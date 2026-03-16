@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ExecDSL 生成器</title>
+  <style>
+    :root {
+      --bg: #f3efe7;
+      --panel: rgba(255, 252, 246, 0.92);
+      --panel-strong: #fffaf0;
+      --line: rgba(43, 50, 42, 0.12);
+      --text: #1e241d;
+      --muted: #5d6758;
+      --accent: #0f766e;
+      --accent-strong: #115e59;
+      --danger: #b91c1c;
+      --shadow: 0 18px 60px rgba(42, 48, 40, 0.12);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans SC", "PingFang SC", "Hiragino Sans GB", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 30%),
+        radial-gradient(circle at top right, rgba(202, 138, 4, 0.16), transparent 28%),
+        linear-gradient(180deg, #f9f4ea 0%, #f1ebdf 100%);
+      min-height: 100vh;
+    }
+
+    .page {
+      max-width: 1520px;
+      margin: 0 auto;
+      padding: 28px 20px 36px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .hero-card,
+    .preview-card,
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .hero-card {
+      padding: 28px;
+    }
+
+    .preview-card {
+      padding: 18px;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      min-height: 250px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 0.95;
+      margin-bottom: 12px;
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      margin-bottom: 10px;
+    }
+
+    h3 {
+      font-size: 0.98rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 16px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 0.16s ease, opacity 0.16s ease, background 0.16s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #f8fcfb;
+    }
+
+    .btn-secondary {
+      background: rgba(15, 118, 110, 0.1);
+      color: var(--accent-strong);
+    }
+
+    .btn-ghost {
+      background: rgba(30, 36, 29, 0.06);
+      color: var(--text);
+    }
+
+    .btn-danger {
+      background: rgba(185, 28, 28, 0.1);
+      color: var(--danger);
+    }
+
+    .btn-mini {
+      padding: 6px 12px;
+      font-size: 0.88rem;
+      border-radius: 12px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .panel {
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 0.88rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid rgba(30, 36, 29, 0.12);
+      background: var(--panel-strong);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 11px 13px;
+      font: inherit;
+      resize: vertical;
+      min-height: 44px;
+    }
+
+    textarea {
+      min-height: 92px;
+      line-height: 1.5;
+    }
+
+    .collection {
+      display: grid;
+      gap: 14px;
+    }
+
+    .item-card {
+      border: 1px solid rgba(30, 36, 29, 0.09);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.75);
+      padding: 14px;
+    }
+
+    .item-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .item-head strong {
+      font-size: 0.95rem;
+    }
+
+    .nested-list {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .inline-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .inline-row.single-wide {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .small-note {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .json-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .status {
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      background: rgba(15, 118, 110, 0.12);
+      color: var(--accent-strong);
+    }
+
+    .status.error {
+      background: rgba(185, 28, 28, 0.12);
+      color: var(--danger);
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border-radius: 16px;
+      padding: 16px;
+      background: #18201a;
+      color: #f6f8f3;
+      min-height: 420px;
+      overflow: auto;
+      line-height: 1.55;
+      font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+      font-size: 0.92rem;
+    }
+
+    .issues {
+      margin-top: 14px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .issue {
+      border-radius: 14px;
+      padding: 10px 12px;
+      background: rgba(185, 28, 28, 0.08);
+      color: #7f1d1d;
+      font-size: 0.9rem;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    @media (max-width: 1100px) {
+      .hero,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .grid,
+      .inline-row {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-card,
+      .preview-card,
+      .panel {
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <div class="hero-card">
+        <h1>ExecDSL<br />可视化生成器</h1>
+        <p>
+          这是一个单文件静态工具，专门用于快速拼装当前版本的
+          <code>ExecDSL</code>。左侧编辑结构化表单，右侧实时生成 JSON，
+          可以直接复制、下载，或者先载入当前参考样例再调整。
+        </p>
+        <div class="toolbar">
+          <button class="btn-primary" id="load-sample">载入参考样例</button>
+          <button class="btn-secondary" id="reset-form">新建空白 DSL</button>
+          <button class="btn-ghost" id="copy-json">复制 JSON</button>
+          <button class="btn-ghost" id="download-json">下载 JSON</button>
+        </div>
+      </div>
+      <div class="preview-card">
+        <h2>生成结果</h2>
+        <div class="json-toolbar">
+          <div id="status" class="status">表单已准备就绪</div>
+          <div class="small-note">默认会把内容保存在浏览器本地缓存，刷新后不会丢。</div>
+        </div>
+        <pre id="json-preview"></pre>
+        <div id="issues" class="issues"></div>
+      </div>
+    </section>
+
+    <section class="layout">
+      <main>
+        <section class="panel">
+          <h2>Context</h2>
+          <div class="grid">
+            <div class="field">
+              <label for="context-type">type</label>
+              <select id="context-type">
+                <option value="sql">sql</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="context-datasource">datasource</label>
+              <input id="context-datasource" placeholder="saas_db" />
+            </div>
+            <div class="field">
+              <label for="context-result-mode">result_mode</label>
+              <select id="context-result-mode">
+                <option value="record">record</option>
+                <option value="records">records</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="context-outputs">outputs</label>
+              <input id="context-outputs" placeholder="flow, scenario" />
+            </div>
+            <div class="field full">
+              <label for="context-sql">sql_template</label>
+              <textarea id="context-sql" placeholder="SELECT flow, scenario FROM header WHERE header_id = :source_object_id"></textarea>
+            </div>
+          </div>
+          <h3>sql_params</h3>
+          <div id="context-params" class="nested-list"></div>
+          <button class="btn-secondary btn-mini" data-add="param-row" data-target="context-params">新增参数</button>
+        </section>
+
+        <section class="panel">
+          <div class="item-head">
+            <div>
+              <h2>Variables</h2>
+              <div class="small-note">当前默认按 <code>assign_by_condition</code> 生成。</div>
+            </div>
+            <button class="btn-secondary" id="add-variable">新增变量</button>
+          </div>
+          <div id="variables-list" class="collection"></div>
+        </section>
+
+        <section class="panel">
+          <div class="item-head">
+            <div>
+              <h2>Prechecks</h2>
+              <div class="small-note">按顺序执行，命中失败后立即停止。</div>
+            </div>
+            <button class="btn-secondary" id="add-precheck">新增 Precheck</button>
+          </div>
+          <div id="prechecks-list" class="collection"></div>
+        </section>
+
+        <section class="panel">
+          <div class="item-head">
+            <div>
+              <h2>Steps</h2>
+              <div class="small-note">支持 <code>consumes</code>，会映射为 CTE。</div>
+            </div>
+            <button class="btn-secondary" id="add-step">新增 Step</button>
+          </div>
+          <div id="steps-list" class="collection"></div>
+        </section>
+
+        <section class="panel">
+          <h2>On Fail</h2>
+          <div class="grid">
+            <div class="field">
+              <label for="on-fail-decision">decision</label>
+              <input id="on-fail-decision" placeholder="$steps.exchange_rate.final_amount > $variables.threshold" />
+            </div>
+            <div class="field">
+              <label for="on-fail-mode">mode</label>
+              <select id="on-fail-mode">
+                <option value="single">single</option>
+                <option value="sub_repeat">sub_repeat</option>
+                <option value="full_repeat">full_repeat</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="on-fail-divider">divider</label>
+              <input id="on-fail-divider" placeholder="仅 sub_repeat 或自定义 full_repeat 时填写" />
+            </div>
+            <div class="field">
+              <label for="on-fail-divider-cn">divider_cn</label>
+              <input id="on-fail-divider-cn" placeholder="默认中文分隔符" />
+            </div>
+            <div class="field">
+              <label for="on-fail-divider-en">divider_en</label>
+              <input id="on-fail-divider-en" placeholder="默认英文分隔符" />
+            </div>
+            <div class="field full">
+              <label for="on-fail-message-cn">message_cn</label>
+              <textarea id="on-fail-message-cn" placeholder="金额{$steps.exchange_rate.final_amount}超过阈值{$variables.threshold}"></textarea>
+            </div>
+            <div class="field full">
+              <label for="on-fail-message-en">message_en</label>
+              <textarea id="on-fail-message-en" placeholder="The amount {steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}."></textarea>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <aside>
+        <section class="panel">
+          <h2>使用提示</h2>
+          <div class="small-note">
+            <p>1. <code>outputs</code> 用英文逗号分隔。</p>
+            <p>2. 变量条件里的 <code>value</code> 会优先按 JSON 值解析，例如数字、布尔、null。</p>
+            <p>3. <code>sql_params</code> 原样保留，适合填 <code>$input.xxx</code>、<code>$context.xxx</code> 这类路径。</p>
+            <p>4. <code>sub_repeat</code> 模板里请保留一段 <code>[]</code> 用于标记重复片段。</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>快捷动作</h2>
+          <div class="toolbar">
+            <button class="btn-ghost" id="add-context-param">给 Context 加参数</button>
+            <button class="btn-ghost" id="scroll-top">回到顶部</button>
+          </div>
+          <div class="footer-note">
+            页面文件位于 <code>playground/exec_dsl_generator.html</code>，可以直接用浏览器打开。
+          </div>
+        </section>
+      </aside>
+    </section>
+  </div>
+
+  <template id="param-row-template">
+    <div class="inline-row single-wide dynamic-row">
+      <div class="inline-row">
+        <input data-role="key" placeholder="key，例如 source_object_id" />
+        <input data-role="value" placeholder="value，例如 $input.source_object_id" />
+        <button class="btn-danger btn-mini" data-remove-row="true">删除</button>
+      </div>
+    </div>
+  </template>
+
+  <template id="condition-row-template">
+    <div class="inline-row dynamic-row">
+      <input data-role="condition" placeholder="condition，例如 $context.flow == 'flow1'" />
+      <input data-role="value" placeholder='value，例如 1000 或 "PASS"' />
+      <button class="btn-danger btn-mini" data-remove-row="true">删除</button>
+    </div>
+  </template>
+
+  <template id="consume-row-template">
+    <div class="inline-row dynamic-row">
+      <input data-role="from" placeholder="from，例如 $steps.query_aggregate_amount" />
+      <input data-role="alias" placeholder="alias，例如 am" />
+      <button class="btn-danger btn-mini" data-remove-row="true">删除</button>
+    </div>
+  </template>
+
+  <script>
+    const STORAGE_KEY = "exec_dsl_generator_state_v1";
+
+    const SAMPLE_DSL = {
+      context: {
+        type: "sql",
+        datasource: "saas_db",
+        result_mode: "record",
+        sql_template: "SELECT flow, scenario FROM header WHERE header_id = :source_object_id",
+        sql_params: {
+          source_object_id: "$input.source_object_id"
+        },
+        outputs: ["flow", "scenario"]
+      },
+      variables: {
+        threshold: {
+          type: "assign_by_condition",
+          when: [
+            {
+              condition: "$context.flow == 'flow1' and $context.scenario in ('scenario1', 'scenario2')",
+              value: 1000
+            },
+            {
+              condition: "$context.flow == 'flow2' and $context.scenario == 'scenario2'",
+              value: 800
+            }
+          ],
+          default: 500
+        }
+      },
+      prechecks: [
+        {
+          name: "check_rate_null",
+          description: "检查是否存在汇率为空的记录",
+          type: "sql",
+          datasource: "saas_db",
+          result_mode: "records",
+          sql_template: "SELECT func, txn, rate_type, rate_date FROM jounrnal WHERE header_id = :source_object_id AND rate is null",
+          sql_params: {
+            source_object_id: "$input.source_object_id"
+          },
+          on_fail: {
+            decision: "exists",
+            mode: "sub_repeat",
+            divider: ",",
+            message_cn: "存在汇率为空的记录: [记录{func}-{txn}-{rate_date}]",
+            message_en: "There are records with null exchange rates: [Record{func}-{txn}-{rate_date}]."
+          }
+        }
+      ],
+      steps: [
+        {
+          name: "query_aggregate_amount",
+          description: "查询汇总金额",
+          type: "sql",
+          datasource: "saas_db",
+          result_mode: "records",
+          sql_template: "SELECT func, SUM(amount) as total_amount FROM jounrnal WHERE header_id = :source_object_id group by func",
+          sql_params: {
+            source_object_id: "$input.source_object_id"
+          },
+          outputs: ["func", "total_amount"]
+        },
+        {
+          name: "exchange_rate",
+          description: "换算美元汇率汇总金额",
+          type: "sql",
+          datasource: "data_db",
+          result_mode: "record",
+          consumes: [
+            {
+              from: "$steps.query_aggregate_amount",
+              alias: "am"
+            }
+          ],
+          sql_template: "SELECT sum(case when am.func = 'USD' then am.total_amount else am.total_amount * er.rate end) as final_amount FROM am left join exchange_rate er on am.func = er.func and er.rate_date = CURRENT_DATE",
+          sql_params: {},
+          outputs: ["final_amount"]
+        }
+      ],
+      on_fail: {
+        decision: "$steps.exchange_rate.final_amount > $variables.threshold",
+        mode: "single",
+        message_cn: "金额{$steps.exchange_rate.final_amount}超过阈值{$variables.threshold}",
+        message_en: "The amount {steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}.",
+        divider: "",
+        divider_cn: "",
+        divider_en: ""
+      }
+    };
+
+    const contextParamsEl = document.getElementById("context-params");
+    const variablesListEl = document.getElementById("variables-list");
+    const prechecksListEl = document.getElementById("prechecks-list");
+    const stepsListEl = document.getElementById("steps-list");
+    const previewEl = document.getElementById("json-preview");
+    const issuesEl = document.getElementById("issues");
+    const statusEl = document.getElementById("status");
+
+    function createButton(label, className, dataset = {}) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = className;
+      button.textContent = label;
+      Object.entries(dataset).forEach(([key, value]) => {
+        button.dataset[key] = value;
+      });
+      return button;
+    }
+
+    function cloneTemplate(templateId) {
+      return document.getElementById(templateId).content.firstElementChild.cloneNode(true);
+    }
+
+    function addParamRow(container, key = "", value = "") {
+      const row = cloneTemplate("param-row-template");
+      row.querySelector('[data-role="key"]').value = key;
+      row.querySelector('[data-role="value"]').value = value;
+      container.appendChild(row);
+      return row;
+    }
+
+    function addConditionRow(container, condition = "", value = "") {
+      const row = cloneTemplate("condition-row-template");
+      row.querySelector('[data-role="condition"]').value = condition;
+      row.querySelector('[data-role="value"]').value = value;
+      container.appendChild(row);
+      return row;
+    }
+
+    function addConsumeRow(container, from = "", alias = "") {
+      const row = cloneTemplate("consume-row-template");
+      row.querySelector('[data-role="from"]').value = from;
+      row.querySelector('[data-role="alias"]').value = alias;
+      container.appendChild(row);
+      return row;
+    }
+
+    function createVariableCard(name = "", data = {}) {
+      const card = document.createElement("div");
+      card.className = "item-card variable-card";
+      card.innerHTML = `
+        <div class="item-head">
+          <strong>变量</strong>
+          <button type="button" class="btn-danger btn-mini" data-remove-card="true">删除变量</button>
+        </div>
+        <div class="grid">
+          <div class="field">
+            <label>变量名</label>
+            <input data-role="variable-name" placeholder="threshold" />
+          </div>
+          <div class="field">
+            <label>type</label>
+            <select data-role="variable-type">
+              <option value="assign_by_condition">assign_by_condition</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label>default</label>
+            <input data-role="variable-default" placeholder='例如 500 或 "PASS"' />
+          </div>
+        </div>
+        <h3>when 条件</h3>
+        <div class="nested-list" data-role="conditions"></div>
+        <button type="button" class="btn-secondary btn-mini" data-add-condition="true">新增条件</button>
+      `;
+
+      card.querySelector('[data-role="variable-name"]').value = name;
+      card.querySelector('[data-role="variable-type"]').value = data.type || "assign_by_condition";
+      card.querySelector('[data-role="variable-default"]').value = stringifyEditorValue(data.default);
+
+      const conditionsContainer = card.querySelector('[data-role="conditions"]');
+      const conditions = Array.isArray(data.when) && data.when.length ? data.when : [{ condition: "", value: "" }];
+      conditions.forEach((item) => addConditionRow(conditionsContainer, item.condition || "", stringifyEditorValue(item.value)));
+
+      return card;
+    }
+
+    function createFailPolicySection(policy = {}) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "grid";
+      wrapper.innerHTML = `
+        <div class="field">
+          <label>decision</label>
+          <input data-role="decision" placeholder="exists 或表达式" />
+        </div>
+        <div class="field">
+          <label>mode</label>
+          <select data-role="mode">
+            <option value="single">single</option>
+            <option value="sub_repeat">sub_repeat</option>
+            <option value="full_repeat">full_repeat</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>divider</label>
+          <input data-role="divider" placeholder="sub_repeat 时常用，例如 ," />
+        </div>
+        <div class="field">
+          <label>divider_cn</label>
+          <input data-role="divider-cn" placeholder="full_repeat 中文分隔符" />
+        </div>
+        <div class="field">
+          <label>divider_en</label>
+          <input data-role="divider-en" placeholder="full_repeat 英文分隔符" />
+        </div>
+        <div class="field full">
+          <label>message_cn</label>
+          <textarea data-role="message-cn" placeholder="中文消息模板"></textarea>
+        </div>
+        <div class="field full">
+          <label>message_en</label>
+          <textarea data-role="message-en" placeholder="英文消息模板"></textarea>
+        </div>
+      `;
+
+      wrapper.querySelector('[data-role="decision"]').value = policy.decision || "";
+      wrapper.querySelector('[data-role="mode"]').value = policy.mode || "single";
+      wrapper.querySelector('[data-role="divider"]').value = policy.divider || "";
+      wrapper.querySelector('[data-role="divider-cn"]').value = policy.divider_cn || "";
+      wrapper.querySelector('[data-role="divider-en"]').value = policy.divider_en || "";
+      wrapper.querySelector('[data-role="message-cn"]').value = policy.message_cn || "";
+      wrapper.querySelector('[data-role="message-en"]').value = policy.message_en || "";
+      return wrapper;
+    }
+
+    function createPrecheckCard(data = {}) {
+      const card = document.createElement("div");
+      card.className = "item-card precheck-card";
+      card.innerHTML = `
+        <div class="item-head">
+          <strong>Precheck</strong>
+          <button type="button" class="btn-danger btn-mini" data-remove-card="true">删除 Precheck</button>
+        </div>
+        <div class="grid">
+          <div class="field">
+            <label>name</label>
+            <input data-role="name" placeholder="check_rate_null" />
+          </div>
+          <div class="field">
+            <label>type</label>
+            <select data-role="type">
+              <option value="sql">sql</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>datasource</label>
+            <input data-role="datasource" placeholder="saas_db" />
+          </div>
+          <div class="field">
+            <label>result_mode</label>
+            <select data-role="result-mode">
+              <option value="record">record</option>
+              <option value="records">records</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label>description</label>
+            <input data-role="description" placeholder="检查说明" />
+          </div>
+          <div class="field full">
+            <label>sql_template</label>
+            <textarea data-role="sql-template" placeholder="SELECT ..."></textarea>
+          </div>
+          <div class="field full">
+            <label>outputs</label>
+            <input data-role="outputs" placeholder="可选，英文逗号分隔" />
+          </div>
+        </div>
+        <h3>sql_params</h3>
+        <div class="nested-list" data-role="sql-params"></div>
+        <button type="button" class="btn-secondary btn-mini" data-add="param-row" data-target-role="sql-params">新增参数</button>
+        <h3 style="margin-top: 14px;">on_fail</h3>
+        <div data-role="fail-policy"></div>
+      `;
+
+      card.querySelector('[data-role="name"]').value = data.name || "";
+      card.querySelector('[data-role="type"]').value = data.type || "sql";
+      card.querySelector('[data-role="datasource"]').value = data.datasource || "";
+      card.querySelector('[data-role="result-mode"]').value = data.result_mode || "records";
+      card.querySelector('[data-role="description"]').value = data.description || "";
+      card.querySelector('[data-role="sql-template"]').value = data.sql_template || "";
+      card.querySelector('[data-role="outputs"]').value = (data.outputs || []).join(", ");
+
+      const paramsContainer = card.querySelector('[data-role="sql-params"]');
+      const sqlParams = data.sql_params || {};
+      const entries = Object.entries(sqlParams);
+      if (entries.length === 0) {
+        addParamRow(paramsContainer);
+      } else {
+        entries.forEach(([key, value]) => addParamRow(paramsContainer, key, String(value)));
+      }
+
+      card.querySelector('[data-role="fail-policy"]').appendChild(createFailPolicySection(data.on_fail || {}));
+      return card;
+    }
+
+    function createStepCard(data = {}) {
+      const card = document.createElement("div");
+      card.className = "item-card step-card";
+      card.innerHTML = `
+        <div class="item-head">
+          <strong>Step</strong>
+          <button type="button" class="btn-danger btn-mini" data-remove-card="true">删除 Step</button>
+        </div>
+        <div class="grid">
+          <div class="field">
+            <label>name</label>
+            <input data-role="name" placeholder="exchange_rate" />
+          </div>
+          <div class="field">
+            <label>type</label>
+            <select data-role="type">
+              <option value="sql">sql</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>datasource</label>
+            <input data-role="datasource" placeholder="data_db" />
+          </div>
+          <div class="field">
+            <label>result_mode</label>
+            <select data-role="result-mode">
+              <option value="record">record</option>
+              <option value="records">records</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label>description</label>
+            <input data-role="description" placeholder="步骤说明" />
+          </div>
+          <div class="field full">
+            <label>sql_template</label>
+            <textarea data-role="sql-template" placeholder="SELECT ..."></textarea>
+          </div>
+          <div class="field full">
+            <label>outputs</label>
+            <input data-role="outputs" placeholder="final_amount 或 func, total_amount" />
+          </div>
+        </div>
+        <h3>sql_params</h3>
+        <div class="nested-list" data-role="sql-params"></div>
+        <button type="button" class="btn-secondary btn-mini" data-add="param-row" data-target-role="sql-params">新增参数</button>
+        <h3 style="margin-top: 14px;">consumes</h3>
+        <div class="nested-list" data-role="consumes"></div>
+        <button type="button" class="btn-secondary btn-mini" data-add="consume-row" data-target-role="consumes">新增 consume</button>
+      `;
+
+      card.querySelector('[data-role="name"]').value = data.name || "";
+      card.querySelector('[data-role="type"]').value = data.type || "sql";
+      card.querySelector('[data-role="datasource"]').value = data.datasource || "";
+      card.querySelector('[data-role="result-mode"]').value = data.result_mode || "records";
+      card.querySelector('[data-role="description"]').value = data.description || "";
+      card.querySelector('[data-role="sql-template"]').value = data.sql_template || "";
+      card.querySelector('[data-role="outputs"]').value = (data.outputs || []).join(", ");
+
+      const paramsContainer = card.querySelector('[data-role="sql-params"]');
+      const entries = Object.entries(data.sql_params || {});
+      if (entries.length === 0) {
+        addParamRow(paramsContainer);
+      } else {
+        entries.forEach(([key, value]) => addParamRow(paramsContainer, key, String(value)));
+      }
+
+      const consumesContainer = card.querySelector('[data-role="consumes"]');
+      const consumes = Array.isArray(data.consumes) && data.consumes.length ? data.consumes : [];
+      if (consumes.length === 0) {
+        addConsumeRow(consumesContainer);
+      } else {
+        consumes.forEach((consume) => addConsumeRow(consumesContainer, consume.from || "", consume.alias || ""));
+      }
+
+      return card;
+    }
+
+    function stringifyEditorValue(value) {
+      if (value === undefined || value === null) {
+        return value === null ? "null" : "";
+      }
+      if (typeof value === "string") {
+        return value;
+      }
+      return JSON.stringify(value);
+    }
+
+    function parseValue(value) {
+      const text = value.trim();
+      if (text === "") {
+        return "";
+      }
+
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        return text;
+      }
+    }
+
+    function readObjectRows(container) {
+      const object = {};
+      container.querySelectorAll(".dynamic-row").forEach((row) => {
+        const key = row.querySelector('[data-role="key"]')?.value.trim();
+        const value = row.querySelector('[data-role="value"]')?.value ?? "";
+        if (key) {
+          object[key] = value;
+        }
+      });
+      return object;
+    }
+
+    function readOutputs(input) {
+      return input.value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    function readFailPolicy(container) {
+      const policy = {
+        decision: container.querySelector('[data-role="decision"]').value.trim(),
+        mode: container.querySelector('[data-role="mode"]').value,
+        message_cn: container.querySelector('[data-role="message-cn"]').value,
+        message_en: container.querySelector('[data-role="message-en"]').value
+      };
+
+      const divider = container.querySelector('[data-role="divider"]').value.trim();
+      const dividerCn = container.querySelector('[data-role="divider-cn"]').value.trim();
+      const dividerEn = container.querySelector('[data-role="divider-en"]').value.trim();
+
+      if (divider) policy.divider = divider;
+      if (dividerCn) policy.divider_cn = dividerCn;
+      if (dividerEn) policy.divider_en = dividerEn;
+      return policy;
+    }
+
+    function collectDsl() {
+      const dsl = {
+        context: {
+          type: document.getElementById("context-type").value,
+          datasource: document.getElementById("context-datasource").value.trim(),
+          result_mode: document.getElementById("context-result-mode").value,
+          sql_template: document.getElementById("context-sql").value,
+          sql_params: readObjectRows(contextParamsEl),
+          outputs: readOutputs(document.getElementById("context-outputs"))
+        },
+        variables: {},
+        prechecks: [],
+        steps: [],
+        on_fail: {
+          decision: document.getElementById("on-fail-decision").value.trim(),
+          mode: document.getElementById("on-fail-mode").value,
+          message_cn: document.getElementById("on-fail-message-cn").value,
+          message_en: document.getElementById("on-fail-message-en").value
+        }
+      };
+
+      const onFailDivider = document.getElementById("on-fail-divider").value.trim();
+      const onFailDividerCn = document.getElementById("on-fail-divider-cn").value.trim();
+      const onFailDividerEn = document.getElementById("on-fail-divider-en").value.trim();
+      if (onFailDivider) dsl.on_fail.divider = onFailDivider;
+      if (onFailDividerCn) dsl.on_fail.divider_cn = onFailDividerCn;
+      if (onFailDividerEn) dsl.on_fail.divider_en = onFailDividerEn;
+
+      variablesListEl.querySelectorAll(".variable-card").forEach((card) => {
+        const name = card.querySelector('[data-role="variable-name"]').value.trim();
+        if (!name) {
+          return;
+        }
+        const when = [];
+        card.querySelectorAll('[data-role="conditions"] .dynamic-row').forEach((row) => {
+          const condition = row.querySelector('[data-role="condition"]').value.trim();
+          const value = row.querySelector('[data-role="value"]').value;
+          if (condition) {
+            when.push({
+              condition,
+              value: parseValue(value)
+            });
+          }
+        });
+
+        dsl.variables[name] = {
+          type: card.querySelector('[data-role="variable-type"]').value,
+          when,
+          default: parseValue(card.querySelector('[data-role="variable-default"]').value)
+        };
+      });
+
+      prechecksListEl.querySelectorAll(".precheck-card").forEach((card) => {
+        const item = {
+          name: card.querySelector('[data-role="name"]').value.trim(),
+          description: card.querySelector('[data-role="description"]').value.trim(),
+          type: card.querySelector('[data-role="type"]').value,
+          datasource: card.querySelector('[data-role="datasource"]').value.trim(),
+          result_mode: card.querySelector('[data-role="result-mode"]').value,
+          sql_template: card.querySelector('[data-role="sql-template"]').value,
+          sql_params: readObjectRows(card.querySelector('[data-role="sql-params"]')),
+          outputs: readOutputs(card.querySelector('[data-role="outputs"]')),
+          on_fail: readFailPolicy(card.querySelector('[data-role="fail-policy"]'))
+        };
+        if (!item.description) {
+          delete item.description;
+        }
+        if (item.outputs.length === 0) {
+          delete item.outputs;
+        }
+        dsl.prechecks.push(item);
+      });
+
+      stepsListEl.querySelectorAll(".step-card").forEach((card) => {
+        const consumes = [];
+        card.querySelectorAll('[data-role="consumes"] .dynamic-row').forEach((row) => {
+          const from = row.querySelector('[data-role="from"]').value.trim();
+          const alias = row.querySelector('[data-role="alias"]').value.trim();
+          if (from || alias) {
+            consumes.push({ from, alias });
+          }
+        });
+
+        const item = {
+          name: card.querySelector('[data-role="name"]').value.trim(),
+          description: card.querySelector('[data-role="description"]').value.trim(),
+          type: card.querySelector('[data-role="type"]').value,
+          datasource: card.querySelector('[data-role="datasource"]').value.trim(),
+          result_mode: card.querySelector('[data-role="result-mode"]').value,
+          sql_template: card.querySelector('[data-role="sql-template"]').value,
+          sql_params: readObjectRows(card.querySelector('[data-role="sql-params"]')),
+          outputs: readOutputs(card.querySelector('[data-role="outputs"]')),
+          consumes
+        };
+
+        if (!item.description) {
+          delete item.description;
+        }
+        if (item.consumes.length === 0) {
+          delete item.consumes;
+        }
+        dsl.steps.push(item);
+      });
+
+      return dsl;
+    }
+
+    function validateDsl(dsl) {
+      const issues = [];
+
+      if (!dsl.context.datasource) {
+        issues.push("context.datasource 不能为空。");
+      }
+      if (!dsl.context.sql_template.trim()) {
+        issues.push("context.sql_template 不能为空。");
+      }
+      if (dsl.context.outputs.length === 0) {
+        issues.push("context.outputs 建议至少填写一个字段。");
+      }
+
+      if (Object.keys(dsl.variables).length === 0) {
+        issues.push("建议至少配置一个 variable。");
+      }
+
+      dsl.prechecks.forEach((item, index) => {
+        if (!item.name) issues.push(`prechecks[${index}].name 不能为空。`);
+        if (!item.sql_template.trim()) issues.push(`prechecks[${index}].sql_template 不能为空。`);
+        if (!item.on_fail.decision) issues.push(`prechecks[${index}].on_fail.decision 不能为空。`);
+        if (item.on_fail.mode === "sub_repeat" && !item.on_fail.message_cn.includes("[")) {
+          issues.push(`prechecks[${index}] 使用 sub_repeat 时，message_cn 建议包含 []。`);
+        }
+      });
+
+      dsl.steps.forEach((item, index) => {
+        if (!item.name) issues.push(`steps[${index}].name 不能为空。`);
+        if (!item.sql_template.trim()) issues.push(`steps[${index}].sql_template 不能为空。`);
+      });
+
+      if (!dsl.on_fail.decision) {
+        issues.push("on_fail.decision 不能为空。");
+      }
+      if (!dsl.on_fail.message_cn.trim()) {
+        issues.push("on_fail.message_cn 不能为空。");
+      }
+      if (!dsl.on_fail.message_en.trim()) {
+        issues.push("on_fail.message_en 不能为空。");
+      }
+
+      return issues;
+    }
+
+    function saveState(dsl) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(dsl));
+    }
+
+    function refreshPreview() {
+      const dsl = collectDsl();
+      const issues = validateDsl(dsl);
+      previewEl.textContent = JSON.stringify(dsl, null, 2);
+      issuesEl.innerHTML = "";
+
+      if (issues.length) {
+        statusEl.className = "status error";
+        statusEl.textContent = `发现 ${issues.length} 个提醒`;
+        issues.forEach((issue) => {
+          const node = document.createElement("div");
+          node.className = "issue";
+          node.textContent = issue;
+          issuesEl.appendChild(node);
+        });
+      } else {
+        statusEl.className = "status";
+        statusEl.textContent = "结构看起来没有明显缺项";
+      }
+
+      saveState(dsl);
+      return dsl;
+    }
+
+    function fillContext(data) {
+      document.getElementById("context-type").value = data.type || "sql";
+      document.getElementById("context-datasource").value = data.datasource || "";
+      document.getElementById("context-result-mode").value = data.result_mode || "record";
+      document.getElementById("context-sql").value = data.sql_template || "";
+      document.getElementById("context-outputs").value = (data.outputs || []).join(", ");
+      contextParamsEl.innerHTML = "";
+      const entries = Object.entries(data.sql_params || {});
+      if (entries.length === 0) {
+        addParamRow(contextParamsEl);
+      } else {
+        entries.forEach(([key, value]) => addParamRow(contextParamsEl, key, String(value)));
+      }
+    }
+
+    function fillOnFail(data) {
+      document.getElementById("on-fail-decision").value = data.decision || "";
+      document.getElementById("on-fail-mode").value = data.mode || "single";
+      document.getElementById("on-fail-divider").value = data.divider || "";
+      document.getElementById("on-fail-divider-cn").value = data.divider_cn || "";
+      document.getElementById("on-fail-divider-en").value = data.divider_en || "";
+      document.getElementById("on-fail-message-cn").value = data.message_cn || "";
+      document.getElementById("on-fail-message-en").value = data.message_en || "";
+    }
+
+    function loadDsl(data) {
+      fillContext(data.context || {});
+      variablesListEl.innerHTML = "";
+      const variableEntries = Object.entries(data.variables || {});
+      if (variableEntries.length === 0) {
+        variablesListEl.appendChild(createVariableCard("threshold", { type: "assign_by_condition", when: [{ condition: "", value: "" }], default: "" }));
+      } else {
+        variableEntries.forEach(([name, value]) => variablesListEl.appendChild(createVariableCard(name, value)));
+      }
+
+      prechecksListEl.innerHTML = "";
+      const prechecks = Array.isArray(data.prechecks) && data.prechecks.length ? data.prechecks : [{}];
+      prechecks.forEach((item) => prechecksListEl.appendChild(createPrecheckCard(item)));
+
+      stepsListEl.innerHTML = "";
+      const steps = Array.isArray(data.steps) && data.steps.length ? data.steps : [{}];
+      steps.forEach((item) => stepsListEl.appendChild(createStepCard(item)));
+
+      fillOnFail(data.on_fail || {});
+      refreshPreview();
+    }
+
+    function resetDsl() {
+      loadDsl({
+        context: {
+          type: "sql",
+          datasource: "",
+          result_mode: "record",
+          sql_template: "",
+          sql_params: {},
+          outputs: []
+        },
+        variables: {
+          threshold: {
+            type: "assign_by_condition",
+            when: [{ condition: "", value: "" }],
+            default: ""
+          }
+        },
+        prechecks: [
+          {
+            name: "",
+            description: "",
+            type: "sql",
+            datasource: "",
+            result_mode: "records",
+            sql_template: "",
+            sql_params: {},
+            outputs: [],
+            on_fail: {
+              decision: "exists",
+              mode: "sub_repeat",
+              divider: ",",
+              message_cn: "",
+              message_en: ""
+            }
+          }
+        ],
+        steps: [
+          {
+            name: "",
+            description: "",
+            type: "sql",
+            datasource: "",
+            result_mode: "record",
+            sql_template: "",
+            sql_params: {},
+            outputs: [],
+            consumes: []
+          }
+        ],
+        on_fail: {
+          decision: "",
+          mode: "single",
+          message_cn: "",
+          message_en: ""
+        }
+      });
+    }
+
+    function handleCollectionActions(event) {
+      const removeRowButton = event.target.closest("[data-remove-row]");
+      if (removeRowButton) {
+        removeRowButton.closest(".dynamic-row").remove();
+        refreshPreview();
+        return;
+      }
+
+      const removeCardButton = event.target.closest("[data-remove-card]");
+      if (removeCardButton) {
+        removeCardButton.closest(".item-card").remove();
+        refreshPreview();
+        return;
+      }
+
+      const addButton = event.target.closest("[data-add]");
+      if (addButton) {
+        const action = addButton.dataset.add;
+        const targetId = addButton.dataset.target;
+        const targetRole = addButton.dataset.targetRole;
+        const target = targetId
+          ? document.getElementById(targetId)
+          : addButton.closest(".item-card, .panel").querySelector(`[data-role="${targetRole}"]`);
+        if (action === "param-row") addParamRow(target);
+        if (action === "consume-row") addConsumeRow(target);
+        refreshPreview();
+        return;
+      }
+
+      const addCondition = event.target.closest("[data-add-condition]");
+      if (addCondition) {
+        const target = addCondition.closest(".variable-card").querySelector('[data-role="conditions"]');
+        addConditionRow(target);
+        refreshPreview();
+      }
+    }
+
+    function downloadJson() {
+      const dsl = refreshPreview();
+      const blob = new Blob([JSON.stringify(dsl, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "exec_dsl.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function copyJson() {
+      try {
+        await navigator.clipboard.writeText(previewEl.textContent);
+        statusEl.className = "status";
+        statusEl.textContent = "JSON 已复制到剪贴板";
+      } catch (error) {
+        statusEl.className = "status error";
+        statusEl.textContent = "复制失败，请手动复制右侧内容";
+      }
+    }
+
+    document.getElementById("load-sample").addEventListener("click", () => loadDsl(SAMPLE_DSL));
+    document.getElementById("reset-form").addEventListener("click", resetDsl);
+    document.getElementById("copy-json").addEventListener("click", copyJson);
+    document.getElementById("download-json").addEventListener("click", downloadJson);
+    document.getElementById("add-variable").addEventListener("click", () => {
+      variablesListEl.appendChild(createVariableCard("", { type: "assign_by_condition", when: [{ condition: "", value: "" }], default: "" }));
+      refreshPreview();
+    });
+    document.getElementById("add-precheck").addEventListener("click", () => {
+      prechecksListEl.appendChild(createPrecheckCard({ on_fail: { decision: "exists", mode: "sub_repeat", divider: ",", message_cn: "", message_en: "" } }));
+      refreshPreview();
+    });
+    document.getElementById("add-step").addEventListener("click", () => {
+      stepsListEl.appendChild(createStepCard({}));
+      refreshPreview();
+    });
+    document.getElementById("add-context-param").addEventListener("click", () => {
+      addParamRow(contextParamsEl);
+      refreshPreview();
+    });
+    document.getElementById("scroll-top").addEventListener("click", () => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    document.body.addEventListener("click", handleCollectionActions);
+    document.body.addEventListener("input", () => {
+      refreshPreview();
+    });
+    document.body.addEventListener("change", () => {
+      refreshPreview();
+    });
+
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        loadDsl(JSON.parse(stored));
+      } else {
+        loadDsl(SAMPLE_DSL);
+      }
+    } catch (error) {
+      loadDsl(SAMPLE_DSL);
+    }
+  </script>
+</body>
+</html>
