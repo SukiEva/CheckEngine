@@ -61,7 +61,7 @@
 若实现与样例、规范发生冲突，应优先：
 
 1. 先核对 `EXEC_DSL_V0.1.md`
-2. 再核对 `example.json`
+2. 再核对 `references/example.json`
 3. 若仍有歧义，先与用户确认，再修改实现或文档
 
 ## ExecDSL 当前边界
