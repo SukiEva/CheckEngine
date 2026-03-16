@@ -1,0 +1,40 @@
+"""JSON 解析器测试。"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from check_engine.exceptions import DSLParseError
+from check_engine.parser import JsonDslParser
+
+
+class JsonDslParserTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.parser = JsonDslParser()
+        self.example_path = Path(__file__).resolve().parents[1] / "references" / "example.json"
+
+    def test_parse_example_json(self) -> None:
+        document = self.parser.parse(self.example_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(document.context.datasource, "saas_db")
+        self.assertEqual(document.context.outputs, ["flow", "scenario"])
+        self.assertEqual(document.variables["threshold"].default, 500)
+        self.assertEqual(len(document.prechecks), 2)
+        self.assertEqual(document.steps[1].consumes[0].alias, "am")
+        self.assertEqual(document.on_fail.mode, "single")
+
+    def test_parse_invalid_json_raises(self) -> None:
+        with self.assertRaises(DSLParseError):
+            self.parser.parse("{invalid json}")
+
+    def test_parse_missing_top_level_block_raises(self) -> None:
+        with self.assertRaises(DSLParseError):
+            self.parser.parse('{"context": {}, "variables": {}, "prechecks": [], "steps": []}')
+
+
+if __name__ == "__main__":
+    unittest.main()
