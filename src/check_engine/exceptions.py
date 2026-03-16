@@ -7,3 +7,7 @@ class DSLParseError(ValueError):
 
 class DSLValidationError(ValueError):
     """DSL 静态校验失败。"""
+
+
+class DSLExecutionError(RuntimeError):
+    """DSL 运行时执行失败。"""

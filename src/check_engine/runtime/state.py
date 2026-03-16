@@ -1,0 +1,164 @@
+"""ExecDSL 运行时状态对象。"""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+from typing import Any, Optional
+
+from check_engine.exceptions import DSLExecutionError
+
+
+@dataclass(frozen=True)
+class ExecutionTrace:
+    """单个节点的执行轨迹。"""
+
+    phase: str
+    node_name: str
+    node_kind: str
+    datasource: str
+    sql: str
+    params: dict[str, Any]
+    result_mode: str
+    row_count: int
+    success: bool
+    elapsed_ms: float
+    error: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class NodeExecutionResult:
+    """节点执行结果。"""
+
+    node_name: str
+    result_mode: str
+    raw_rows: list[dict[str, Any]]
+    exported_data: Any
+    exported_fields: list[str]
+    datasource: str
+    sql: str
+    params: dict[str, Any]
+    elapsed_ms: float
+
+    def as_rows(self) -> list[dict[str, Any]]:
+        return list(self.raw_rows)
+
+
+@dataclass(frozen=True)
+class ExecutionResult:
+    """最终执行结果。"""
+
+    passed: bool
+    phase: str
+    failed_node: Optional[str]
+    message_cn: Optional[str]
+    message_en: Optional[str]
+    context: dict[str, Any]
+    variables: dict[str, Any]
+    steps: dict[str, Any]
+    trace: list[ExecutionTrace]
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["trace"] = [asdict(item) for item in self.trace]
+        return payload
+
+
+@dataclass
+class ExecutionState:
+    """执行过程中的可变状态。"""
+
+    input_data: dict[str, Any]
+    context_result: Optional[NodeExecutionResult] = None
+    context_data: dict[str, Any] = field(default_factory=dict)
+    variables_data: dict[str, Any] = field(default_factory=dict)
+    step_results: dict[str, NodeExecutionResult] = field(default_factory=dict)
+    step_data: dict[str, Any] = field(default_factory=dict)
+    trace: list[ExecutionTrace] = field(default_factory=list)
+
+    @classmethod
+    def new(cls, input_data: dict[str, Any]) -> "ExecutionState":
+        return cls(input_data=input_data)
+
+    def set_context_result(self, result: NodeExecutionResult) -> None:
+        self.context_result = result
+        self.context_data = result.exported_data if isinstance(result.exported_data, dict) else {}
+
+    def set_step_result(self, step_name: str, result: NodeExecutionResult) -> None:
+        self.step_results[step_name] = result
+        self.step_data[step_name] = result.exported_data
+
+    def add_trace(self, trace: ExecutionTrace) -> None:
+        self.trace.append(trace)
+
+    def resolve_reference(self, reference: str) -> Any:
+        if not reference.startswith("$"):
+            raise DSLExecutionError(f"非法引用路径: {reference}")
+
+        parts = reference[1:].split(".")
+        root = parts[0]
+        if root == "input":
+            return self._resolve_from_mapping(self.input_data, parts[1:], reference)
+        if root == "context":
+            return self._resolve_from_mapping(self.context_data, parts[1:], reference)
+        if root == "variables":
+            return self._resolve_from_mapping(self.variables_data, parts[1:], reference)
+        if root == "steps":
+            if len(parts) < 2:
+                raise DSLExecutionError(f"steps 引用必须包含步骤名: {reference}")
+            step_name = parts[1]
+            if step_name not in self.step_data:
+                raise DSLExecutionError(f"未找到步骤执行结果: {reference}")
+            return self._resolve_from_mapping_or_object(self.step_data[step_name], parts[2:], reference)
+        raise DSLExecutionError(f"未知作用域: {reference}")
+
+    def resolve_path(self, path: str) -> Any:
+        return self.resolve_reference(path if path.startswith("$") else "$" + path)
+
+    def get_consumable_rows(self, from_path: str) -> tuple[list[dict[str, Any]], list[str]]:
+        if from_path == "$context":
+            if self.context_result is None:
+                raise DSLExecutionError("context 结果不存在，无法构建 consumes。")
+            return self._rows_and_fields(self.context_result)
+
+        if not from_path.startswith("$steps."):
+            raise DSLExecutionError(f"consumes.from 不支持的引用: {from_path}")
+
+        parts = from_path[1:].split(".")
+        if len(parts) != 2:
+            raise DSLExecutionError(f"consumes.from 仅支持引用整步结果: {from_path}")
+
+        step_name = parts[1]
+        if step_name not in self.step_results:
+            raise DSLExecutionError(f"consumes.from 引用了不存在的步骤结果: {from_path}")
+
+        return self._rows_and_fields(self.step_results[step_name])
+
+    def _rows_and_fields(self, result: NodeExecutionResult) -> tuple[list[dict[str, Any]], list[str]]:
+        rows = result.as_rows()
+        fields = list(result.exported_fields)
+        if not fields and rows:
+            fields = list(rows[0].keys())
+        return rows, fields
+
+    def _resolve_from_mapping(self, mapping: dict[str, Any], parts: list[str], reference: str) -> Any:
+        current: Any = mapping
+        for part in parts:
+            if not isinstance(current, dict):
+                raise DSLExecutionError(f"引用路径无法继续解析: {reference}")
+            if part not in current:
+                raise DSLExecutionError(f"引用字段不存在: {reference}")
+            current = current[part]
+        return current
+
+    def _resolve_from_mapping_or_object(self, value: Any, parts: list[str], reference: str) -> Any:
+        current = value
+        if not parts:
+            return current
+        for part in parts:
+            if isinstance(current, dict):
+                if part not in current:
+                    raise DSLExecutionError(f"引用字段不存在: {reference}")
+                current = current[part]
+            else:
+                raise DSLExecutionError(f"引用路径无法继续解析: {reference}")
+        return current

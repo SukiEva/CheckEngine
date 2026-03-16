@@ -4,6 +4,7 @@ from typing import Optional
 
 from check_engine.dsl.models import DslDocument
 from check_engine.validator.reference_validator import ReferenceValidator
+from check_engine.validator.sql_validator import SqlSafetyValidator
 from check_engine.validator.structure_validator import StructureValidator
 
 
@@ -14,10 +15,13 @@ class DslValidator:
         self,
         structure_validator: Optional[StructureValidator] = None,
         reference_validator: Optional[ReferenceValidator] = None,
+        sql_validator: Optional[SqlSafetyValidator] = None,
     ) -> None:
         self.structure_validator = structure_validator or StructureValidator()
         self.reference_validator = reference_validator or ReferenceValidator()
+        self.sql_validator = sql_validator or SqlSafetyValidator()
 
     def validate(self, document: DslDocument) -> None:
         self.structure_validator.validate(document)
         self.reference_validator.validate(document)
+        self.sql_validator.validate(document)
