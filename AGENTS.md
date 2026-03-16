@@ -55,8 +55,8 @@
 
 当前 DSL 设计以以下文件为准：
 
-- [`EXEC_DSL_V0.1.md`](/Users/Suki/Documents/WorkSpace/Claude/CheckEngine/EXEC_DSL_V0.1.md)：当前 DSL 规范草案
-- [`example.json`](/Users/Suki/Documents/WorkSpace/Claude/CheckEngine/example.json)：当前 DSL 样例
+- [EXEC_DSL_V0.1.md](./EXEC_DSL_V0.1.md)：当前 DSL 规范草案
+- [example.json](./references/example.json)：当前 DSL 样例
 
 若实现与样例、规范发生冲突，应优先：
 

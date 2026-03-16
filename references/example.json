@@ -1,0 +1,100 @@
+{
+  "context": {
+    "type": "sql",
+    "datasource": "saas_db",
+    "result_mode": "record",
+    "sql_template": "SELECT flow, scenario FROM header WHERE header_id = :source_object_id",
+    "sql_params": {
+      "source_object_id": "$input.source_object_id"
+    },
+    "outputs": ["flow", "scenario"]
+  },
+  "variables": {
+    "threshold": {
+      "type": "assign_by_condition",
+      "when": [
+        {
+          "condition": "$context.flow == 'flow1' and $context.scenario in ('scenario1', 'scenario2')",
+          "value": 1000
+        },
+        {
+          "condition": "$context.flow == 'flow2' and $context.scenario == 'scenario2'",
+          "value": 800
+        }
+      ],
+      "default": 500
+    }
+  },
+  "prechecks": [
+    {
+      "name": "check_rate_null",
+      "description": "检查是否存在汇率为空的记录",
+      "type": "sql",
+      "datasource": "saas_db",
+      "result_mode": "records",
+      "sql_template": "SELECT func, txn, rate_type, rate_date FROM jounrnal WHERE header_id = :source_object_id AND rate is null",
+      "sql_params": {
+        "source_object_id": "$input.source_object_id"
+      },
+      "on_fail": {
+        "decision": "exists",
+        "mode": "sub_repeat",
+        "divider": ",",
+        "message_cn": "存在汇率为空的记录: [记录{func}-{txn}-{rate_date}]",
+        "message_en": "There are records with null exchange rates: [Record{func}-{txn}-{rate_date}]."
+      }
+    },
+    {
+      "name": "check_rate_wrong",
+      "description": "检查是否存在汇率类型错误的记录",
+      "type": "sql",
+      "datasource": "saas_db",
+      "result_mode": "records",
+      "sql_template": "SELECT rate_type FROM jounrnal WHERE header_id = :source_object_id AND rate_type <> 'user'",
+      "sql_params": {
+        "source_object_id": "$input.source_object_id"
+      },
+      "on_fail": {
+        "decision": "exists",
+        "mode": "full_repeat",
+        "message_cn": "汇率类型{rate_type}错误",
+        "message_en": "Exchange rate type {rate_type} is incorrect."
+      }
+    }
+  ],
+  "steps": [
+    {
+      "name": "query_aggregate_amount",
+      "description": "查询汇总金额",
+      "type": "sql",
+      "datasource": "saas_db",
+      "result_mode": "records",
+      "sql_template": "SELECT func, SUM(amount) as total_amount FROM jounrnal WHERE header_id = :source_object_id group by func",
+      "sql_params": {
+        "source_object_id": "$input.source_object_id"
+      }
+    },
+    {
+      "name": "exchange_rate",
+      "description": "换算美元汇率汇总金额",
+      "type": "sql",
+      "datasource": "data_db",
+      "result_mode": "record",
+      "consumes": [
+        {
+          "from": "$steps.query_aggregate_amount",
+          "alias": "am"
+        }
+      ],
+      "sql_template": "SELECT sum(case when am.func = 'USD' then am.total_amount else am.total_amount * er.rate end) as final_amount FROM am left join exchange_rate er on am.func = er.func and er.rate_date = CURRENT_DATE",
+      "sql_params": {},
+      "outputs": ["final_amount"]
+    }
+  ],
+  "on_fail": {
+    "decision": "$steps.exchange_rate.final_amount > $variables.threshold",
+    "mode": "single",
+    "message_cn": "金额{$steps.exchange_rate.final_amount}超过阈值{$variables.threshold}",
+    "message_en": "The amount {steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}."
+  }
+}

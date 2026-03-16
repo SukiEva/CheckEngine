@@ -1,6 +1,6 @@
 # ExecDSL v0.1 规范草案
 
-本文档基于当前样例 [`example.json`](/Users/Suki/Documents/WorkSpace/Claude/CheckEngine/example.json) 整理，用于约束 `ExecDSL` 的解析与执行行为。
+本文档基于当前样例 [`example.json`](./references/example.json) 整理，用于约束 `ExecDSL` 的解析与执行行为。
 
 ## 1. 顶层结构
 
