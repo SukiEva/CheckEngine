@@ -51,15 +51,16 @@ class DslEngine:
     ) -> ExecutionResult:
         state = ExecutionState.new(input_data=input_data)
 
-        context_result, context_trace = self.sql_executor.execute_node(
-            document.context,
-            phase="context",
-            state=state,
-            datasource_registry=datasource_registry,
-            node_name="context",
-        )
-        state.add_trace(context_trace)
-        state.set_context_result(context_result)
+        if document.context is not None:
+            context_result, context_trace = self.sql_executor.execute_node(
+                document.context,
+                phase="context",
+                state=state,
+                datasource_registry=datasource_registry,
+                node_name="context",
+            )
+            state.add_trace(context_trace)
+            state.set_context_result(context_result)
 
         for variable_name, definition in document.variables.items():
             state.variables_data[variable_name] = self._evaluate_variable(definition, state)

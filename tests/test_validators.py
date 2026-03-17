@@ -27,6 +27,61 @@ class ValidatorTestCase(unittest.TestCase):
         document = self.parser.parse(json.dumps(self.example_data))
         self.validator.validate(document)
 
+    def test_validate_without_optional_blocks(self) -> None:
+        data = {
+            "steps": [
+                {
+                    "name": "s1",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "false",
+                "mode": "single",
+                "message_cn": "ok",
+                "message_en": "ok",
+            },
+        }
+        document = self.parser.parse(json.dumps(data))
+        self.validator.validate(document)
+
+    def test_reference_context_without_context_block_raises(self) -> None:
+        data = {
+            "variables": {
+                "threshold": {
+                    "type": "assign_by_condition",
+                    "when": [{"condition": "$context.flow == 'flow1'", "value": 1}],
+                    "default": 0,
+                }
+            },
+            "steps": [
+                {
+                    "name": "s1",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "false",
+                "mode": "single",
+                "message_cn": "ok",
+                "message_en": "ok",
+            },
+        }
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.reference_validator.validate(document)
+
     def test_invalid_sub_repeat_template_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["prechecks"][0]["on_fail"]["message_cn"] = "存在汇率为空的记录: 记录{func}-{txn}-{rate_date}"

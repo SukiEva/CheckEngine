@@ -59,9 +59,6 @@ class JsonDslParser:
     """将 JSON DSL 文本解析为内部数据模型。"""
 
     REQUIRED_TOP_LEVEL_KEYS = (
-        DslField.CONTEXT.value,
-        DslField.VARIABLES.value,
-        DslField.PRECHECKS.value,
         DslField.STEPS.value,
         DslField.ON_FAIL.value,
     )
@@ -83,9 +80,9 @@ class JsonDslParser:
             raise DSLParseError(f"DSL is missing top-level blocks: {', '.join(missing)}")
 
         return DslDocument(
-            context=self._parse_context(data[DslField.CONTEXT.value]),
-            variables=self._parse_variables(data[DslField.VARIABLES.value]),
-            prechecks=self._parse_prechecks(data[DslField.PRECHECKS.value]),
+            context=self._parse_context(data[DslField.CONTEXT.value]) if DslField.CONTEXT.value in data else None,
+            variables=self._parse_variables(data.get(DslField.VARIABLES.value, {})),
+            prechecks=self._parse_prechecks(data.get(DslField.PRECHECKS.value, [])),
             steps=self._parse_steps(data[DslField.STEPS.value]),
             on_fail=self._parse_fail_policy(data[DslField.ON_FAIL.value], DslField.ON_FAIL.value),
             raw=data,

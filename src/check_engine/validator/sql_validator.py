@@ -18,7 +18,8 @@ class SqlSafetyValidator:
     LEADING_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 
     def validate(self, document: DslDocument) -> None:
-        self._validate_sql(document.context, "context")
+        if document.context is not None:
+            self._validate_sql(document.context, "context")
         for index, precheck in enumerate(document.prechecks):
             self._validate_sql(precheck, "prechecks[{0}]".format(index))
         for index, step in enumerate(document.steps):
