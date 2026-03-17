@@ -160,14 +160,13 @@ FROM am
 
 ### 6.2 variables
 
-`variables` 当前先支持 `assign_by_condition`。
+`variables` 当前只支持赋值语义：按 `when` 条件顺序匹配；若 `when` 为空则视为常量。
 
 示例：
 
 ```json
 {
   "threshold": {
-    "type": "assign_by_condition",
     "when": [
       {
         "condition": "$context.flow == 'flow1'",
@@ -184,6 +183,22 @@ FROM am
 - 按顺序匹配 `when`
 - 命中第一条即取其 `value`
 - 若都不命中，取 `default`
+
+常量示例（`when` 为空）：
+
+```json
+{
+  "threshold": {
+    "when": [],
+    "default": 800
+  }
+}
+```
+
+常量语义：
+
+- 不进行条件匹配
+- 直接返回 `default`
 
 ### 6.3 prechecks[]
 
@@ -428,7 +443,7 @@ FROM am
 
 - 只支持只读 SQL
 - `context` 和 `steps` 当前只支持 `type: sql`
-- `variables` 当前只支持 `assign_by_condition`
+- `variables` 当前只支持赋值语义：`when` 有条件分支；`when` 为空表示常量（取 `default`）
 - `prechecks.on_fail.decision` 支持兼容关键字 `exists`，并支持 `exists($path)`
 - 顶层 `on_fail.decision` 支持表达式与 `exists($path)`（不支持裸 `exists`）
 - 不支持循环、自定义脚本与除 `exists(...)` 外的函数调用

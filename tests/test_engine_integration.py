@@ -103,6 +103,25 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "final")
         self.assertEqual(result.failed_node, "on_fail")
 
+    def test_execute_with_constant_variable(self) -> None:
+        self._insert_header("FAIL_CONSTANT", "flow1", "scenario1")
+        self._insert_journal("FAIL_CONSTANT", "USD", "1", "user", "2024-01-01", 1.0, 400)
+        self._insert_journal("FAIL_CONSTANT", "CNY", "2", "user", "2024-01-01", 1.0, 700)
+        self._insert_rate("CNY", 1.0)
+
+        dsl_data = json.loads(self.dsl_text)
+        dsl_data["variables"] = {
+            "threshold": {
+                "when": [],
+                "default": 800,
+            }
+        }
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_CONSTANT"}, self.registry)
+
+        self.assertFalse(result.passed)
+        self.assertEqual(result.phase, "final")
+        self.assertIn("阈值800", result.message_cn)
+
     def test_execute_on_fail_exists_with_records_field_reference(self) -> None:
         self._insert_header("FAIL_RECORDS_EXISTS", "flow1", "scenario1")
         self._insert_journal("FAIL_RECORDS_EXISTS", "USD", "1", "user", "2024-01-01", 1.0, 321)

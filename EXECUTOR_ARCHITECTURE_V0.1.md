@@ -527,7 +527,7 @@ FROM am
 - 只支持只读 SQL
 - 只支持 `record` 和 `records`
 - `context` / `steps` 只支持 `type: sql`
-- `variables` 只支持 `assign_by_condition`
+- `variables` 只支持赋值语义（`when` 条件匹配；`when` 为空则取 `default`）
 - `prechecks.on_fail.decision` 兼容 `exists` 并支持 `exists($path)`
 - 顶层 `on_fail.decision` 支持 `exists($path)`（不支持裸 `exists`）
 - `consumes` 先用 `VALUES CTE`
