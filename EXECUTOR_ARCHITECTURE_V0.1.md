@@ -80,7 +80,6 @@ src/check_engine/
     evaluator.py
   runtime/
     state.py
-    trace.py
   sql/
     executor.py
     cte_builder.py
@@ -148,7 +147,6 @@ class DslDocument:
 推荐对象：
 
 - `ExecutionState`
-- `ExecutionTrace`
 - `NodeExecutionResult`
 - `ExecutionResult`
 
@@ -161,7 +159,6 @@ class ExecutionState:
     context_data: dict[str, Any]
     variables_data: dict[str, Any]
     step_data: dict[str, dict[str, Any]]
-    trace: list["ExecutionTrace"]
 ```
 
 建议同时保留两类结果：
@@ -435,8 +432,7 @@ FROM am
   "phase": "pass",
   "failed_node": null,
   "message_cn": null,
-  "message_en": null,
-  "trace": []
+  "message_en": null
 }
 ```
 
@@ -445,17 +441,6 @@ FROM am
 - `phase = "precheck"` 或 `phase = "final"`
 - `failed_node` 填具体节点名或 `on_fail`
 - `message_cn` / `message_en` 填渲染后的消息
-
-建议保留 `trace`，用于记录：
-
-- 节点名
-- 节点类型
-- datasource
-- 执行 SQL
-- 绑定参数
-- 结果模式
-- 耗时
-- 是否成功
 
 ## 16. 错误模型设计
 
