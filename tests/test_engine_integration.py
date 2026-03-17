@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from contextlib import contextmanager
 from datetime import date
@@ -89,6 +90,19 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertIn("超过阈值1000", result.message_cn)
         self.assertIn("exceeds the threshold 1000", result.message_en)
         self.assertEqual(result.steps["exchange_rate"]["final_amount"], 1300)
+
+    def test_execute_returns_final_failure_with_exists_function(self) -> None:
+        self._insert_header("FAIL_EXISTS", "flow1", "scenario1")
+        self._insert_journal("FAIL_EXISTS", "USD", "1", "user", "2024-01-01", 1.0, 400)
+        self._insert_rate("USD", 1.0)
+
+        dsl_data = json.loads(self.dsl_text)
+        dsl_data["on_fail"]["decision"] = "exists($steps.exchange_rate.final_amount)"
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_EXISTS"}, self.registry)
+
+        self.assertFalse(result.passed)
+        self.assertEqual(result.phase, "final")
+        self.assertEqual(result.failed_node, "on_fail")
 
     def test_execute_returns_precheck_failure(self) -> None:
         self._insert_header("FAIL_PRECHECK", "flow1", "scenario1")

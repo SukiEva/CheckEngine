@@ -34,7 +34,15 @@ class _SafeExpressionValidator(ast.NodeVisitor):
         ast.LtE,
         ast.In,
         ast.NotIn,
+        ast.Call,
     )
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if not isinstance(node.func, ast.Name) or node.func.id != "exists":
+            raise DSLExecutionError("Only exists(...) function is supported in expression.")
+        if len(node.args) != 1 or node.keywords:
+            raise DSLExecutionError("exists(...) must have exactly one positional argument.")
+        self.visit(node.args[0])
 
     def generic_visit(self, node: ast.AST) -> None:
         if not isinstance(node, self.ALLOWED_NODES):
@@ -54,6 +62,13 @@ class ExpressionEvaluator:
 
         ref_env = {}
 
+        def exists(value: Any) -> bool:
+            if value is None:
+                return False
+            if isinstance(value, (str, bytes, list, tuple, dict, set)):
+                return len(value) > 0
+            return True
+
         def replace_reference(match: re.Match[str]) -> str:
             ref_name = "__ref_{0}".format(len(ref_env))
             ref_env[ref_name] = state.resolve_reference(match.group(0))
@@ -70,6 +85,6 @@ class ExpressionEvaluator:
         _SafeExpressionValidator().visit(tree)
 
         try:
-            return eval(compile(tree, "<dsl-expression>", "eval"), {"__builtins__": {}}, ref_env)
+            return eval(compile(tree, "<dsl-expression>", "eval"), {"__builtins__": {}}, {**ref_env, "exists": exists})
         except Exception as exc:  # noqa: BLE001
             raise DSLExecutionError(f"Expression evaluation failed: {expression}") from exc

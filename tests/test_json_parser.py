@@ -31,9 +31,18 @@ class JsonDslParserTestCase(unittest.TestCase):
         with self.assertRaises(DSLParseError):
             self.parser.parse("{invalid json}")
 
-    def test_parse_missing_top_level_block_raises(self) -> None:
+    def test_parse_missing_required_top_level_block_raises(self) -> None:
         with self.assertRaises(DSLParseError):
-            self.parser.parse('{"context": {}, "variables": {}, "prechecks": [], "steps": []}')
+            self.parser.parse('{"steps": []}')
+
+    def test_parse_optional_top_level_blocks(self) -> None:
+        document = self.parser.parse(
+            '{"steps": [{"name": "s1", "type": "sql", "datasource": "db", "result_mode": "record", "sql_template": "select 1", "sql_params": {}, "outputs": ["v"]}], "on_fail": {"decision": "false", "mode": "single", "message_cn": "x", "message_en": "y"}}'
+        )
+
+        self.assertIsNone(document.context)
+        self.assertEqual(document.variables, {})
+        self.assertEqual(document.prechecks, [])
 
 
 if __name__ == "__main__":
