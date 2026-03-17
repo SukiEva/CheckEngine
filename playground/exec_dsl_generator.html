@@ -491,6 +491,7 @@
             <p>2. 变量条件里的 <code>value</code> 会优先按 JSON 值解析，例如数字、布尔、null。</p>
             <p>3. <code>sql_params</code> 原样保留，适合填 <code>$input.xxx</code>、<code>$context.xxx</code> 这类路径。</p>
             <p>4. <code>sub_repeat</code> 模板里请保留一段 <code>[]</code> 用于标记重复片段。</p>
+            <p>5. 消息模板支持 <code>f{$path:format_spec}</code>，例如 <code>f{$steps.a.out1:,}</code>。</p>
           </div>
         </section>
 
