@@ -44,6 +44,14 @@ class JsonDslParserTestCase(unittest.TestCase):
         self.assertEqual(document.variables, {})
         self.assertEqual(document.prechecks, [])
 
+    def test_parse_constant_variable_with_empty_when(self) -> None:
+        document = self.parser.parse(
+            '{"variables": {"threshold": {"when": [], "default": 888}}, "steps": [{"name": "s1", "type": "sql", "datasource": "db", "result_mode": "record", "sql_template": "select 1 as v", "sql_params": {}, "outputs": ["v"]}], "on_fail": {"decision": "$variables.threshold > 100", "mode": "single", "message_cn": "x", "message_en": "y"}}'
+        )
+
+        self.assertEqual(document.variables["threshold"].when, [])
+        self.assertEqual(document.variables["threshold"].default, 888)
+
 
 if __name__ == "__main__":
     unittest.main()

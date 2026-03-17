@@ -112,7 +112,6 @@ class JsonDslParser:
             when_path = f"{var_path}.{DslField.WHEN.value}"
             when_items = self._expect_list(definition.get(DslField.WHEN.value, []), when_path)
             variables[name] = VariableDefinition(
-                type=self._expect_string(definition.get(DslField.TYPE.value), f"{var_path}.{DslField.TYPE.value}"),
                 when=[
                     VariableCondition(
                         condition=self._expect_string(

@@ -9,35 +9,12 @@ from ..exceptions import DSLExecutionError
 
 
 @dataclass(frozen=True)
-class ExecutionTrace:
-    """单个节点的执行轨迹。"""
-
-    phase: str
-    node_name: str
-    node_kind: str
-    datasource: str
-    sql: str
-    params: dict[str, Any]
-    result_mode: str
-    row_count: int
-    success: bool
-    elapsed_ms: float
-    error: Optional[str] = None
-
-
-@dataclass(frozen=True)
 class NodeExecutionResult:
     """节点执行结果。"""
 
-    node_name: str
-    result_mode: str
     raw_rows: list[dict[str, Any]]
     exported_data: Any
     exported_fields: list[str]
-    datasource: str
-    sql: str
-    params: dict[str, Any]
-    elapsed_ms: float
 
     def as_rows(self) -> list[dict[str, Any]]:
         return list(self.raw_rows)
@@ -55,12 +32,9 @@ class ExecutionResult:
     context: dict[str, Any]
     variables: dict[str, Any]
     steps: dict[str, Any]
-    trace: list[ExecutionTrace]
 
     def to_dict(self) -> dict[str, Any]:
-        payload = asdict(self)
-        payload["trace"] = [asdict(item) for item in self.trace]
-        return payload
+        return asdict(self)
 
 
 @dataclass
@@ -73,7 +47,6 @@ class ExecutionState:
     variables_data: dict[str, Any] = field(default_factory=dict)
     step_results: dict[str, NodeExecutionResult] = field(default_factory=dict)
     step_data: dict[str, Any] = field(default_factory=dict)
-    trace: list[ExecutionTrace] = field(default_factory=list)
 
     @classmethod
     def new(cls, input_data: dict[str, Any]) -> "ExecutionState":
@@ -86,9 +59,6 @@ class ExecutionState:
     def set_step_result(self, step_name: str, result: NodeExecutionResult) -> None:
         self.step_results[step_name] = result
         self.step_data[step_name] = result.exported_data
-
-    def add_trace(self, trace: ExecutionTrace) -> None:
-        self.trace.append(trace)
 
     def resolve_reference(self, reference: str) -> Any:
         if not reference.startswith("$"):

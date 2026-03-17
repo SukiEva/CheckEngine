@@ -14,7 +14,6 @@ class StructureValidator:
     VALID_SQL_NODE_TYPES = {"sql"}
     VALID_RESULT_MODES = {"record", "records"}
     VALID_FAIL_MODES = {"sub_repeat", "full_repeat", "single"}
-    VALID_VARIABLE_TYPES = {"assign_by_condition"}
     EXISTS_CALL_PATTERN = re.compile(r"^exists\(\s*\$[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*\)$")
 
     def validate(self, document: DslDocument) -> None:
@@ -32,10 +31,6 @@ class StructureValidator:
 
     def _validate_variables(self, variables: dict[str, VariableDefinition]) -> None:
         for name, definition in variables.items():
-            if definition.type not in self.VALID_VARIABLE_TYPES:
-                raise DSLValidationError(f"variables.{name}.type is not supported: {definition.type}")
-            if not definition.when:
-                raise DSLValidationError(f"variables.{name}.when must not be empty.")
             for index, item in enumerate(definition.when):
                 if not item.condition.strip():
                     raise DSLValidationError(f"variables.{name}.when[{index}].condition must not be empty.")
@@ -99,8 +94,10 @@ class StructureValidator:
             raise DSLValidationError(f"{path}.message_en must not be empty.")
 
         if policy.mode == "sub_repeat":
-            if policy.divider is None:
-                raise DSLValidationError(f"{path}.divider must not be empty.")
+            if policy.divider is None and (policy.divider_cn is None or policy.divider_en is None):
+                raise DSLValidationError(
+                    f"{path} must provide divider, or provide both divider_cn and divider_en when mode is sub_repeat."
+                )
             self._validate_repeat_segment(policy.message_cn, f"{path}.message_cn")
             self._validate_repeat_segment(policy.message_en, f"{path}.message_en")
 
