@@ -6,8 +6,8 @@ import ast
 import re
 from typing import Any
 
-from check_engine.exceptions import DSLExecutionError
-from check_engine.runtime.state import ExecutionState
+from ..exceptions import DSLExecutionError
+from ..runtime.state import ExecutionState
 
 
 class _SafeExpressionValidator(ast.NodeVisitor):
@@ -38,7 +38,7 @@ class _SafeExpressionValidator(ast.NodeVisitor):
 
     def generic_visit(self, node: ast.AST) -> None:
         if not isinstance(node, self.ALLOWED_NODES):
-            raise DSLExecutionError(f"表达式包含不支持的语法节点: {node.__class__.__name__}")
+            raise DSLExecutionError(f"Expression contains unsupported syntax node: {node.__class__.__name__}")
         super().generic_visit(node)
 
 
@@ -50,7 +50,7 @@ class ExpressionEvaluator:
 
     def evaluate(self, expression: str, state: ExecutionState) -> Any:
         if expression == "exists":
-            raise DSLExecutionError("关键字 exists 仅用于 precheck 失败判定，不应直接执行。")
+            raise DSLExecutionError("Keyword 'exists' is only valid for precheck failure decision and must not be evaluated directly.")
 
         ref_env = {}
 
@@ -65,11 +65,11 @@ class ExpressionEvaluator:
         try:
             tree = ast.parse(python_expr, mode="eval")
         except SyntaxError as exc:
-            raise DSLExecutionError(f"表达式语法错误: {expression}") from exc
+            raise DSLExecutionError(f"Expression syntax error: {expression}") from exc
 
         _SafeExpressionValidator().visit(tree)
 
         try:
             return eval(compile(tree, "<dsl-expression>", "eval"), {"__builtins__": {}}, ref_env)
         except Exception as exc:  # noqa: BLE001
-            raise DSLExecutionError(f"表达式求值失败: {expression}") from exc
+            raise DSLExecutionError(f"Expression evaluation failed: {expression}") from exc

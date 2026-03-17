@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
-from check_engine.dsl.models import (
+from ..dsl.models import (
     ConsumeSpec,
     ContextNode,
     DslDocument,
@@ -15,7 +15,7 @@ from check_engine.dsl.models import (
     VariableCondition,
     VariableDefinition,
 )
-from check_engine.exceptions import DSLParseError
+from ..exceptions import DSLParseError
 
 
 class JsonDslParser:
@@ -25,19 +25,19 @@ class JsonDslParser:
 
     def parse(self, dsl_text: str) -> DslDocument:
         if not isinstance(dsl_text, str):
-            raise DSLParseError("DSL 文本必须是字符串。")
+            raise DSLParseError("DSL text must be a string.")
 
         try:
             data = json.loads(dsl_text)
         except json.JSONDecodeError as exc:
-            raise DSLParseError(f"DSL JSON 解析失败: {exc.msg}") from exc
+            raise DSLParseError(f"Failed to parse DSL JSON: {exc.msg}") from exc
 
         if not isinstance(data, dict):
-            raise DSLParseError("DSL 顶层必须是 JSON 对象。")
+            raise DSLParseError("Top-level DSL must be a JSON object.")
 
         missing = [key for key in self.REQUIRED_TOP_LEVEL_KEYS if key not in data]
         if missing:
-            raise DSLParseError(f"DSL 缺少顶层块: {', '.join(missing)}")
+            raise DSLParseError(f"DSL is missing top-level blocks: {', '.join(missing)}")
 
         return DslDocument(
             context=self._parse_context(data["context"]),
@@ -156,17 +156,17 @@ class JsonDslParser:
 
     def _expect_dict(self, value: Any, path: str) -> dict[str, Any]:
         if not isinstance(value, dict):
-            raise DSLParseError(f"{path} 必须是对象。")
+            raise DSLParseError(f"{path} must be an object.")
         return value
 
     def _expect_list(self, value: Any, path: str) -> list[Any]:
         if not isinstance(value, list):
-            raise DSLParseError(f"{path} 必须是数组。")
+            raise DSLParseError(f"{path} must be a list.")
         return value
 
     def _expect_string(self, value: Any, path: str) -> str:
         if not isinstance(value, str) or not value.strip():
-            raise DSLParseError(f"{path} 必须是非空字符串。")
+            raise DSLParseError(f"{path} must be a non-empty string.")
         return value
 
     def _optional_string(self, value: Any, path: str) -> Optional[str]:

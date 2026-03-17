@@ -3,18 +3,13 @@
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
 from typing import Any, Optional
 
-from check_engine.dsl.models import SqlNode, StepNode
-from check_engine.exceptions import DSLExecutionError
-from check_engine.runtime.state import ExecutionTrace, NodeExecutionResult
-from check_engine.sql.cte_builder import CteBuilder
-
-try:
-    from sqlalchemy import text as sqlalchemy_text
-except Exception:  # noqa: BLE001
-    sqlalchemy_text = None
-
+from ..dsl.models import SqlNode, StepNode
+from ..exceptions import DSLExecutionError
+from ..runtime.state import ExecutionTrace, NodeExecutionResult
+from .cte_builder import CteBuilder
 
 class SqlExecutor:
     """执行 context、precheck、step 中的 SQL 节点。"""
@@ -45,7 +40,7 @@ class SqlExecutor:
             exported_data, exported_fields = self._project_outputs(node, rows)
         except Exception as exc:  # noqa: BLE001
             elapsed_ms = (time.perf_counter() - start) * 1000
-            error = exc if isinstance(exc, DSLExecutionError) else DSLExecutionError(f"SQL 节点执行失败: {node_name}")
+            error = exc if isinstance(exc, DSLExecutionError) else DSLExecutionError(f"SQL node execution failed: {node_name}")
             trace = ExecutionTrace(
                 phase=phase,
                 node_name=node_name,
@@ -105,51 +100,20 @@ class SqlExecutor:
         return cte_sql + " " + sql_template
 
     def _run_sql(self, datasource: Any, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
-        if hasattr(datasource, "connect") and not hasattr(datasource, "cursor") and not hasattr(datasource, "exec_driver_sql"):
-            connection = datasource.connect()
-            try:
-                return self._run_sql(connection, sql, params)
-            finally:
-                close = getattr(connection, "close", None)
-                if callable(close):
-                    close()
+        if not hasattr(datasource, "get_session"):
+            raise DSLExecutionError("Datasource must provide get_session and execute SQL through a SQLAlchemy Session.")
 
-        if hasattr(datasource, "cursor"):
-            return self._run_with_dbapi(datasource, sql, params)
+        from sqlalchemy import text as sqlalchemy_text
 
-        if hasattr(datasource, "exec_driver_sql") or hasattr(datasource, "execute"):
-            return self._run_with_sqlalchemy_like(datasource, sql, params)
-
-        raise DSLExecutionError("数据源对象不支持执行 SQL。")
-
-    def _run_with_sqlalchemy_like(self, datasource: Any, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
-        if hasattr(datasource, "execute") and sqlalchemy_text is not None:
-            result = datasource.execute(sqlalchemy_text(sql), params)
-        elif hasattr(datasource, "exec_driver_sql"):
-            result = datasource.exec_driver_sql(sql, params)
-        else:
-            raise DSLExecutionError("当前 SQLAlchemy 对象不支持执行 SQL。")
-
+        session_factory = contextmanager(datasource.get_session)
+        with session_factory() as session:
+            result = session.execute(sqlalchemy_text(sql), params)
         keys = list(result.keys())
         return [dict(zip(keys, row)) for row in result.fetchall()]
 
-    def _run_with_dbapi(self, datasource: Any, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
-        cursor = datasource.cursor()
-        try:
-            cursor.execute(sql, params)
-            description = cursor.description or []
-            if not description:
-                return []
-            columns = [item[0] for item in description]
-            return [dict(zip(columns, row)) for row in cursor.fetchall()]
-        finally:
-            close = getattr(cursor, "close", None)
-            if callable(close):
-                close()
-
     def _project_outputs(self, node: SqlNode, rows: list[dict[str, Any]]) -> tuple[Any, list[str]]:
         if node.result_mode == "record" and len(rows) > 1:
-            raise DSLExecutionError("record 模式返回了多行结果。")
+            raise DSLExecutionError("record mode returned multiple rows.")
 
         fields = list(node.outputs)
         if not fields and rows:
