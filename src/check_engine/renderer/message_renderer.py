@@ -103,16 +103,27 @@ class MessageRenderer:
         token_map: dict[str, list[Any]] = {}
         for match in self.PLACEHOLDER_PATTERN.finditer(template):
             token = match.group(1).strip()
+<<<<<<< codex/fix-on_fail-message_cn-for-array-outputs-ht74ms
             reference_token, _ = self._split_format_token(token)
             if reference_token.startswith("$"):
                 value = state.resolve_reference(reference_token)
             elif self.IMPLICIT_PATH_PATTERN.match(reference_token):
                 value = state.resolve_path(reference_token)
+=======
+            if token.startswith("$"):
+                value = state.resolve_reference(token)
+            elif self.IMPLICIT_PATH_PATTERN.match(token):
+                value = state.resolve_path(token)
+>>>>>>> main
             else:
                 continue
 
             if isinstance(value, list):
+<<<<<<< codex/fix-on_fail-message_cn-for-array-outputs-ht74ms
                 token_map[reference_token] = value
+=======
+                token_map[token] = value
+>>>>>>> main
         return token_map
 
     def _render_once(
@@ -122,9 +133,16 @@ class MessageRenderer:
         row: Optional[dict[str, Any]],
         overrides: Optional[dict[str, Any]] = None,
     ) -> str:
+<<<<<<< codex/fix-on_fail-message_cn-for-array-outputs-ht74ms
         def resolve_token(token: str) -> Any:
             if overrides is not None and token in overrides:
                 return overrides[token]
+=======
+        def replace(match: re.Match[str]) -> str:
+            token = match.group(1).strip()
+            if overrides is not None and token in overrides:
+                return self._stringify(overrides[token])
+>>>>>>> main
             if token.startswith("$"):
                 return state.resolve_reference(token)
             if self.IMPLICIT_PATH_PATTERN.match(token):

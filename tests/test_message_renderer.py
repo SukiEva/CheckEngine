@@ -104,6 +104,7 @@ class MessageRendererTestCase(unittest.TestCase):
         self.assertEqual(message_cn, "存在异常记录: 记录A-1；记录B-2")
         self.assertEqual(message_en, "Invalid records: RecordA-1 | RecordB-2")
 
+<<<<<<< codex/fix-on_fail-message_cn-for-array-outputs-ht74ms
     def test_render_single_with_formatted_global_paths(self) -> None:
         self.state.step_data = {"exchange_rate": {"final_amount": 12345.67}}
         self.state.variables_data = {"threshold": 1000}
@@ -139,6 +140,8 @@ class MessageRendererTestCase(unittest.TestCase):
         self.assertEqual(message_cn, "结果：1,200-5.6 | 3,000-7.0")
         self.assertEqual(message_en, "result: 1,200-5.6 | 3,000-7.0")
 
+=======
+>>>>>>> main
 
 if __name__ == "__main__":
     unittest.main()
