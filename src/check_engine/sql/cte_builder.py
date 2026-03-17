@@ -48,14 +48,9 @@ class CteBuilder:
             placeholders = []
             for field in fields:
                 param_name = "__cte_{0}_{1}_{2}".format(alias, row_index, field)
-                params[param_name] = self._preserve_parameter_value(row.get(field))
+                params[param_name] = row.get(field)
                 placeholders.append(":{0}".format(param_name))
             value_rows.append("(" + ", ".join(placeholders) + ")")
 
         sql = "{0}({1}) AS (VALUES {2})".format(alias, column_sql, ", ".join(value_rows))
         return sql, params
-
-    def _preserve_parameter_value(self, value: Any) -> Any:
-        """保留参数原始对象，避免提前字符串化导致精度或格式变化。"""
-
-        return value

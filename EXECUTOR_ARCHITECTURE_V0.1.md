@@ -365,7 +365,6 @@ FROM am
 - 简单直接
 - 易于参数绑定
 - 易于跨数据源传递中间结果
-- 参数值可保持原始 Python 对象（如 `Decimal`），避免提前字符串化造成精度或展示形式变化
 
 ### 12.3 当前风险
 
@@ -407,7 +406,6 @@ FROM am
 
 - `{field}` 行级占位符
 - `{$path}` 全局路径占位符
-- `f{$path:format_spec}` 格式化占位符
 - `sub_repeat`
 - `full_repeat`
 - `single`
