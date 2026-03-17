@@ -131,11 +131,11 @@ references/
 ```python
 @dataclass
 class DslDocument:
-    context: "ContextNode"
-    variables: dict[str, "VariableDefinition"]
-    prechecks: list["PrecheckNode"]
+    context: "ContextNode | None"
     steps: list["StepNode"]
     on_fail: "FailPolicy"
+    variables: dict[str, "VariableDefinition"] = field(default_factory=dict)
+    prechecks: list["PrecheckNode"] = field(default_factory=list)
 ```
 
 关键原则：
@@ -207,9 +207,9 @@ class DatasourceRegistry(Protocol):
 3. 执行引用校验
 4. 执行 SQL 安全校验
 5. 初始化 `ExecutionState`
-6. 执行 `context`
-7. 计算 `variables`
-8. 顺序执行 `prechecks`
+6. 若存在 `context`，执行 `context`
+7. 若存在 `variables`，计算 `variables`
+8. 若存在 `prechecks`，顺序执行 `prechecks`
 9. 如有失败，立即渲染消息并返回
 10. 顺序执行 `steps`
 11. 求值顶层 `on_fail.decision`
@@ -225,7 +225,8 @@ def execute(dsl_text, input_data, datasource_registry):
 
     state = ExecutionState.new(input_data=input_data)
 
-    state.context_data = execute_context(dsl.context, state, datasource_registry)
+    if dsl.context is not None:
+        state.context_data = execute_context(dsl.context, state, datasource_registry)
     state.variables_data = evaluate_variables(dsl.variables, state)
 
     for precheck in dsl.prechecks:
@@ -248,15 +249,15 @@ def execute(dsl_text, input_data, datasource_registry):
 `json_parser.py` 建议只做三件事：
 
 1. `json.loads`
-2. 必填顶层块检查
-3. 转换为内部 `dataclass` 模型
+2. 必填顶层块检查（当前仅 `steps`、`on_fail`）
+3. 转换为内部 `dataclass` 模型（可选块补默认值）
 
 不建议在解析器里做过多业务校验，避免职责混乱。
 
 解析阶段建议报错的情况：
 
 - JSON 非法
-- 顶层块缺失
+- 必填顶层块缺失
 - 顶层块类型错误，例如 `steps` 不是数组
 - 明显必填字段缺失，例如 `step.name` 不存在
 
@@ -268,7 +269,7 @@ def execute(dsl_text, input_data, datasource_registry):
 
 负责检查：
 
-- 顶层块齐全
+- 必填顶层块齐全（`steps`、`on_fail`）
 - 节点字段类型合法
 - `name` 唯一
 - `result_mode` 合法
@@ -318,7 +319,7 @@ def execute(dsl_text, input_data, datasource_registry):
 
 不允许：
 
-- 函数调用
+- 除 `exists(...)` 外的函数调用
 - 属性写入
 - 下标赋值
 - 任意 Python 代码
@@ -542,7 +543,8 @@ FROM am
 - 只支持 `record` 和 `records`
 - `context` / `steps` 只支持 `type: sql`
 - `variables` 只支持 `assign_by_condition`
-- `prechecks.on_fail.decision` 先只支持 `exists`
+- `prechecks.on_fail.decision` 兼容 `exists` 并支持 `exists($path)`
+- 顶层 `on_fail.decision` 支持 `exists($path)`（不支持裸 `exists`）
 - `consumes` 先用 `VALUES CTE`
 - 空结果 CTE 暂视为已知边界，保守处理
 
@@ -555,3 +557,11 @@ FROM am
 - [`references/example.json`](./references/example.json)
 
 若架构设计与 DSL 规范冲突，以 DSL 规范为准；若规范本身不足以支撑实现，应先补文档，再改代码。
+
+
+## 21. decision 语义统一约束（补充）
+
+- `prechecks[].on_fail.decision`：支持兼容关键字 `exists`。
+- 通用表达式：支持 `exists($path)`，用于判断路径值是否非空存在。
+- 顶层 `on_fail.decision`：不支持裸 `exists`，必须写成 `exists($path)`。
+- 安全约束：除 `exists(...)` 外，不支持其它函数调用。

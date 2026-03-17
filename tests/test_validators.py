@@ -82,6 +82,28 @@ class ValidatorTestCase(unittest.TestCase):
         with self.assertRaises(DSLValidationError):
             self.reference_validator.validate(document)
 
+    def test_validate_on_fail_exists_call(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["on_fail"]["decision"] = "exists($steps.exchange_rate.final_amount)"
+        document = self.parser.parse(json.dumps(data))
+        self.validator.validate(document)
+
+    def test_validate_on_fail_bare_exists_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["on_fail"]["decision"] = "exists"
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.structure_validator.validate(document)
+
+    def test_validate_on_fail_invalid_exists_syntax_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["on_fail"]["decision"] = "exists($steps.exchange_rate.final_amount, $variables.threshold)"
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.structure_validator.validate(document)
+
     def test_invalid_sub_repeat_template_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["prechecks"][0]["on_fail"]["message_cn"] = "存在汇率为空的记录: 记录{func}-{txn}-{rate_date}"

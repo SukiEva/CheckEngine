@@ -95,7 +95,7 @@ class DslEngine:
             state.add_trace(trace)
             state.set_step_result(step.name, result)
 
-        if bool(self.expression_evaluator.evaluate(document.on_fail.decision, state)):
+        if self._should_fail_by_policy(document.on_fail, state):
             message_cn, message_en = self.message_renderer.render(document.on_fail, state)
             return self.result_builder.build_failure(
                 phase="final",
@@ -121,4 +121,7 @@ class DslEngine:
     ) -> bool:
         if policy.decision == "exists":
             return len(rows) > 0
+        return self._should_fail_by_policy(policy, state)
+
+    def _should_fail_by_policy(self, policy: FailPolicy, state: ExecutionState) -> bool:
         return bool(self.expression_evaluator.evaluate(policy.decision, state))

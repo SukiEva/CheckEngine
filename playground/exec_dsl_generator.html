@@ -439,7 +439,7 @@
           <div class="grid">
             <div class="field">
               <label for="on-fail-decision">decision</label>
-              <input id="on-fail-decision" placeholder="$steps.exchange_rate.final_amount > $variables.threshold" />
+              <input id="on-fail-decision" placeholder="exists($steps.exchange_rate.final_amount) 或表达式" />
             </div>
             <div class="field">
               <label for="on-fail-mode">mode</label>
@@ -615,7 +615,7 @@
         }
       ],
       on_fail: {
-        decision: "$steps.exchange_rate.final_amount > $variables.threshold",
+        decision: "exists($steps.exchange_rate.final_amount)",
         mode: "single",
         message_cn: "金额{$steps.exchange_rate.final_amount}超过阈值{$variables.threshold}",
         message_en: "The amount {steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}.",
@@ -718,7 +718,7 @@
       wrapper.innerHTML = `
         <div class="field">
           <label>decision</label>
-          <input data-role="decision" placeholder="exists 或表达式" />
+          <input data-role="decision" placeholder="exists（仅 precheck）/ exists($path) / 表达式" />
         </div>
         <div class="field">
           <label>mode</label>
@@ -1118,6 +1118,8 @@
 
       if (!dsl.on_fail.decision) {
         issues.push("on_fail.decision 不能为空。");
+      } else if (dsl.on_fail.decision.trim() === "exists") {
+        issues.push("on_fail.decision 不支持裸 exists，请改为 exists($path)。");
       }
       if (!dsl.on_fail.message_cn.trim()) {
         issues.push("on_fail.message_cn 不能为空。");
