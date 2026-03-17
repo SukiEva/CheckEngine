@@ -94,8 +94,10 @@ class StructureValidator:
             raise DSLValidationError(f"{path}.message_en must not be empty.")
 
         if policy.mode == "sub_repeat":
-            if policy.divider is None:
-                raise DSLValidationError(f"{path}.divider must not be empty.")
+            if policy.divider is None and (policy.divider_cn is None or policy.divider_en is None):
+                raise DSLValidationError(
+                    f"{path} must provide divider, or provide both divider_cn and divider_en when mode is sub_repeat."
+                )
             self._validate_repeat_segment(policy.message_cn, f"{path}.message_cn")
             self._validate_repeat_segment(policy.message_en, f"{path}.message_en")
 

@@ -168,6 +168,25 @@ class ValidatorTestCase(unittest.TestCase):
         with self.assertRaises(DSLValidationError):
             self.structure_validator.validate(document)
 
+    def test_sub_repeat_with_divider_cn_en_is_valid(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0]["on_fail"].pop("divider", None)
+        data["prechecks"][0]["on_fail"]["divider_cn"] = "；"
+        data["prechecks"][0]["on_fail"]["divider_en"] = " | "
+        document = self.parser.parse(json.dumps(data))
+
+        self.structure_validator.validate(document)
+
+    def test_sub_repeat_missing_divider_en_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0]["on_fail"].pop("divider", None)
+        data["prechecks"][0]["on_fail"]["divider_cn"] = "；"
+        data["prechecks"][0]["on_fail"].pop("divider_en", None)
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.structure_validator.validate(document)
+
     def test_invalid_step_reference_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["on_fail"]["decision"] = "$steps.not_exists.final_amount > $variables.threshold"

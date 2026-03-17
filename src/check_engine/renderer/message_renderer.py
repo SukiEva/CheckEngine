@@ -49,7 +49,7 @@ class MessageRenderer:
             return divider.join([self._render_once(template, state, row) for row in rows])
 
         if policy.mode == "sub_repeat":
-            return self._render_sub_repeat(template, policy, state, rows)
+            return self._render_sub_repeat(template, policy, locale, state, rows)
 
         raise DSLExecutionError(f"Unknown message rendering mode: {policy.mode}")
 
@@ -57,6 +57,7 @@ class MessageRenderer:
         self,
         template: str,
         policy: FailPolicy,
+        locale: str,
         state: ExecutionState,
         rows: list[dict[str, Any]],
     ) -> str:
@@ -65,7 +66,8 @@ class MessageRenderer:
         prefix = template[:left]
         segment = template[left + 1 : right]
         suffix = template[right + 1 :]
-        repeated = policy.divider.join(self._render_sub_repeat_segments(segment, state, rows))
+        divider = self._resolve_sub_repeat_divider(policy, locale)
+        repeated = divider.join(self._render_sub_repeat_segments(segment, state, rows))
         return "{0}{1}{2}".format(
             self._render_once(prefix, state, None),
             repeated,
@@ -146,6 +148,17 @@ class MessageRenderer:
         if policy.divider is not None:
             return policy.divider
         return " "
+
+    def _resolve_sub_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
+        if policy.divider is not None:
+            return policy.divider
+        if locale == "cn":
+            if policy.divider_cn is None:
+                raise DSLExecutionError("sub_repeat divider_cn is required when divider is not set.")
+            return policy.divider_cn
+        if policy.divider_en is None:
+            raise DSLExecutionError("sub_repeat divider_en is required when divider is not set.")
+        return policy.divider_en
 
     def _stringify(self, value: Any) -> str:
         if value is None:

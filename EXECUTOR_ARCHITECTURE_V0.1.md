@@ -419,6 +419,8 @@ FROM am
 模式实现建议：
 
 - `sub_repeat`：识别并提取唯一的 `[]` 片段
+  - 分隔符优先使用 `divider`
+  - 若未配置 `divider`，则要求同时配置 `divider_cn` 与 `divider_en`
 - `full_repeat`：整条模板逐行渲染后拼接
 - `single`：只渲染一次
 

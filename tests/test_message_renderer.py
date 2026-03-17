@@ -87,6 +87,23 @@ class MessageRendererTestCase(unittest.TestCase):
         with self.assertRaisesRegex(DSLExecutionError, "same length"):
             self.renderer.render(policy, self.state)
 
+    def test_render_sub_repeat_with_locale_specific_divider(self) -> None:
+        policy = FailPolicy(
+            decision="exists",
+            mode="sub_repeat",
+            divider=None,
+            divider_cn="；",
+            divider_en=" | ",
+            message_cn="存在异常记录: [记录{func}-{txn}]",
+            message_en="Invalid records: [Record{func}-{txn}]",
+        )
+        rows = [{"func": "A", "txn": "1"}, {"func": "B", "txn": "2"}]
+
+        message_cn, message_en = self.renderer.render(policy, self.state, rows)
+
+        self.assertEqual(message_cn, "存在异常记录: 记录A-1；记录B-2")
+        self.assertEqual(message_en, "Invalid records: RecordA-1 | RecordB-2")
+
 
 if __name__ == "__main__":
     unittest.main()
