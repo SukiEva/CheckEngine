@@ -405,7 +405,7 @@
           <div class="item-head">
             <div>
               <h2>Variables</h2>
-              <div class="small-note">当前默认按 <code>assign_by_condition</code> 生成。</div>
+              <div class="small-note"><code>when</code> 为空时表示常量（取 <code>default</code>）。</div>
             </div>
             <button class="btn-secondary" id="add-variable">新增变量</button>
           </div>
@@ -451,7 +451,7 @@
             </div>
             <div class="field">
               <label for="on-fail-divider">divider</label>
-              <input id="on-fail-divider" placeholder="仅 sub_repeat 或自定义 full_repeat 时填写" />
+              <input id="on-fail-divider" placeholder="sub_repeat: 优先用 divider，否则需同时配置 divider_cn/en" />
             </div>
             <div class="field">
               <label for="on-fail-divider-cn">divider_cn</label>
@@ -550,7 +550,6 @@
       },
       variables: {
         threshold: {
-          type: "assign_by_condition",
           when: [
             {
               condition: "$context.flow == 'flow1' and $context.scenario in ('scenario1', 'scenario2')",
@@ -685,12 +684,6 @@
             <label>变量名</label>
             <input data-role="variable-name" placeholder="threshold" />
           </div>
-          <div class="field">
-            <label>type</label>
-            <select data-role="variable-type">
-              <option value="assign_by_condition">assign_by_condition</option>
-            </select>
-          </div>
           <div class="field full">
             <label>default</label>
             <input data-role="variable-default" placeholder='例如 500 或 "PASS"' />
@@ -702,7 +695,6 @@
       `;
 
       card.querySelector('[data-role="variable-name"]').value = name;
-      card.querySelector('[data-role="variable-type"]').value = data.type || "assign_by_condition";
       card.querySelector('[data-role="variable-default"]').value = stringifyEditorValue(data.default);
 
       const conditionsContainer = card.querySelector('[data-role="conditions"]');
@@ -1015,7 +1007,6 @@
         });
 
         variables[name] = {
-          type: card.querySelector('[data-role="variable-type"]').value,
           when,
           default: parseValue(card.querySelector('[data-role="variable-default"]').value)
         };
@@ -1189,7 +1180,7 @@
       variablesListEl.innerHTML = "";
       const variableEntries = Object.entries(data.variables || {});
       if (variableEntries.length === 0) {
-        variablesListEl.appendChild(createVariableCard("threshold", { type: "assign_by_condition", when: [{ condition: "", value: "" }], default: "" }));
+        variablesListEl.appendChild(createVariableCard("threshold", { when: [{ condition: "", value: "" }], default: "" }));
       } else {
         variableEntries.forEach(([name, value]) => variablesListEl.appendChild(createVariableCard(name, value)));
       }
@@ -1304,7 +1295,7 @@
     document.getElementById("copy-json").addEventListener("click", copyJson);
     document.getElementById("download-json").addEventListener("click", downloadJson);
     document.getElementById("add-variable").addEventListener("click", () => {
-      variablesListEl.appendChild(createVariableCard("", { type: "assign_by_condition", when: [{ condition: "", value: "" }], default: "" }));
+      variablesListEl.appendChild(createVariableCard("", { when: [{ condition: "", value: "" }], default: "" }));
       refreshPreview();
     });
     document.getElementById("add-precheck").addEventListener("click", () => {

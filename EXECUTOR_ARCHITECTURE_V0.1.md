@@ -80,7 +80,6 @@ src/check_engine/
     evaluator.py
   runtime/
     state.py
-    trace.py
   sql/
     executor.py
     cte_builder.py
@@ -148,7 +147,6 @@ class DslDocument:
 推荐对象：
 
 - `ExecutionState`
-- `ExecutionTrace`
 - `NodeExecutionResult`
 - `ExecutionResult`
 
@@ -161,7 +159,6 @@ class ExecutionState:
     context_data: dict[str, Any]
     variables_data: dict[str, Any]
     step_data: dict[str, dict[str, Any]]
-    trace: list["ExecutionTrace"]
 ```
 
 建议同时保留两类结果：
@@ -422,6 +419,8 @@ FROM am
 模式实现建议：
 
 - `sub_repeat`：识别并提取唯一的 `[]` 片段
+  - 分隔符优先使用 `divider`
+  - 若未配置 `divider`，则要求同时配置 `divider_cn` 与 `divider_en`
 - `full_repeat`：整条模板逐行渲染后拼接
 - `single`：只渲染一次
 
@@ -435,8 +434,7 @@ FROM am
   "phase": "pass",
   "failed_node": null,
   "message_cn": null,
-  "message_en": null,
-  "trace": []
+  "message_en": null
 }
 ```
 
@@ -445,17 +443,6 @@ FROM am
 - `phase = "precheck"` 或 `phase = "final"`
 - `failed_node` 填具体节点名或 `on_fail`
 - `message_cn` / `message_en` 填渲染后的消息
-
-建议保留 `trace`，用于记录：
-
-- 节点名
-- 节点类型
-- datasource
-- 执行 SQL
-- 绑定参数
-- 结果模式
-- 耗时
-- 是否成功
 
 ## 16. 错误模型设计
 
@@ -542,7 +529,7 @@ FROM am
 - 只支持只读 SQL
 - 只支持 `record` 和 `records`
 - `context` / `steps` 只支持 `type: sql`
-- `variables` 只支持 `assign_by_condition`
+- `variables` 只支持赋值语义（`when` 条件匹配；`when` 为空则取 `default`）
 - `prechecks.on_fail.decision` 兼容 `exists` 并支持 `exists($path)`
 - 顶层 `on_fail.decision` 支持 `exists($path)`（不支持裸 `exists`）
 - `consumes` 先用 `VALUES CTE`

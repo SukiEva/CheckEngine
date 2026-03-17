@@ -49,7 +49,7 @@ class MessageRenderer:
             return divider.join([self._render_once(template, state, row) for row in rows])
 
         if policy.mode == "sub_repeat":
-            return self._render_sub_repeat(template, policy, state, rows)
+            return self._render_sub_repeat(template, policy, locale, state, rows)
 
         raise DSLExecutionError(f"Unknown message rendering mode: {policy.mode}")
 
@@ -57,6 +57,7 @@ class MessageRenderer:
         self,
         template: str,
         policy: FailPolicy,
+        locale: str,
         state: ExecutionState,
         rows: list[dict[str, Any]],
     ) -> str:
@@ -65,21 +66,64 @@ class MessageRenderer:
         prefix = template[:left]
         segment = template[left + 1 : right]
         suffix = template[right + 1 :]
-        repeated = policy.divider.join([self._render_once(segment, state, row) for row in rows])
+        divider = self._resolve_sub_repeat_divider(policy, locale)
+        repeated = divider.join(self._render_sub_repeat_segments(segment, state, rows))
         return "{0}{1}{2}".format(
             self._render_once(prefix, state, None),
             repeated,
             self._render_once(suffix, state, None),
         )
 
+    def _render_sub_repeat_segments(
+        self,
+        segment: str,
+        state: ExecutionState,
+        rows: list[dict[str, Any]],
+    ) -> list[str]:
+        if rows:
+            return [self._render_once(segment, state, row) for row in rows]
+
+        array_tokens = self._collect_array_tokens(segment, state)
+        if not array_tokens:
+            return []
+
+        token_lengths = {len(values) for values in array_tokens.values()}
+        if len(token_lengths) != 1:
+            raise DSLExecutionError("sub_repeat list placeholders must have the same length.")
+
+        token_size = token_lengths.pop()
+        rendered: list[str] = []
+        for index in range(token_size):
+            overrides = {token: values[index] for token, values in array_tokens.items()}
+            rendered.append(self._render_once(segment, state, None, overrides=overrides))
+        return rendered
+
+    def _collect_array_tokens(self, template: str, state: ExecutionState) -> dict[str, list[Any]]:
+        token_map: dict[str, list[Any]] = {}
+        for match in self.PLACEHOLDER_PATTERN.finditer(template):
+            token = match.group(1).strip()
+            if token.startswith("$"):
+                value = state.resolve_reference(token)
+            elif self.IMPLICIT_PATH_PATTERN.match(token):
+                value = state.resolve_path(token)
+            else:
+                continue
+
+            if isinstance(value, list):
+                token_map[token] = value
+        return token_map
+
     def _render_once(
         self,
         template: str,
         state: ExecutionState,
         row: Optional[dict[str, Any]],
+        overrides: Optional[dict[str, Any]] = None,
     ) -> str:
         def replace(match: re.Match[str]) -> str:
             token = match.group(1).strip()
+            if overrides is not None and token in overrides:
+                return self._stringify(overrides[token])
             if token.startswith("$"):
                 return self._stringify(state.resolve_reference(token))
             if self.IMPLICIT_PATH_PATTERN.match(token):
@@ -104,6 +148,17 @@ class MessageRenderer:
         if policy.divider is not None:
             return policy.divider
         return " "
+
+    def _resolve_sub_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
+        if policy.divider is not None:
+            return policy.divider
+        if locale == "cn":
+            if policy.divider_cn is None:
+                raise DSLExecutionError("sub_repeat divider_cn is required when divider is not set.")
+            return policy.divider_cn
+        if policy.divider_en is None:
+            raise DSLExecutionError("sub_repeat divider_en is required when divider is not set.")
+        return policy.divider_en
 
     def _stringify(self, value: Any) -> str:
         if value is None:
