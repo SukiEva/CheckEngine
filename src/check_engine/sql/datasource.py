@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Protocol
 
-from check_engine.exceptions import DSLExecutionError
+from ..exceptions import DSLExecutionError
 
 
 class DatasourceRegistry(Protocol):
@@ -22,5 +22,5 @@ class StaticDatasourceRegistry:
 
     def get(self, name: str) -> Any:
         if name not in self._mapping:
-            raise DSLExecutionError(f"未找到数据源: {name}")
+            raise DSLExecutionError(f"Datasource not found: {name}")
         return self._mapping[name]

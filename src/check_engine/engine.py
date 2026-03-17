@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from check_engine.dsl.models import DslDocument, FailPolicy, VariableDefinition
-from check_engine.expression import ExpressionEvaluator
-from check_engine.parser import JsonDslParser
-from check_engine.renderer import MessageRenderer
-from check_engine.result import ResultBuilder
-from check_engine.runtime.state import ExecutionResult, ExecutionState
-from check_engine.sql import SqlExecutor
-from check_engine.validator import DslValidator
+from .dsl.models import DslDocument, FailPolicy, VariableDefinition
+from .expression import ExpressionEvaluator
+from .parser import JsonDslParser
+from .renderer import MessageRenderer
+from .result import ResultBuilder
+from .runtime.state import ExecutionResult, ExecutionState
+from .sql import SqlExecutor
+from .validator import DslValidator
 
 
 class DslEngine:

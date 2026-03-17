@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 
-from check_engine.dsl.models import DslDocument, FailPolicy, PrecheckNode, StepNode, VariableDefinition
-from check_engine.exceptions import DSLValidationError
+from ..dsl.models import DslDocument, FailPolicy, PrecheckNode, StepNode, VariableDefinition
+from ..exceptions import DSLValidationError
 
 
 class ReferenceValidator:
@@ -72,9 +72,9 @@ class ReferenceValidator:
 
             parts = self._split_reference(consume.from_path)
             if len(parts) != 2 or parts[0] != "steps":
-                raise DSLValidationError(f"consumes.from 引用非法: {consume.from_path}")
+                raise DSLValidationError(f"Invalid consumes.from reference: {consume.from_path}")
             if parts[1] not in available_steps:
-                raise DSLValidationError(f"consumes.from 引用了未执行的步骤: {consume.from_path}")
+                raise DSLValidationError(f"consumes.from references a step that has not executed yet: {consume.from_path}")
 
     def _validate_fail_policy(
         self,
@@ -103,41 +103,41 @@ class ReferenceValidator:
     ) -> None:
         parts = self._split_reference(reference)
         if not parts:
-            raise DSLValidationError(f"{path} 引用非法: {reference}")
+            raise DSLValidationError(f"{path} contains invalid reference: {reference}")
 
         root = parts[0]
         if root == "input":
             if len(parts) < 2:
-                raise DSLValidationError(f"{path} 的 input 引用必须包含字段: {reference}")
+                raise DSLValidationError(f"{path} input reference must include a field: {reference}")
             return
 
         if root == "context":
             if len(parts) != 2:
-                raise DSLValidationError(f"{path} 的 context 引用层级非法: {reference}")
+                raise DSLValidationError(f"{path} context reference has invalid depth: {reference}")
             if parts[1] not in document.context.outputs:
-                raise DSLValidationError(f"{path} 引用了未导出的 context 字段: {reference}")
+                raise DSLValidationError(f"{path} references a non-exported context field: {reference}")
             return
 
         if root == "variables":
             if len(parts) != 2:
-                raise DSLValidationError(f"{path} 的 variables 引用层级非法: {reference}")
+                raise DSLValidationError(f"{path} variables reference has invalid depth: {reference}")
             if parts[1] not in document.variables:
-                raise DSLValidationError(f"{path} 引用了未声明的变量: {reference}")
+                raise DSLValidationError(f"{path} references an undeclared variable: {reference}")
             return
 
         if root == "steps":
             if len(parts) != 3:
-                raise DSLValidationError(f"{path} 的 steps 引用层级非法: {reference}")
+                raise DSLValidationError(f"{path} steps reference has invalid depth: {reference}")
             step_name = parts[1]
             field_name = parts[2]
             if step_name not in available_steps:
-                raise DSLValidationError(f"{path} 引用了当前不可用的步骤: {reference}")
+                raise DSLValidationError(f"{path} references a step not available at this point: {reference}")
             step = self._find_step(document.steps, step_name)
             if step.outputs and field_name not in step.outputs:
-                raise DSLValidationError(f"{path} 引用了未导出的步骤字段: {reference}")
+                raise DSLValidationError(f"{path} references a non-exported step field: {reference}")
             return
 
-        raise DSLValidationError(f"{path} 存在未知作用域: {reference}")
+        raise DSLValidationError(f"{path} contains unknown scope: {reference}")
 
     def _extract_references(self, text: str) -> list[str]:
         return self.PATH_PATTERN.findall(text)
@@ -149,4 +149,4 @@ class ReferenceValidator:
         for step in steps:
             if step.name == step_name:
                 return step
-        raise DSLValidationError(f"未找到步骤: {step_name}")
+        raise DSLValidationError(f"Step not found: {step_name}")

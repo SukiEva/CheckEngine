@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from check_engine.dsl.models import ConsumeSpec
-from check_engine.exceptions import DSLExecutionError
-from check_engine.runtime.state import ExecutionState
+from ..dsl.models import ConsumeSpec
+from ..exceptions import DSLExecutionError
+from ..runtime.state import ExecutionState
 
 
 class CteBuilder:
@@ -34,7 +34,7 @@ class CteBuilder:
         fields: list[str],
     ) -> tuple[str, dict[str, Any]]:
         if not fields:
-            raise DSLExecutionError(f"CTE {alias} 无法推断列名，请显式配置 outputs。")
+            raise DSLExecutionError(f"CTE {alias} cannot infer column names; please configure outputs explicitly.")
 
         params: dict[str, Any] = {}
         column_sql = ", ".join(fields)
