@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from enum import Enum
 from typing import Any, Optional
 
 from ..dsl.models import (
@@ -18,10 +19,52 @@ from ..dsl.models import (
 from ..exceptions import DSLParseError
 
 
+class DslField(str, Enum):
+    """DSL 字段常量。"""
+
+    CONTEXT = "context"
+    VARIABLES = "variables"
+    PRECHECKS = "prechecks"
+    STEPS = "steps"
+    ON_FAIL = "on_fail"
+
+    TYPE = "type"
+    DATASOURCE = "datasource"
+    RESULT_MODE = "result_mode"
+    SQL_TEMPLATE = "sql_template"
+    SQL_PARAMS = "sql_params"
+    OUTPUTS = "outputs"
+    DESCRIPTION = "description"
+
+    WHEN = "when"
+    CONDITION = "condition"
+    VALUE = "value"
+    DEFAULT = "default"
+    NAME = "name"
+
+    CONSUMES = "consumes"
+    FROM = "from"
+    ALIAS = "alias"
+
+    DECISION = "decision"
+    MODE = "mode"
+    MESSAGE_CN = "message_cn"
+    MESSAGE_EN = "message_en"
+    DIVIDER = "divider"
+    DIVIDER_CN = "divider_cn"
+    DIVIDER_EN = "divider_en"
+
+
 class JsonDslParser:
     """将 JSON DSL 文本解析为内部数据模型。"""
 
-    REQUIRED_TOP_LEVEL_KEYS = ("context", "variables", "prechecks", "steps", "on_fail")
+    REQUIRED_TOP_LEVEL_KEYS = (
+        DslField.CONTEXT.value,
+        DslField.VARIABLES.value,
+        DslField.PRECHECKS.value,
+        DslField.STEPS.value,
+        DslField.ON_FAIL.value,
+    )
 
     def parse(self, dsl_text: str) -> DslDocument:
         if not isinstance(dsl_text, str):
@@ -40,99 +83,108 @@ class JsonDslParser:
             raise DSLParseError(f"DSL is missing top-level blocks: {', '.join(missing)}")
 
         return DslDocument(
-            context=self._parse_context(data["context"]),
-            variables=self._parse_variables(data["variables"]),
-            prechecks=self._parse_prechecks(data["prechecks"]),
-            steps=self._parse_steps(data["steps"]),
-            on_fail=self._parse_fail_policy(data["on_fail"], "on_fail"),
+            context=self._parse_context(data[DslField.CONTEXT.value]),
+            variables=self._parse_variables(data[DslField.VARIABLES.value]),
+            prechecks=self._parse_prechecks(data[DslField.PRECHECKS.value]),
+            steps=self._parse_steps(data[DslField.STEPS.value]),
+            on_fail=self._parse_fail_policy(data[DslField.ON_FAIL.value], DslField.ON_FAIL.value),
             raw=data,
         )
 
     def _parse_context(self, value: Any) -> ContextNode:
-        mapping = self._expect_dict(value, "context")
+        path = DslField.CONTEXT.value
+        mapping = self._expect_dict(value, path)
         return ContextNode(
-            type=self._expect_string(mapping.get("type"), "context.type"),
-            datasource=self._expect_string(mapping.get("datasource"), "context.datasource"),
-            result_mode=self._expect_string(mapping.get("result_mode"), "context.result_mode"),
-            sql_template=self._expect_string(mapping.get("sql_template"), "context.sql_template"),
-            sql_params=self._expect_dict(mapping.get("sql_params", {}), "context.sql_params"),
-            outputs=self._parse_string_list(mapping.get("outputs", []), "context.outputs"),
-            description=self._optional_string(mapping.get("description"), "context.description"),
+            type=self._expect_string(mapping.get(DslField.TYPE.value), f"{path}.{DslField.TYPE.value}"),
+            datasource=self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{path}.{DslField.DATASOURCE.value}"),
+            result_mode=self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{path}.{DslField.RESULT_MODE.value}"),
+            sql_template=self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{path}.{DslField.SQL_TEMPLATE.value}"),
+            sql_params=self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{path}.{DslField.SQL_PARAMS.value}"),
+            outputs=self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{path}.{DslField.OUTPUTS.value}"),
+            description=self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{path}.{DslField.DESCRIPTION.value}"),
         )
 
     def _parse_variables(self, value: Any) -> dict[str, VariableDefinition]:
-        mapping = self._expect_dict(value, "variables")
+        path = DslField.VARIABLES.value
+        mapping = self._expect_dict(value, path)
         variables: dict[str, VariableDefinition] = {}
 
         for name, raw_definition in mapping.items():
-            definition = self._expect_dict(raw_definition, f"variables.{name}")
-            when_items = self._expect_list(definition.get("when", []), f"variables.{name}.when")
+            var_path = f"{path}.{name}"
+            definition = self._expect_dict(raw_definition, var_path)
+            when_path = f"{var_path}.{DslField.WHEN.value}"
+            when_items = self._expect_list(definition.get(DslField.WHEN.value, []), when_path)
             variables[name] = VariableDefinition(
-                type=self._expect_string(definition.get("type"), f"variables.{name}.type"),
+                type=self._expect_string(definition.get(DslField.TYPE.value), f"{var_path}.{DslField.TYPE.value}"),
                 when=[
                     VariableCondition(
                         condition=self._expect_string(
-                            self._expect_dict(item, f"variables.{name}.when[{index}]").get("condition"),
-                            f"variables.{name}.when[{index}].condition",
+                            self._expect_dict(item, f"{when_path}[{index}]").get(DslField.CONDITION.value),
+                            f"{when_path}[{index}].{DslField.CONDITION.value}",
                         ),
-                        value=self._expect_dict(item, f"variables.{name}.when[{index}]").get("value"),
+                        value=self._expect_dict(item, f"{when_path}[{index}]").get(DslField.VALUE.value),
                     )
                     for index, item in enumerate(when_items)
                 ],
-                default=definition.get("default"),
+                default=definition.get(DslField.DEFAULT.value),
             )
 
         return variables
 
     def _parse_prechecks(self, value: Any) -> list[PrecheckNode]:
-        items = self._expect_list(value, "prechecks")
+        path = DslField.PRECHECKS.value
+        items = self._expect_list(value, path)
         nodes: list[PrecheckNode] = []
         for index, item in enumerate(items):
-            mapping = self._expect_dict(item, f"prechecks[{index}]")
+            node_path = f"{path}[{index}]"
+            mapping = self._expect_dict(item, node_path)
             nodes.append(
                 PrecheckNode(
-                    name=self._expect_string(mapping.get("name"), f"prechecks[{index}].name"),
-                    description=self._optional_string(mapping.get("description"), f"prechecks[{index}].description"),
-                    type=self._expect_string(mapping.get("type"), f"prechecks[{index}].type"),
-                    datasource=self._expect_string(mapping.get("datasource"), f"prechecks[{index}].datasource"),
-                    result_mode=self._expect_string(mapping.get("result_mode"), f"prechecks[{index}].result_mode"),
-                    sql_template=self._expect_string(mapping.get("sql_template"), f"prechecks[{index}].sql_template"),
-                    sql_params=self._expect_dict(mapping.get("sql_params", {}), f"prechecks[{index}].sql_params"),
-                    outputs=self._parse_string_list(mapping.get("outputs", []), f"prechecks[{index}].outputs"),
-                    on_fail=self._parse_fail_policy(mapping.get("on_fail"), f"prechecks[{index}].on_fail"),
+                    name=self._expect_string(mapping.get(DslField.NAME.value), f"{node_path}.{DslField.NAME.value}"),
+                    description=self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{node_path}.{DslField.DESCRIPTION.value}"),
+                    type=self._expect_string(mapping.get(DslField.TYPE.value), f"{node_path}.{DslField.TYPE.value}"),
+                    datasource=self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{node_path}.{DslField.DATASOURCE.value}"),
+                    result_mode=self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{node_path}.{DslField.RESULT_MODE.value}"),
+                    sql_template=self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{node_path}.{DslField.SQL_TEMPLATE.value}"),
+                    sql_params=self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{node_path}.{DslField.SQL_PARAMS.value}"),
+                    outputs=self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{node_path}.{DslField.OUTPUTS.value}"),
+                    on_fail=self._parse_fail_policy(mapping.get(DslField.ON_FAIL.value), f"{node_path}.{DslField.ON_FAIL.value}"),
                 )
             )
         return nodes
 
     def _parse_steps(self, value: Any) -> list[StepNode]:
-        items = self._expect_list(value, "steps")
+        path = DslField.STEPS.value
+        items = self._expect_list(value, path)
         nodes: list[StepNode] = []
         for index, item in enumerate(items):
-            mapping = self._expect_dict(item, f"steps[{index}]")
-            raw_consumes = self._expect_list(mapping.get("consumes", []), f"steps[{index}].consumes")
+            node_path = f"{path}[{index}]"
+            mapping = self._expect_dict(item, node_path)
+            consumes_path = f"{node_path}.{DslField.CONSUMES.value}"
+            raw_consumes = self._expect_list(mapping.get(DslField.CONSUMES.value, []), consumes_path)
             consumes = [
                 ConsumeSpec(
                     from_path=self._expect_string(
-                        self._expect_dict(raw_consume, f"steps[{index}].consumes[{consume_index}]").get("from"),
-                        f"steps[{index}].consumes[{consume_index}].from",
+                        self._expect_dict(raw_consume, f"{consumes_path}[{consume_index}]").get(DslField.FROM.value),
+                        f"{consumes_path}[{consume_index}].{DslField.FROM.value}",
                     ),
                     alias=self._expect_string(
-                        self._expect_dict(raw_consume, f"steps[{index}].consumes[{consume_index}]").get("alias"),
-                        f"steps[{index}].consumes[{consume_index}].alias",
+                        self._expect_dict(raw_consume, f"{consumes_path}[{consume_index}]").get(DslField.ALIAS.value),
+                        f"{consumes_path}[{consume_index}].{DslField.ALIAS.value}",
                     ),
                 )
                 for consume_index, raw_consume in enumerate(raw_consumes)
             ]
             nodes.append(
                 StepNode(
-                    name=self._expect_string(mapping.get("name"), f"steps[{index}].name"),
-                    description=self._optional_string(mapping.get("description"), f"steps[{index}].description"),
-                    type=self._expect_string(mapping.get("type"), f"steps[{index}].type"),
-                    datasource=self._expect_string(mapping.get("datasource"), f"steps[{index}].datasource"),
-                    result_mode=self._expect_string(mapping.get("result_mode"), f"steps[{index}].result_mode"),
-                    sql_template=self._expect_string(mapping.get("sql_template"), f"steps[{index}].sql_template"),
-                    sql_params=self._expect_dict(mapping.get("sql_params", {}), f"steps[{index}].sql_params"),
-                    outputs=self._parse_string_list(mapping.get("outputs", []), f"steps[{index}].outputs"),
+                    name=self._expect_string(mapping.get(DslField.NAME.value), f"{node_path}.{DslField.NAME.value}"),
+                    description=self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{node_path}.{DslField.DESCRIPTION.value}"),
+                    type=self._expect_string(mapping.get(DslField.TYPE.value), f"{node_path}.{DslField.TYPE.value}"),
+                    datasource=self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{node_path}.{DslField.DATASOURCE.value}"),
+                    result_mode=self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{node_path}.{DslField.RESULT_MODE.value}"),
+                    sql_template=self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{node_path}.{DslField.SQL_TEMPLATE.value}"),
+                    sql_params=self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{node_path}.{DslField.SQL_PARAMS.value}"),
+                    outputs=self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{node_path}.{DslField.OUTPUTS.value}"),
                     consumes=consumes,
                 )
             )
@@ -141,13 +193,13 @@ class JsonDslParser:
     def _parse_fail_policy(self, value: Any, path: str) -> FailPolicy:
         mapping = self._expect_dict(value, path)
         return FailPolicy(
-            decision=self._expect_string(mapping.get("decision"), f"{path}.decision"),
-            mode=self._expect_string(mapping.get("mode"), f"{path}.mode"),
-            message_cn=self._expect_string(mapping.get("message_cn"), f"{path}.message_cn"),
-            message_en=self._expect_string(mapping.get("message_en"), f"{path}.message_en"),
-            divider=self._optional_string(mapping.get("divider"), f"{path}.divider"),
-            divider_cn=self._optional_string(mapping.get("divider_cn"), f"{path}.divider_cn"),
-            divider_en=self._optional_string(mapping.get("divider_en"), f"{path}.divider_en"),
+            decision=self._expect_string(mapping.get(DslField.DECISION.value), f"{path}.{DslField.DECISION.value}"),
+            mode=self._expect_string(mapping.get(DslField.MODE.value), f"{path}.{DslField.MODE.value}"),
+            message_cn=self._expect_string(mapping.get(DslField.MESSAGE_CN.value), f"{path}.{DslField.MESSAGE_CN.value}"),
+            message_en=self._expect_string(mapping.get(DslField.MESSAGE_EN.value), f"{path}.{DslField.MESSAGE_EN.value}"),
+            divider=self._optional_string(mapping.get(DslField.DIVIDER.value), f"{path}.{DslField.DIVIDER.value}"),
+            divider_cn=self._optional_string(mapping.get(DslField.DIVIDER_CN.value), f"{path}.{DslField.DIVIDER_CN.value}"),
+            divider_en=self._optional_string(mapping.get(DslField.DIVIDER_EN.value), f"{path}.{DslField.DIVIDER_EN.value}"),
         )
 
     def _parse_string_list(self, value: Any, path: str) -> list[str]:
