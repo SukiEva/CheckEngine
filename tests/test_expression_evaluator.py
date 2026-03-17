@@ -28,6 +28,20 @@ class ExpressionEvaluatorTestCase(unittest.TestCase):
         expression = "$input.source_object_id != null and $variables.threshold >= 1000"
         self.assertTrue(self.evaluator.evaluate(expression, self.state))
 
+    def test_evaluate_exists_function(self) -> None:
+        expression = "exists($steps.exchange_rate.final_amount)"
+        self.assertTrue(self.evaluator.evaluate(expression, self.state))
+
+    def test_evaluate_exists_function_on_step_records_field(self) -> None:
+        self.state.step_data["duplicate_lines"] = [{"duplicate_entry_lines": 10}, {"duplicate_entry_lines": 20}]
+        expression = "exists($steps.duplicate_lines.duplicate_entry_lines)"
+        self.assertTrue(self.evaluator.evaluate(expression, self.state))
+
+    def test_evaluate_exists_function_on_empty_list(self) -> None:
+        self.state.step_data["empty_step"] = []
+        expression = "exists($steps.empty_step)"
+        self.assertFalse(self.evaluator.evaluate(expression, self.state))
+
     def test_evaluate_final_failure_expression(self) -> None:
         expression = "$steps.exchange_rate.final_amount > $variables.threshold"
         self.assertTrue(self.evaluator.evaluate(expression, self.state))

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from ..dsl.models import ContextNode, DslDocument, FailPolicy, PrecheckNode, SqlNode, StepNode, VariableDefinition
 from ..exceptions import DSLValidationError
 
@@ -13,9 +15,11 @@ class StructureValidator:
     VALID_RESULT_MODES = {"record", "records"}
     VALID_FAIL_MODES = {"sub_repeat", "full_repeat", "single"}
     VALID_VARIABLE_TYPES = {"assign_by_condition"}
+    EXISTS_CALL_PATTERN = re.compile(r"^exists\(\s*\$[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*\)$")
 
     def validate(self, document: DslDocument) -> None:
-        self._validate_context(document.context)
+        if document.context is not None:
+            self._validate_context(document.context)
         self._validate_variables(document.variables)
         self._validate_prechecks(document.prechecks)
         self._validate_steps(document.steps)
@@ -82,8 +86,13 @@ class StructureValidator:
     def _validate_fail_policy(self, policy: FailPolicy, path: str) -> None:
         if policy.mode not in self.VALID_FAIL_MODES:
             raise DSLValidationError(f"{path}.mode is not supported: {policy.mode}")
-        if not policy.decision.strip():
+        decision = policy.decision.strip()
+        if not decision:
             raise DSLValidationError(f"{path}.decision must not be empty.")
+        if decision == "exists" and path == "on_fail":
+            raise DSLValidationError("on_fail.decision does not support bare 'exists'; use exists($path) instead.")
+        if decision != "exists" and decision.startswith("exists") and not self.EXISTS_CALL_PATTERN.fullmatch(decision):
+            raise DSLValidationError(f"{path}.decision exists syntax is invalid: {policy.decision}")
         if not policy.message_cn.strip():
             raise DSLValidationError(f"{path}.message_cn must not be empty.")
         if not policy.message_en.strip():

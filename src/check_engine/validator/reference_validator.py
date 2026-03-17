@@ -26,7 +26,7 @@ class ReferenceValidator:
         for index, step in enumerate(document.steps):
             available_steps = step_names[:index]
             self._validate_sql_params(step.sql_params, document, available_steps=available_steps)
-            self._validate_consumes(step, available_steps)
+            self._validate_consumes(step, available_steps, document)
 
         self._validate_fail_policy(
             document.on_fail,
@@ -65,9 +65,11 @@ class ReferenceValidator:
                     path=f"sql_params.{key}",
                 )
 
-    def _validate_consumes(self, step: StepNode, available_steps: list[str]) -> None:
+    def _validate_consumes(self, step: StepNode, available_steps: list[str], document: DslDocument) -> None:
         for consume in step.consumes:
             if consume.from_path == "$context":
+                if document.context is None:
+                    raise DSLValidationError("consumes.from references $context but context block is not defined.")
                 continue
 
             parts = self._split_reference(consume.from_path)
@@ -112,6 +114,8 @@ class ReferenceValidator:
             return
 
         if root == "context":
+            if document.context is None:
+                raise DSLValidationError(f"{path} references $context but context block is not defined: {reference}")
             if len(parts) != 2:
                 raise DSLValidationError(f"{path} context reference has invalid depth: {reference}")
             if parts[1] not in document.context.outputs:

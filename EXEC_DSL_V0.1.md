@@ -4,15 +4,29 @@
 
 ## 1. 顶层结构
 
-`ExecDSL` 顶层固定为以下 5 个块：
+`ExecDSL` 顶层包含以下块，其中 `steps` 与 `on_fail` 为必填，`context` / `variables` / `prechecks` 为可选：
 
 ```json
 {
+  "steps": [],
+  "on_fail": {},
   "context": {},
   "variables": {},
-  "prechecks": [],
+  "prechecks": []
+}
+```
+
+最小可执行 DSL 形态：
+
+```json
+{
   "steps": [],
-  "on_fail": {}
+  "on_fail": {
+    "decision": "false",
+    "mode": "single",
+    "message_cn": "",
+    "message_en": ""
+  }
 }
 ```
 
@@ -29,9 +43,9 @@
 执行顺序固定为：
 
 1. 绑定 `$input`
-2. 执行 `context`
-3. 计算 `variables`
-4. 顺序执行 `prechecks`
+2. 若存在 `context`，执行 `context`
+3. 若存在 `variables`，计算 `variables`
+4. 若存在 `prechecks`，顺序执行 `prechecks`
 5. 若某个 `precheck` 失败，立即停止并返回失败
 6. 顺序执行 `steps`
 7. 计算顶层 `on_fail.decision`
@@ -73,14 +87,14 @@
 
 规则：
 
-- `context.outputs`：可被 `variables`、`prechecks`、`steps`、`on_fail` 引用
+- `context.outputs`（当 `context` 存在时）：可被 `variables`、`prechecks`、`steps`、`on_fail` 引用
 - `steps[].outputs`：可被后续 `steps` 和顶层 `on_fail` 引用
 - 不做全局字段提升
 - 只允许带命名空间引用
 
 建议约束：
 
-- `context` 必须声明 `outputs`
+- 若声明了 `context`，则必须声明 `outputs`
 - 被 `consumes` 引用的 `step` 必须声明 `outputs`
 - 被表达式引用的 `step` 应声明 `outputs`
 
@@ -255,6 +269,7 @@ FROM am
 - `steps` 全部执行完成后求值
 - 若 `decision` 为真，则整条规则失败
 - 若 `decision` 为假，则整条规则通过
+- 顶层 `on_fail.decision` 允许使用 `exists($path)` 判断某个路径是否“非空存在”
 
 ## 7. decision 表达式规则
 
@@ -267,12 +282,14 @@ FROM am
 
 特例：
 
-- `prechecks[].on_fail.decision` 支持关键字 `exists`
-- 顶层 `on_fail.decision` 使用普通布尔表达式
+- `prechecks[].on_fail.decision` 支持关键字 `exists`（兼容语义：当前 SQL 有结果即失败）
+- `prechecks[].on_fail.decision` 与顶层 `on_fail.decision` 都支持 `exists($path)`
+- 顶层 `on_fail.decision` **不支持** 裸 `exists`，必须写成 `exists($path)`
 
 建议约束：
 
-- `v0.1` 不支持函数调用
+- `v0.1` 仅支持内置函数 `exists(...)`
+- `v0.1` 不支持其它函数调用
 - `v0.1` 不支持复杂脚本表达式
 - `v0.1` 不支持自定义 Python 逻辑
 
@@ -394,6 +411,7 @@ FROM am
 - 只支持只读 SQL
 - `context` 和 `steps` 当前只支持 `type: sql`
 - `variables` 当前只支持 `assign_by_condition`
-- `prechecks.on_fail.decision` 当前只支持 `exists`
-- 不支持循环、函数调用、自定义脚本
+- `prechecks.on_fail.decision` 支持兼容关键字 `exists`，并支持 `exists($path)`
+- 顶层 `on_fail.decision` 支持表达式与 `exists($path)`（不支持裸 `exists`）
+- 不支持循环、自定义脚本与除 `exists(...)` 外的函数调用
 - 不支持无作用域的字段引用

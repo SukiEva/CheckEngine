@@ -159,6 +159,18 @@ class ExecutionState:
                 if part not in current:
                     raise DSLExecutionError(f"Referenced field does not exist: {reference}")
                 current = current[part]
-            else:
-                raise DSLExecutionError(f"Cannot resolve reference path further: {reference}")
+                continue
+
+            if isinstance(current, list):
+                projected = []
+                for item in current:
+                    if not isinstance(item, dict):
+                        raise DSLExecutionError(f"Cannot resolve reference path further: {reference}")
+                    if part not in item:
+                        raise DSLExecutionError(f"Referenced field does not exist: {reference}")
+                    projected.append(item[part])
+                current = projected
+                continue
+
+            raise DSLExecutionError(f"Cannot resolve reference path further: {reference}")
         return current
