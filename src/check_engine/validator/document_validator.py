@@ -2,10 +2,10 @@
 
 from typing import Optional
 
-from check_engine.dsl.models import DslDocument
-from check_engine.validator.reference_validator import ReferenceValidator
-from check_engine.validator.sql_validator import SqlSafetyValidator
-from check_engine.validator.structure_validator import StructureValidator
+from ..dsl.models import DslDocument
+from .reference_validator import ReferenceValidator
+from .sql_validator import SqlSafetyValidator
+from .structure_validator import StructureValidator
 
 
 class DslValidator:

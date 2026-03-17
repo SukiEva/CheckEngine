@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 
-from check_engine.dsl.models import DslDocument, SqlNode
-from check_engine.exceptions import DSLValidationError
+from ..dsl.models import DslDocument, SqlNode
+from ..exceptions import DSLValidationError
 
 
 class SqlSafetyValidator:
@@ -27,8 +27,8 @@ class SqlSafetyValidator:
     def _validate_sql(self, node: SqlNode, path: str) -> None:
         sql = node.sql_template.strip()
         if not self.LEADING_PATTERN.search(sql):
-            raise DSLValidationError("{0}.sql_template 仅支持 SELECT/WITH 查询。".format(path))
+            raise DSLValidationError("{0}.sql_template only SELECT/WITH queries are allowed.".format(path))
         if self.FORBIDDEN_PATTERN.search(sql):
-            raise DSLValidationError("{0}.sql_template 包含非只读 SQL 关键字。".format(path))
+            raise DSLValidationError("{0}.sql_template contains non-read-only SQL keyword.".format(path))
         if ";" in sql.rstrip(";"):
-            raise DSLValidationError("{0}.sql_template 不支持多语句。".format(path))
+            raise DSLValidationError("{0}.sql_template multiple statements are not supported.".format(path))

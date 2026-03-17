@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from check_engine.runtime.state import ExecutionResult, ExecutionState
+from ..runtime.state import ExecutionResult, ExecutionState
 
 
 class ResultBuilder:

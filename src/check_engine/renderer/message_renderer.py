@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from typing import Any, Optional
 
-from check_engine.dsl.models import FailPolicy
-from check_engine.exceptions import DSLExecutionError
-from check_engine.runtime.state import ExecutionState
+from ..dsl.models import FailPolicy
+from ..exceptions import DSLExecutionError
+from ..runtime.state import ExecutionState
 
 
 class MessageRenderer:
@@ -38,7 +38,7 @@ class MessageRenderer:
     ) -> str:
         if policy.mode == "single":
             if len(rows) > 1:
-                raise DSLExecutionError("single 模式下结果行数不能超过 1。")
+                raise DSLExecutionError("single mode requires at most one result row.")
             row = rows[0] if rows else None
             return self._render_once(template, state, row)
 
@@ -51,7 +51,7 @@ class MessageRenderer:
         if policy.mode == "sub_repeat":
             return self._render_sub_repeat(template, policy, state, rows)
 
-        raise DSLExecutionError(f"未知消息渲染模式: {policy.mode}")
+        raise DSLExecutionError(f"Unknown message rendering mode: {policy.mode}")
 
     def _render_sub_repeat(
         self,
@@ -85,9 +85,9 @@ class MessageRenderer:
             if self.IMPLICIT_PATH_PATTERN.match(token):
                 return self._stringify(state.resolve_path(token))
             if row is None:
-                raise DSLExecutionError(f"模板中的行级字段无法解析: {token}")
+                raise DSLExecutionError(f"Cannot resolve row-level placeholder in template: {token}")
             if token not in row:
-                raise DSLExecutionError(f"模板中的字段不存在: {token}")
+                raise DSLExecutionError(f"Template placeholder field does not exist: {token}")
             return self._stringify(row[token])
 
         return self.PLACEHOLDER_PATTERN.sub(replace, template)

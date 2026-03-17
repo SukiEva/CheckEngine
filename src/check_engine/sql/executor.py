@@ -6,10 +6,10 @@ import time
 from contextlib import contextmanager
 from typing import Any, Optional
 
-from check_engine.dsl.models import SqlNode, StepNode
-from check_engine.exceptions import DSLExecutionError
-from check_engine.runtime.state import ExecutionTrace, NodeExecutionResult
-from check_engine.sql.cte_builder import CteBuilder
+from ..dsl.models import SqlNode, StepNode
+from ..exceptions import DSLExecutionError
+from ..runtime.state import ExecutionTrace, NodeExecutionResult
+from .cte_builder import CteBuilder
 
 class SqlExecutor:
     """执行 context、precheck、step 中的 SQL 节点。"""
@@ -40,7 +40,7 @@ class SqlExecutor:
             exported_data, exported_fields = self._project_outputs(node, rows)
         except Exception as exc:  # noqa: BLE001
             elapsed_ms = (time.perf_counter() - start) * 1000
-            error = exc if isinstance(exc, DSLExecutionError) else DSLExecutionError(f"SQL 节点执行失败: {node_name}")
+            error = exc if isinstance(exc, DSLExecutionError) else DSLExecutionError(f"SQL node execution failed: {node_name}")
             trace = ExecutionTrace(
                 phase=phase,
                 node_name=node_name,
@@ -101,7 +101,7 @@ class SqlExecutor:
 
     def _run_sql(self, datasource: Any, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         if not hasattr(datasource, "get_session"):
-            raise DSLExecutionError("数据源对象必须提供 get_session 方法，并通过 SQLAlchemy Session 执行 SQL。")
+            raise DSLExecutionError("Datasource must provide get_session and execute SQL through a SQLAlchemy Session.")
 
         from sqlalchemy import text as sqlalchemy_text
 
@@ -113,7 +113,7 @@ class SqlExecutor:
 
     def _project_outputs(self, node: SqlNode, rows: list[dict[str, Any]]) -> tuple[Any, list[str]]:
         if node.result_mode == "record" and len(rows) > 1:
-            raise DSLExecutionError("record 模式返回了多行结果。")
+            raise DSLExecutionError("record mode returned multiple rows.")
 
         fields = list(node.outputs)
         if not fields and rows:
