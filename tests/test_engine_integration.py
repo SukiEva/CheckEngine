@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
+import importlib.util
 import sys
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -14,12 +15,34 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from check_engine import DslEngine, StaticDatasourceRegistry
 
 
+@unittest.skipUnless(importlib.util.find_spec("sqlalchemy") is not None, "需要安装 sqlalchemy")
 class DslEngineIntegrationTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
         example_path = Path(__file__).resolve().parents[1] / "references" / "example.json"
         self.dsl_text = example_path.read_text(encoding="utf-8")
-        self.saas_db = sqlite3.connect(":memory:")
-        self.data_db = sqlite3.connect(":memory:")
+        self._text = self._load_text()
+
+        class _SqlAlchemyDatasource:
+            def __init__(self, db_url: str) -> None:
+                self.engine = create_engine(db_url)
+                self._session_factory = sessionmaker(bind=self.engine)
+
+            @contextmanager
+            def get_session(self):
+                session = self._session_factory()
+                try:
+                    yield session
+                finally:
+                    session.close()
+
+            def dispose(self) -> None:
+                self.engine.dispose()
+
+        self.saas_db = _SqlAlchemyDatasource("sqlite+pysqlite:///:memory:")
+        self.data_db = _SqlAlchemyDatasource("sqlite+pysqlite:///:memory:")
         self.registry = StaticDatasourceRegistry(
             {
                 "saas_db": self.saas_db,
@@ -29,9 +52,14 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.engine = DslEngine()
         self._create_schema()
 
+    def _load_text(self):
+        from sqlalchemy import text
+
+        return text
+
     def tearDown(self) -> None:
-        self.saas_db.close()
-        self.data_db.close()
+        self.saas_db.dispose()
+        self.data_db.dispose()
 
     def test_execute_returns_pass(self) -> None:
         self._insert_header("PASS_1", "flow1", "scenario1")
@@ -77,44 +105,56 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertEqual(len(result.trace), 2)
 
     def _create_schema(self) -> None:
-        self.saas_db.execute(
-            """
-            CREATE TABLE header (
-                header_id TEXT PRIMARY KEY,
-                flow TEXT NOT NULL,
-                scenario TEXT NOT NULL
+        with self.saas_db.get_session() as session:
+            session.execute(
+                self._text(
+                    """
+                    CREATE TABLE header (
+                        header_id TEXT PRIMARY KEY,
+                        flow TEXT NOT NULL,
+                        scenario TEXT NOT NULL
+                    )
+                    """
+                )
             )
-            """
-        )
-        self.saas_db.execute(
-            """
-            CREATE TABLE jounrnal (
-                header_id TEXT NOT NULL,
-                func TEXT NOT NULL,
-                txn TEXT NOT NULL,
-                rate_type TEXT NOT NULL,
-                rate_date TEXT NOT NULL,
-                rate REAL,
-                amount REAL NOT NULL
+            session.execute(
+                self._text(
+                    """
+                    CREATE TABLE jounrnal (
+                        header_id TEXT NOT NULL,
+                        func TEXT NOT NULL,
+                        txn TEXT NOT NULL,
+                        rate_type TEXT NOT NULL,
+                        rate_date TEXT NOT NULL,
+                        rate REAL,
+                        amount REAL NOT NULL
+                    )
+                    """
+                )
             )
-            """
-        )
-        self.data_db.execute(
-            """
-            CREATE TABLE exchange_rate (
-                func TEXT NOT NULL,
-                rate REAL NOT NULL,
-                rate_date TEXT NOT NULL
+            session.commit()
+
+        with self.data_db.get_session() as session:
+            session.execute(
+                self._text(
+                    """
+                    CREATE TABLE exchange_rate (
+                        func TEXT NOT NULL,
+                        rate REAL NOT NULL,
+                        rate_date TEXT NOT NULL
+                    )
+                    """
+                )
             )
-            """
-        )
+            session.commit()
 
     def _insert_header(self, header_id: str, flow: str, scenario: str) -> None:
-        self.saas_db.execute(
-            "INSERT INTO header(header_id, flow, scenario) VALUES (:header_id, :flow, :scenario)",
-            {"header_id": header_id, "flow": flow, "scenario": scenario},
-        )
-        self.saas_db.commit()
+        with self.saas_db.get_session() as session:
+            session.execute(
+                self._text("INSERT INTO header(header_id, flow, scenario) VALUES (:header_id, :flow, :scenario)"),
+                {"header_id": header_id, "flow": flow, "scenario": scenario},
+            )
+            session.commit()
 
     def _insert_journal(
         self,
@@ -126,36 +166,42 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         rate: Optional[float],
         amount: float,
     ) -> None:
-        self.saas_db.execute(
-            """
-            INSERT INTO jounrnal(header_id, func, txn, rate_type, rate_date, rate, amount)
-            VALUES (:header_id, :func, :txn, :rate_type, :rate_date, :rate, :amount)
-            """,
-            {
-                "header_id": header_id,
-                "func": func,
-                "txn": txn,
-                "rate_type": rate_type,
-                "rate_date": rate_date,
-                "rate": rate,
-                "amount": amount,
-            },
-        )
-        self.saas_db.commit()
+        with self.saas_db.get_session() as session:
+            session.execute(
+                self._text(
+                    """
+                    INSERT INTO jounrnal(header_id, func, txn, rate_type, rate_date, rate, amount)
+                    VALUES (:header_id, :func, :txn, :rate_type, :rate_date, :rate, :amount)
+                    """
+                ),
+                {
+                    "header_id": header_id,
+                    "func": func,
+                    "txn": txn,
+                    "rate_type": rate_type,
+                    "rate_date": rate_date,
+                    "rate": rate,
+                    "amount": amount,
+                },
+            )
+            session.commit()
 
     def _insert_rate(self, func: str, rate: float) -> None:
-        self.data_db.execute(
-            """
-            INSERT INTO exchange_rate(func, rate, rate_date)
-            VALUES (:func, :rate, :rate_date)
-            """,
-            {
-                "func": func,
-                "rate": rate,
-                "rate_date": date.today().isoformat(),
-            },
-        )
-        self.data_db.commit()
+        with self.data_db.get_session() as session:
+            session.execute(
+                self._text(
+                    """
+                    INSERT INTO exchange_rate(func, rate, rate_date)
+                    VALUES (:func, :rate, :rate_date)
+                    """
+                ),
+                {
+                    "func": func,
+                    "rate": rate,
+                    "rate_date": date.today().isoformat(),
+                },
+            )
+            session.commit()
 
 
 if __name__ == "__main__":
