@@ -108,8 +108,7 @@ class SqlExecutor:
         session_factory = contextmanager(datasource.get_session)
         with session_factory() as session:
             result = session.execute(sqlalchemy_text(sql), params)
-        keys = list(result.keys())
-        return [dict(zip(keys, row)) for row in result.fetchall()]
+            return [dict(row) for row in result.mappings().all()]
 
     def _project_outputs(self, node: SqlNode, rows: list[dict[str, Any]]) -> tuple[Any, list[str]]:
         if node.result_mode == "record" and len(rows) > 1:

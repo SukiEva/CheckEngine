@@ -104,6 +104,37 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "final")
         self.assertEqual(result.failed_node, "on_fail")
 
+    def test_execute_on_fail_exists_with_records_field_reference(self) -> None:
+        self._insert_header("FAIL_RECORDS_EXISTS", "flow1", "scenario1")
+        self._insert_journal("FAIL_RECORDS_EXISTS", "USD", "1", "user", "2024-01-01", 1.0, 321)
+
+        dsl_data = {
+            "steps": [
+                {
+                    "name": "query_duplicate_entry_lines",
+                    "description": "查询重复的行",
+                    "type": "sql",
+                    "datasource": "saas_db",
+                    "result_mode": "records",
+                    "sql_template": "SELECT amount AS duplicate_entry_lines FROM jounrnal WHERE header_id = :source_object_id",
+                    "sql_params": {"source_object_id": "$input.source_object_id"},
+                    "outputs": ["duplicate_entry_lines"],
+                }
+            ],
+            "on_fail": {
+                "decision": "exists($steps.query_duplicate_entry_lines.duplicate_entry_lines)",
+                "mode": "single",
+                "message_cn": "存在疑似重复行",
+                "message_en": "Suspected Duplicate Line Found",
+            },
+        }
+
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_RECORDS_EXISTS"}, self.registry)
+
+        self.assertFalse(result.passed)
+        self.assertEqual(result.phase, "final")
+        self.assertEqual(result.failed_node, "on_fail")
+
     def test_execute_returns_precheck_failure(self) -> None:
         self._insert_header("FAIL_PRECHECK", "flow1", "scenario1")
         self._insert_journal("FAIL_PRECHECK", "USD", "1", "user", "2024-01-01", None, 100)
