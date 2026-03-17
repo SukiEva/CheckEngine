@@ -9,7 +9,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from check_engine.exceptions import DSLValidationError
+from check_engine.exceptions import DSLParseError, DSLValidationError
 from check_engine.parser import JsonDslParser
 from check_engine.validator import DslValidator, ReferenceValidator, StructureValidator
 
@@ -54,7 +54,6 @@ class ValidatorTestCase(unittest.TestCase):
         data = {
             "variables": {
                 "threshold": {
-                    "type": "assign_by_condition",
                     "when": [{"condition": "$context.flow == 'flow1'", "value": 1}],
                     "default": 0,
                 }
@@ -88,6 +87,63 @@ class ValidatorTestCase(unittest.TestCase):
         document = self.parser.parse(json.dumps(data))
         self.validator.validate(document)
 
+    def test_validate_constant_variable(self) -> None:
+        data = {
+            "variables": {
+                "threshold": {
+                    "when": [],
+                    "default": 700,
+                }
+            },
+            "steps": [
+                {
+                    "name": "s1",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "$variables.threshold > 100",
+                "mode": "single",
+                "message_cn": "ok",
+                "message_en": "ok",
+            },
+        }
+        document = self.parser.parse(json.dumps(data))
+        self.validator.validate(document)
+
+    def test_validate_variable_with_empty_condition_raises(self) -> None:
+        data = {
+            "variables": {
+                "threshold": {
+                    "when": [{"condition": "   ", "value": 1}],
+                }
+            },
+            "steps": [
+                {
+                    "name": "s1",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "$variables.threshold > 100",
+                "mode": "single",
+                "message_cn": "ok",
+                "message_en": "ok",
+            },
+        }
+        with self.assertRaises(DSLParseError):
+            self.parser.parse(json.dumps(data))
+
     def test_validate_on_fail_bare_exists_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["on_fail"]["decision"] = "exists"
@@ -107,6 +163,25 @@ class ValidatorTestCase(unittest.TestCase):
     def test_invalid_sub_repeat_template_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["prechecks"][0]["on_fail"]["message_cn"] = "存在汇率为空的记录: 记录{func}-{txn}-{rate_date}"
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.structure_validator.validate(document)
+
+    def test_sub_repeat_with_divider_cn_en_is_valid(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0]["on_fail"].pop("divider", None)
+        data["prechecks"][0]["on_fail"]["divider_cn"] = "；"
+        data["prechecks"][0]["on_fail"]["divider_en"] = " | "
+        document = self.parser.parse(json.dumps(data))
+
+        self.structure_validator.validate(document)
+
+    def test_sub_repeat_missing_divider_en_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0]["on_fail"].pop("divider", None)
+        data["prechecks"][0]["on_fail"]["divider_cn"] = "；"
+        data["prechecks"][0]["on_fail"].pop("divider_en", None)
         document = self.parser.parse(json.dumps(data))
 
         with self.assertRaises(DSLValidationError):

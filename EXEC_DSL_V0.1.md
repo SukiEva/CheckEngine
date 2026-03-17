@@ -118,6 +118,7 @@
 - `from` 只能引用 `context` 或已执行完成的 `steps`
 - 执行器读取被消费节点结果
 - 按该节点的 `outputs` 生成 CTE 列
+- CTE 参数绑定保持原始 Python 值（例如 `Decimal`），不做提前字符串化
 - 在当前 SQL 中以 `alias` 作为临时表使用
 
 当前 step 的 SQL 可以直接写：
@@ -160,14 +161,13 @@ FROM am
 
 ### 6.2 variables
 
-`variables` 当前先支持 `assign_by_condition`。
+`variables` 当前只支持赋值语义：按 `when` 条件顺序匹配；若 `when` 为空则视为常量。
 
 示例：
 
 ```json
 {
   "threshold": {
-    "type": "assign_by_condition",
     "when": [
       {
         "condition": "$context.flow == 'flow1'",
@@ -184,6 +184,22 @@ FROM am
 - 按顺序匹配 `when`
 - 命中第一条即取其 `value`
 - 若都不命中，取 `default`
+
+常量示例（`when` 为空）：
+
+```json
+{
+  "threshold": {
+    "when": [],
+    "default": 800
+  }
+}
+```
+
+常量语义：
+
+- 不进行条件匹配
+- 直接返回 `default`
 
 ### 6.3 prechecks[]
 
@@ -300,14 +316,24 @@ FROM am
 - 行级字段：`{field}`
 - 全局路径：`{$variables.threshold}`、`{$steps.exchange_rate.final_amount}`
 
+支持格式化占位符（Python format 语法）：
+
+- `f{$path:format_spec}`
+- 示例：`f{$steps.a.out1:,}`（千分位）、`f{$steps.a.out2:,.0f}`（千分位并保留 0 位小数）
+- `format_spec` 遵循 Python `format` 迷你语言
+
 ### 8.1 sub_repeat
 
 规则：
 
 - `[]` 只是重复片段标记，最终输出不保留
 - 仅对 `[]` 内模板逐行渲染
-- 使用 `divider` 连接
+- 分隔符规则：
+  - 若配置 `divider`，中英文都使用 `divider`
+  - 若未配置 `divider`，则必须同时配置 `divider_cn` 与 `divider_en`
 - `[]` 外文本保留一份
+- 若 `[]` 内使用全局路径占位符（例如 `{$steps.a.out1}`）且该路径值为数组，则按数组下标逐项渲染
+- 当 `[]` 内有多个数组占位符时，所有数组长度必须一致
 
 示例：
 
@@ -323,6 +349,22 @@ FROM am
 
 ```text
 存在汇率为空的记录: 记录A-1-2024-01-01,记录B-2-2024-01-02
+```
+
+若使用步骤数组路径占位符：
+
+```json
+{
+  "mode": "sub_repeat",
+  "divider": ",",
+  "message_cn": "结果是：[{$steps.a.out1}-{$steps.a.out2}]"
+}
+```
+
+当 `$steps.a.out1=[100,200]` 且 `$steps.a.out2=["USD","CNY"]` 时，输出为：
+
+```text
+结果是：100-USD,200-CNY
 ```
 
 建议约束：
@@ -410,7 +452,7 @@ FROM am
 
 - 只支持只读 SQL
 - `context` 和 `steps` 当前只支持 `type: sql`
-- `variables` 当前只支持 `assign_by_condition`
+- `variables` 当前只支持赋值语义：`when` 有条件分支；`when` 为空表示常量（取 `default`）
 - `prechecks.on_fail.decision` 支持兼容关键字 `exists`，并支持 `exists($path)`
 - 顶层 `on_fail.decision` 支持表达式与 `exists($path)`（不支持裸 `exists`）
 - 不支持循环、自定义脚本与除 `exists(...)` 外的函数调用

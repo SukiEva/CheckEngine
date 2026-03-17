@@ -57,7 +57,6 @@ class VariableCondition:
 class VariableDefinition:
     """变量定义。"""
 
-    type: str
     when: list[VariableCondition] = field(default_factory=list)
     default: Any = None
 

@@ -7,11 +7,13 @@
     "sql_params": {
       "source_object_id": "$input.source_object_id"
     },
-    "outputs": ["flow", "scenario"]
+    "outputs": [
+      "flow",
+      "scenario"
+    ]
   },
   "variables": {
     "threshold": {
-      "type": "assign_by_condition",
       "when": [
         {
           "condition": "$context.flow == 'flow1' and $context.scenario in ('scenario1', 'scenario2')",
@@ -88,7 +90,9 @@
       ],
       "sql_template": "SELECT sum(case when am.func = 'USD' then am.total_amount else am.total_amount * er.rate end) as final_amount FROM am left join exchange_rate er on am.func = er.func and er.rate_date = CURRENT_DATE",
       "sql_params": {},
-      "outputs": ["final_amount"]
+      "outputs": [
+        "final_amount"
+      ]
     }
   ],
   "on_fail": {
