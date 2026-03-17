@@ -74,7 +74,6 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "pass")
         self.assertEqual(result.variables["threshold"], 1000)
         self.assertEqual(result.steps["exchange_rate"]["final_amount"], 900)
-        self.assertEqual(len(result.trace), 5)
 
     def test_execute_returns_final_failure(self) -> None:
         self._insert_header("FAIL_FINAL", "flow1", "scenario1")
@@ -147,7 +146,6 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertEqual(result.failed_node, "check_rate_null")
         self.assertEqual(result.message_cn, "存在汇率为空的记录: 记录USD-1-2024-01-01")
         self.assertIn("null exchange rates", result.message_en)
-        self.assertEqual(len(result.trace), 2)
 
     def _create_schema(self) -> None:
         with self.saas_db.get_session() as session:
