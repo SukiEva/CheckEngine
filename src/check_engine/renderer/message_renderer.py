@@ -14,6 +14,7 @@ class MessageRenderer:
     """按 DSL mode 渲染失败消息。"""
 
     PLACEHOLDER_PATTERN = re.compile(r"\{([^{}]+)\}")
+    FORMAT_PLACEHOLDER_PATTERN = re.compile(r"f\{([^{}]+)\}")
     IMPLICIT_PATH_PATTERN = re.compile(r"^(input|context|variables|steps)\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$")
 
     def render(
@@ -102,15 +103,16 @@ class MessageRenderer:
         token_map: dict[str, list[Any]] = {}
         for match in self.PLACEHOLDER_PATTERN.finditer(template):
             token = match.group(1).strip()
-            if token.startswith("$"):
-                value = state.resolve_reference(token)
-            elif self.IMPLICIT_PATH_PATTERN.match(token):
-                value = state.resolve_path(token)
+            reference_token, _ = self._split_format_token(token)
+            if reference_token.startswith("$"):
+                value = state.resolve_reference(reference_token)
+            elif self.IMPLICIT_PATH_PATTERN.match(reference_token):
+                value = state.resolve_path(reference_token)
             else:
                 continue
 
             if isinstance(value, list):
-                token_map[token] = value
+                token_map[reference_token] = value
         return token_map
 
     def _render_once(
@@ -120,21 +122,40 @@ class MessageRenderer:
         row: Optional[dict[str, Any]],
         overrides: Optional[dict[str, Any]] = None,
     ) -> str:
-        def replace(match: re.Match[str]) -> str:
-            token = match.group(1).strip()
+        def resolve_token(token: str) -> Any:
             if overrides is not None and token in overrides:
-                return self._stringify(overrides[token])
+                return overrides[token]
             if token.startswith("$"):
-                return self._stringify(state.resolve_reference(token))
+                return state.resolve_reference(token)
             if self.IMPLICIT_PATH_PATTERN.match(token):
-                return self._stringify(state.resolve_path(token))
+                return state.resolve_path(token)
             if row is None:
                 raise DSLExecutionError(f"Cannot resolve row-level placeholder in template: {token}")
             if token not in row:
                 raise DSLExecutionError(f"Template placeholder field does not exist: {token}")
-            return self._stringify(row[token])
+            return row[token]
 
-        return self.PLACEHOLDER_PATTERN.sub(replace, template)
+        def replace_format(match: re.Match[str]) -> str:
+            token, format_spec = self._split_format_token(match.group(1).strip())
+            if format_spec is None:
+                raise DSLExecutionError(f"Formatted placeholder must include format spec: {match.group(0)}")
+            try:
+                return format(resolve_token(token), format_spec)
+            except Exception as exc:  # noqa: BLE001
+                raise DSLExecutionError(f"Failed to format placeholder: {match.group(0)}") from exc
+
+        def replace(match: re.Match[str]) -> str:
+            token = match.group(1).strip()
+            return self._stringify(resolve_token(token))
+
+        formatted_template = self.FORMAT_PLACEHOLDER_PATTERN.sub(replace_format, template)
+        return self.PLACEHOLDER_PATTERN.sub(replace, formatted_template)
+
+    def _split_format_token(self, token: str) -> tuple[str, Optional[str]]:
+        if ":" not in token:
+            return token, None
+        name, format_spec = token.split(":", 1)
+        return name.strip(), format_spec
 
     def _resolve_full_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
         if locale == "cn":

@@ -118,6 +118,7 @@
 - `from` 只能引用 `context` 或已执行完成的 `steps`
 - 执行器读取被消费节点结果
 - 按该节点的 `outputs` 生成 CTE 列
+- CTE 参数绑定保持原始 Python 值（例如 `Decimal`），不做提前字符串化
 - 在当前 SQL 中以 `alias` 作为临时表使用
 
 当前 step 的 SQL 可以直接写：
@@ -314,6 +315,12 @@ FROM am
 
 - 行级字段：`{field}`
 - 全局路径：`{$variables.threshold}`、`{$steps.exchange_rate.final_amount}`
+
+支持格式化占位符（Python format 语法）：
+
+- `f{$path:format_spec}`
+- 示例：`f{$steps.a.out1:,}`（千分位）、`f{$steps.a.out2:,.0f}`（千分位并保留 0 位小数）
+- `format_spec` 遵循 Python `format` 迷你语言
 
 ### 8.1 sub_repeat
 
