@@ -52,28 +52,24 @@ class DslEngine:
         state = ExecutionState.new(input_data=input_data)
 
         if document.context is not None:
-            context_result, context_trace = self.sql_executor.execute_node(
+            context_result = self.sql_executor.execute_node(
                 document.context,
-                phase="context",
                 state=state,
                 datasource_registry=datasource_registry,
                 node_name="context",
             )
-            state.add_trace(context_trace)
             state.set_context_result(context_result)
 
         for variable_name, definition in document.variables.items():
             state.variables_data[variable_name] = self._evaluate_variable(definition, state)
 
         for precheck in document.prechecks:
-            result, trace = self.sql_executor.execute_node(
+            result = self.sql_executor.execute_node(
                 precheck,
-                phase="precheck",
                 state=state,
                 datasource_registry=datasource_registry,
                 node_name=precheck.name,
             )
-            state.add_trace(trace)
             if self._should_fail_precheck(precheck.on_fail, result.raw_rows, state):
                 message_cn, message_en = self.message_renderer.render(precheck.on_fail, state, result.raw_rows)
                 return self.result_builder.build_failure(
@@ -85,14 +81,12 @@ class DslEngine:
                 )
 
         for step in document.steps:
-            result, trace = self.sql_executor.execute_node(
+            result = self.sql_executor.execute_node(
                 step,
-                phase="step",
                 state=state,
                 datasource_registry=datasource_registry,
                 node_name=step.name,
             )
-            state.add_trace(trace)
             state.set_step_result(step.name, result)
 
         if self._should_fail_by_policy(document.on_fail, state):

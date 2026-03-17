@@ -74,7 +74,6 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "pass")
         self.assertEqual(result.variables["threshold"], 1000)
         self.assertEqual(result.steps["exchange_rate"]["final_amount"], 900)
-        self.assertEqual(len(result.trace), 5)
 
     def test_execute_returns_final_failure(self) -> None:
         self._insert_header("FAIL_FINAL", "flow1", "scenario1")
@@ -103,6 +102,25 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "final")
         self.assertEqual(result.failed_node, "on_fail")
+
+    def test_execute_with_constant_variable(self) -> None:
+        self._insert_header("FAIL_CONSTANT", "flow1", "scenario1")
+        self._insert_journal("FAIL_CONSTANT", "USD", "1", "user", "2024-01-01", 1.0, 400)
+        self._insert_journal("FAIL_CONSTANT", "CNY", "2", "user", "2024-01-01", 1.0, 700)
+        self._insert_rate("CNY", 1.0)
+
+        dsl_data = json.loads(self.dsl_text)
+        dsl_data["variables"] = {
+            "threshold": {
+                "when": [],
+                "default": 800,
+            }
+        }
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_CONSTANT"}, self.registry)
+
+        self.assertFalse(result.passed)
+        self.assertEqual(result.phase, "final")
+        self.assertIn("阈值800", result.message_cn)
 
     def test_execute_on_fail_exists_with_records_field_reference(self) -> None:
         self._insert_header("FAIL_RECORDS_EXISTS", "flow1", "scenario1")
@@ -147,7 +165,6 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertEqual(result.failed_node, "check_rate_null")
         self.assertEqual(result.message_cn, "存在汇率为空的记录: 记录USD-1-2024-01-01")
         self.assertIn("null exchange rates", result.message_en)
-        self.assertEqual(len(result.trace), 2)
 
     def _create_schema(self) -> None:
         with self.saas_db.get_session() as session:

@@ -18,7 +18,6 @@ class ResultBuilder:
             context=state.context_data,
             variables=state.variables_data,
             steps=state.step_data,
-            trace=state.trace,
         )
 
     def build_failure(
@@ -38,5 +37,4 @@ class ResultBuilder:
             context=state.context_data,
             variables=state.variables_data,
             steps=state.step_data,
-            trace=state.trace,
         )
