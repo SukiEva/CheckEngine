@@ -82,9 +82,9 @@ class StepNode(SqlNode):
 class DslDocument:
     """完整 DSL 文档。"""
 
-    context: ContextNode
-    variables: dict[str, VariableDefinition]
-    prechecks: list[PrecheckNode]
+    context: Optional[ContextNode]
     steps: list[StepNode]
     on_fail: FailPolicy
     raw: dict[str, Any]
+    variables: dict[str, VariableDefinition] = field(default_factory=dict)
+    prechecks: list[PrecheckNode] = field(default_factory=list)

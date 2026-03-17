@@ -15,7 +15,8 @@ class StructureValidator:
     VALID_VARIABLE_TYPES = {"assign_by_condition"}
 
     def validate(self, document: DslDocument) -> None:
-        self._validate_context(document.context)
+        if document.context is not None:
+            self._validate_context(document.context)
         self._validate_variables(document.variables)
         self._validate_prechecks(document.prechecks)
         self._validate_steps(document.steps)
