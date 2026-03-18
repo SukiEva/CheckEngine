@@ -229,7 +229,7 @@ docs/
 
 - 新增或修改类型注解时，若类型可能为空，统一使用 `Optional[...]`，不要使用 `X | None` 写法。
 - 若某个类方法不依赖 `self` 或 `cls`，应显式声明为 `@staticmethod`，不要保留实例方法形式。
-- `DslEngine.execute`、`execute_document`、`execute_compiled` 及相关执行链路中，`datasource_registry` 应显式标注为 `DatasourceRegistry`，不要回退成宽泛的 `Any`。
+- 新增或修改类型注解时，只要能够明确确定具体类型，就不要使用宽泛的 `Any`，应优先写出准确类型。
 - Agent 在修改代码时，应主动遵守以上风格；若发现已有代码与该规范冲突，优先在本次改动范围内一并收敛。
 
 ## Git 约定
