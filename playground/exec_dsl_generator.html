@@ -314,10 +314,115 @@
       font-size: 0.9rem;
     }
 
+    .issue.issue-action {
+      width: 100%;
+      text-align: left;
+      border: 1px solid rgba(185, 28, 28, 0.12);
+      cursor: pointer;
+    }
+
+    .issue.issue-action:hover {
+      background: rgba(185, 28, 28, 0.12);
+    }
+
+    .field.is-hidden {
+      display: none;
+    }
+
+    .field-target {
+      outline: 2px solid rgba(15, 118, 110, 0.38);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 6px rgba(15, 118, 110, 0.08);
+      transition: box-shadow 0.18s ease, outline-color 0.18s ease;
+    }
+
+    .autocomplete-panel {
+      position: fixed;
+      z-index: 1000;
+      min-width: 260px;
+      max-width: min(520px, calc(100vw - 24px));
+      max-height: 280px;
+      overflow: auto;
+      border: 1px solid rgba(30, 36, 29, 0.12);
+      border-radius: 16px;
+      background: rgba(255, 250, 240, 0.98);
+      box-shadow: var(--shadow);
+      padding: 8px;
+      display: none;
+    }
+
+    .autocomplete-option {
+      width: 100%;
+      text-align: left;
+      border-radius: 12px;
+      padding: 9px 12px;
+      background: transparent;
+      color: var(--text);
+      display: grid;
+      gap: 2px;
+    }
+
+    .autocomplete-option:hover,
+    .autocomplete-option.active {
+      background: rgba(15, 118, 110, 0.1);
+    }
+
+    .autocomplete-main {
+      font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+      font-size: 0.9rem;
+    }
+
+    .autocomplete-meta {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
     .footer-note {
       margin-top: 18px;
       color: var(--muted);
       font-size: 0.84rem;
+    }
+
+    dialog.import-dialog {
+      width: min(760px, calc(100vw - 24px));
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 0;
+      background: var(--panel);
+      color: var(--text);
+      box-shadow: var(--shadow);
+    }
+
+    dialog.import-dialog::backdrop {
+      background: rgba(24, 32, 26, 0.4);
+      backdrop-filter: blur(4px);
+    }
+
+    .dialog-card {
+      padding: 20px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .dialog-card textarea {
+      min-height: 260px;
+    }
+
+    .dialog-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .dialog-status {
+      min-height: 22px;
+      font-size: 0.86rem;
+      color: var(--muted);
+    }
+
+    .dialog-status.error {
+      color: var(--danger);
     }
 
     @media (max-width: 1100px) {
@@ -359,6 +464,7 @@
         <div class="toolbar">
           <button class="btn-primary" id="load-sample">载入参考样例</button>
           <button class="btn-secondary" id="reset-form">新建空白 DSL</button>
+          <button class="btn-secondary" id="open-import-dialog">导入 JSON</button>
           <button class="btn-ghost" id="copy-json">复制 JSON</button>
           <button class="btn-ghost" id="download-json">下载 JSON</button>
         </div>
@@ -439,7 +545,7 @@
           <div class="grid">
             <div class="field">
               <label for="on-fail-decision">decision</label>
-              <input id="on-fail-decision" placeholder="exists($steps.exchange_rate.final_amount) 或表达式" />
+              <input id="on-fail-decision" data-ref-autocomplete="true" placeholder="exists($steps.exchange_rate.final_amount) 或表达式" />
             </div>
             <div class="field">
               <label for="on-fail-mode">mode</label>
@@ -449,25 +555,25 @@
                 <option value="full_repeat">full_repeat</option>
               </select>
             </div>
-            <div class="field">
+            <div class="field" data-visibility-modes="sub_repeat,full_repeat">
               <label for="on-fail-divider">divider</label>
               <input id="on-fail-divider" placeholder="sub_repeat 时常用，例如 ," />
             </div>
-            <div class="field">
+            <div class="field" data-visibility-modes="sub_repeat,full_repeat">
               <label for="on-fail-divider-cn">divider_cn</label>
               <input id="on-fail-divider-cn" placeholder="中文分隔符" />
             </div>
-            <div class="field">
+            <div class="field" data-visibility-modes="sub_repeat,full_repeat">
               <label for="on-fail-divider-en">divider_en</label>
               <input id="on-fail-divider-en" placeholder="英文分隔符" />
             </div>
             <div class="field full">
               <label for="on-fail-message-cn">message_cn</label>
-              <textarea id="on-fail-message-cn" placeholder="金额{$steps.exchange_rate.final_amount}超过阈值{$variables.threshold}"></textarea>
+              <textarea id="on-fail-message-cn" data-ref-autocomplete="true" placeholder="金额{$steps.exchange_rate.final_amount}超过阈值{$variables.threshold}"></textarea>
             </div>
             <div class="field full">
               <label for="on-fail-message-en">message_en</label>
-              <textarea id="on-fail-message-en" placeholder="The amount {$steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}."></textarea>
+              <textarea id="on-fail-message-en" data-ref-autocomplete="true" placeholder="The amount {$steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}."></textarea>
             </div>
           </div>
         </section>
@@ -510,11 +616,26 @@
     </section>
   </div>
 
+  <dialog id="import-dialog" class="import-dialog">
+    <div class="dialog-card">
+      <div>
+        <h2>导入 DSL JSON</h2>
+        <p class="small-note">粘贴已有 DSL JSON 后会直接反填到左侧表单。</p>
+      </div>
+      <textarea id="import-json-input" placeholder='请粘贴完整 JSON，例如 {"steps": [], "on_fail": {...}}'></textarea>
+      <div id="import-json-status" class="dialog-status"></div>
+      <div class="dialog-actions">
+        <button type="button" class="btn-ghost" id="cancel-import">取消</button>
+        <button type="button" class="btn-primary" id="confirm-import">导入并覆盖当前表单</button>
+      </div>
+    </div>
+  </dialog>
+
   <template id="param-row-template">
     <div class="inline-row single-wide dynamic-row">
       <div class="inline-row">
         <input data-role="key" placeholder="key，例如 source_object_id" />
-        <input data-role="value" placeholder="value，例如 $input.source_object_id" />
+        <input data-role="value" data-ref-autocomplete="true" placeholder="value，例如 $input.source_object_id" />
         <button class="btn-danger btn-mini" data-remove-row="true">删除</button>
       </div>
     </div>
@@ -522,7 +643,7 @@
 
   <template id="condition-row-template">
     <div class="inline-row dynamic-row">
-      <input data-role="condition" placeholder="condition，例如 $context.flow == 'flow1'" />
+      <input data-role="condition" data-ref-autocomplete="true" placeholder="condition，例如 $context.flow == 'flow1'" />
       <input data-role="value" placeholder='value，例如 1000 或 "PASS"' />
       <button class="btn-danger btn-mini" data-remove-row="true">删除</button>
     </div>
@@ -530,7 +651,7 @@
 
   <template id="consume-row-template">
     <div class="inline-row dynamic-row">
-      <input data-role="from" placeholder="from，例如 $steps.query_aggregate_amount" />
+      <input data-role="from" data-ref-autocomplete="true" placeholder="from，例如 $steps.query_aggregate_amount" />
       <input data-role="alias" placeholder="alias，例如 am" />
       <button class="btn-danger btn-mini" data-remove-row="true">删除</button>
     </div>
@@ -630,10 +751,26 @@
     const previewEl = document.getElementById("json-preview");
     const issuesEl = document.getElementById("issues");
     const statusEl = document.getElementById("status");
+    const importDialogEl = document.getElementById("import-dialog");
+    const importJsonInputEl = document.getElementById("import-json-input");
+    const importJsonStatusEl = document.getElementById("import-json-status");
     const RESERVED_NODE_NAMES = new Set(["input", "context", "variables", "steps", "on_fail"]);
     const EXISTS_CALL_PATTERN = /^exists\(\s*\$[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*\)$/;
     const SQL_ALIAS_PATTERN = /^[A-Za-z_]\w*$/;
     const STEP_SCOPE_PATTERN = /\$steps\.([A-Za-z_]\w*)\.([A-Za-z_]\w*)/g;
+    const TOP_LEVEL_FIELD_ORDER = ["context", "variables", "prechecks", "steps", "on_fail"];
+    const PREVIEW_DEBOUNCE_MS = 180;
+    const autocompleteEl = document.createElement("div");
+    autocompleteEl.className = "autocomplete-panel";
+    document.body.appendChild(autocompleteEl);
+    const autocompleteState = {
+      target: null,
+      matches: [],
+      activeIndex: 0,
+      range: null
+    };
+    let previewTimerId = 0;
+    let highlightTimerId = 0;
 
     function createButton(label, className, dataset = {}) {
       const button = document.createElement("button");
@@ -680,7 +817,10 @@
       card.innerHTML = `
         <div class="item-head">
           <strong>变量</strong>
-          <button type="button" class="btn-danger btn-mini" data-remove-card="true">删除变量</button>
+          <div class="toolbar" style="margin-top: 0;">
+            <button type="button" class="btn-ghost btn-mini" data-copy-card="variable">复制变量</button>
+            <button type="button" class="btn-danger btn-mini" data-remove-card="true">删除变量</button>
+          </div>
         </div>
         <div class="grid">
           <div class="field">
@@ -713,7 +853,7 @@
       wrapper.innerHTML = `
         <div class="field">
           <label>decision</label>
-          <input data-role="decision" placeholder="exists（仅 precheck）/ exists($path) / 表达式" />
+          <input data-role="decision" data-ref-autocomplete="true" placeholder="exists（仅 precheck）/ exists($path) / 表达式" />
         </div>
         <div class="field">
           <label>mode</label>
@@ -723,25 +863,25 @@
             <option value="full_repeat">full_repeat</option>
           </select>
         </div>
-        <div class="field">
+        <div class="field" data-visibility-modes="sub_repeat,full_repeat">
           <label>divider</label>
           <input data-role="divider" placeholder="sub_repeat 时常用，例如 ," />
         </div>
-        <div class="field">
+        <div class="field" data-visibility-modes="sub_repeat,full_repeat">
           <label>divider_cn</label>
           <input data-role="divider-cn" placeholder="full_repeat 中文分隔符" />
         </div>
-        <div class="field">
+        <div class="field" data-visibility-modes="sub_repeat,full_repeat">
           <label>divider_en</label>
           <input data-role="divider-en" placeholder="full_repeat 英文分隔符" />
         </div>
         <div class="field full">
           <label>message_cn</label>
-          <textarea data-role="message-cn" placeholder="中文消息模板"></textarea>
+          <textarea data-role="message-cn" data-ref-autocomplete="true" placeholder="中文消息模板"></textarea>
         </div>
         <div class="field full">
           <label>message_en</label>
-          <textarea data-role="message-en" placeholder="英文消息模板"></textarea>
+          <textarea data-role="message-en" data-ref-autocomplete="true" placeholder="英文消息模板"></textarea>
         </div>
       `;
 
@@ -752,6 +892,7 @@
       wrapper.querySelector('[data-role="divider-en"]').value = policy.divider_en || "";
       wrapper.querySelector('[data-role="message-cn"]').value = policy.message_cn || "";
       wrapper.querySelector('[data-role="message-en"]').value = policy.message_en || "";
+      syncFailPolicyVisibility(wrapper);
       return wrapper;
     }
 
@@ -761,7 +902,12 @@
       card.innerHTML = `
         <div class="item-head">
           <strong>Precheck</strong>
-          <button type="button" class="btn-danger btn-mini" data-remove-card="true">删除 Precheck</button>
+          <div class="toolbar" style="margin-top: 0;">
+            <button type="button" class="btn-ghost btn-mini" data-move-card="up">上移</button>
+            <button type="button" class="btn-ghost btn-mini" data-move-card="down">下移</button>
+            <button type="button" class="btn-ghost btn-mini" data-copy-card="precheck">复制 Precheck</button>
+            <button type="button" class="btn-danger btn-mini" data-remove-card="true">删除 Precheck</button>
+          </div>
         </div>
         <div class="grid">
           <div class="field">
@@ -832,7 +978,12 @@
       card.innerHTML = `
         <div class="item-head">
           <strong>Step</strong>
-          <button type="button" class="btn-danger btn-mini" data-remove-card="true">删除 Step</button>
+          <div class="toolbar" style="margin-top: 0;">
+            <button type="button" class="btn-ghost btn-mini" data-move-card="up">上移</button>
+            <button type="button" class="btn-ghost btn-mini" data-move-card="down">下移</button>
+            <button type="button" class="btn-ghost btn-mini" data-copy-card="step">复制 Step</button>
+            <button type="button" class="btn-danger btn-mini" data-remove-card="true">删除 Step</button>
+          </div>
         </div>
         <div class="grid">
           <div class="field">
@@ -964,6 +1115,393 @@
       return policy;
     }
 
+    function syncFailPolicyVisibility(container) {
+      const mode = container.querySelector('[data-role="mode"], #on-fail-mode')?.value || "single";
+      container.querySelectorAll("[data-visibility-modes]").forEach((field) => {
+        const visibleModes = field.dataset.visibilityModes.split(",").map((item) => item.trim()).filter(Boolean);
+        field.classList.toggle("is-hidden", !visibleModes.includes(mode));
+      });
+    }
+
+    function buildOrderedDsl(rawDsl) {
+      const ordered = {};
+      TOP_LEVEL_FIELD_ORDER.forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(rawDsl, key)) {
+          ordered[key] = rawDsl[key];
+        }
+      });
+      return ordered;
+    }
+
+    function collectReferenceSuggestions() {
+      const suggestions = [
+        { value: "$input", label: "输入对象", type: "scope" },
+        { value: "$context", label: "Context 节点", type: "scope" },
+        { value: "$variables", label: "变量作用域", type: "scope" },
+        { value: "$steps", label: "步骤作用域", type: "scope" }
+      ];
+      const seen = new Set(suggestions.map((item) => item.value));
+      const pushSuggestion = (value, label, type) => {
+        if (seen.has(value)) return;
+        seen.add(value);
+        suggestions.push({ value, label, type });
+      };
+
+      pushSuggestion("$input.source_object_id", "输入字段示例", "input");
+
+      readOutputs(document.getElementById("context-outputs")).forEach((output) => {
+        pushSuggestion(`$context.${output}`, "Context 输出", "context");
+      });
+
+      variablesListEl.querySelectorAll(".variable-card").forEach((card) => {
+        const name = card.querySelector('[data-role="variable-name"]').value.trim();
+        if (name) {
+          pushSuggestion(`$variables.${name}`, "已定义变量", "variable");
+        }
+      });
+
+      stepsListEl.querySelectorAll(".step-card").forEach((card) => {
+        const stepName = card.querySelector('[data-role="name"]').value.trim();
+        if (!stepName) return;
+        pushSuggestion(`$steps.${stepName}`, "步骤节点", "step");
+        readOutputs(card.querySelector('[data-role="outputs"]')).forEach((output) => {
+          pushSuggestion(`$steps.${stepName}.${output}`, "步骤输出字段", "step-output");
+        });
+      });
+
+      return suggestions;
+    }
+
+    function getReferenceRange(target) {
+      const start = target.selectionStart ?? 0;
+      const end = target.selectionEnd ?? 0;
+      if (start !== end) {
+        return null;
+      }
+      const value = target.value || "";
+      let tokenStart = start;
+      while (tokenStart > 0 && /[\$.\w]/.test(value[tokenStart - 1])) {
+        tokenStart -= 1;
+      }
+      let tokenEnd = start;
+      while (tokenEnd < value.length && /[\$.\w]/.test(value[tokenEnd])) {
+        tokenEnd += 1;
+      }
+      const token = value.slice(tokenStart, tokenEnd);
+      if (!token.startsWith("$")) {
+        return null;
+      }
+      return { start: tokenStart, end: tokenEnd, token };
+    }
+
+    function hideAutocomplete() {
+      autocompleteState.target = null;
+      autocompleteState.matches = [];
+      autocompleteState.activeIndex = 0;
+      autocompleteState.range = null;
+      autocompleteEl.style.display = "none";
+      autocompleteEl.innerHTML = "";
+    }
+
+    function positionAutocomplete(target) {
+      const rect = target.getBoundingClientRect();
+      autocompleteEl.style.left = `${Math.max(12, rect.left)}px`;
+      autocompleteEl.style.top = `${Math.min(window.innerHeight - 20, rect.bottom + 8)}px`;
+    }
+
+    function renderAutocomplete() {
+      autocompleteEl.innerHTML = "";
+      autocompleteState.matches.forEach((item, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `autocomplete-option${index === autocompleteState.activeIndex ? " active" : ""}`;
+        button.dataset.index = String(index);
+        button.innerHTML = `
+          <span class="autocomplete-main">${item.value}</span>
+          <span class="autocomplete-meta">${item.label}</span>
+        `;
+        autocompleteEl.appendChild(button);
+      });
+      autocompleteEl.style.display = autocompleteState.matches.length ? "block" : "none";
+    }
+
+    function updateAutocomplete(target) {
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
+        hideAutocomplete();
+        return;
+      }
+      if (target.dataset.refAutocomplete !== "true") {
+        hideAutocomplete();
+        return;
+      }
+      const range = getReferenceRange(target);
+      if (!range) {
+        hideAutocomplete();
+        return;
+      }
+      const token = range.token.toLowerCase();
+      const matches = collectReferenceSuggestions().filter((item) => item.value.toLowerCase().startsWith(token)).slice(0, 12);
+      if (matches.length === 0) {
+        hideAutocomplete();
+        return;
+      }
+      autocompleteState.target = target;
+      autocompleteState.matches = matches;
+      autocompleteState.activeIndex = 0;
+      autocompleteState.range = range;
+      positionAutocomplete(target);
+      renderAutocomplete();
+    }
+
+    function applyAutocompleteSelection(index) {
+      const match = autocompleteState.matches[index];
+      const target = autocompleteState.target;
+      const range = autocompleteState.range;
+      if (!match || !target || !range) {
+        hideAutocomplete();
+        return;
+      }
+      const value = target.value || "";
+      target.value = `${value.slice(0, range.start)}${match.value}${value.slice(range.end)}`;
+      const nextCaret = range.start + match.value.length;
+      target.focus();
+      target.setSelectionRange(nextCaret, nextCaret);
+      hideAutocomplete();
+      refreshPreview();
+    }
+
+    function scheduleRefreshPreview() {
+      window.clearTimeout(previewTimerId);
+      previewTimerId = window.setTimeout(() => {
+        refreshPreview();
+      }, PREVIEW_DEBOUNCE_MS);
+    }
+
+    function uniqueCopyName(baseName, existingNames) {
+      if (!baseName) {
+        return "";
+      }
+      let candidate = `${baseName}_copy`;
+      let index = 2;
+      while (existingNames.has(candidate)) {
+        candidate = `${baseName}_copy${index}`;
+        index += 1;
+      }
+      return candidate;
+    }
+
+    function collectVariableNames(excludeCard = null) {
+      const names = new Set();
+      variablesListEl.querySelectorAll(".variable-card").forEach((card) => {
+        if (card === excludeCard) return;
+        const name = card.querySelector('[data-role="variable-name"]').value.trim();
+        if (name) names.add(name);
+      });
+      return names;
+    }
+
+    function collectNodeNames(excludeCard = null) {
+      const names = new Set();
+      prechecksListEl.querySelectorAll(".precheck-card").forEach((card) => {
+        if (card === excludeCard) return;
+        const name = card.querySelector('[data-role="name"]').value.trim();
+        if (name) names.add(name);
+      });
+      stepsListEl.querySelectorAll(".step-card").forEach((card) => {
+        if (card === excludeCard) return;
+        const name = card.querySelector('[data-role="name"]').value.trim();
+        if (name) names.add(name);
+      });
+      return names;
+    }
+
+    function readVariableCardData(card, options = {}) {
+      const name = card.querySelector('[data-role="variable-name"]').value.trim();
+      const when = [];
+      card.querySelectorAll('[data-role="conditions"] .dynamic-row').forEach((row) => {
+        const condition = row.querySelector('[data-role="condition"]').value.trim();
+        const value = row.querySelector('[data-role="value"]').value;
+        if (condition) {
+          when.push({
+            condition,
+            value: parseValue(value)
+          });
+        }
+      });
+      const nextName = options.renameCopy ? uniqueCopyName(name, collectVariableNames(card)) : name;
+      return {
+        name: nextName,
+        data: {
+          when,
+          default: parseValue(card.querySelector('[data-role="variable-default"]').value)
+        }
+      };
+    }
+
+    function readPrecheckCardData(card, options = {}) {
+      const item = {
+        name: card.querySelector('[data-role="name"]').value.trim(),
+        description: card.querySelector('[data-role="description"]').value.trim(),
+        type: card.querySelector('[data-role="type"]').value,
+        datasource: card.querySelector('[data-role="datasource"]').value.trim(),
+        result_mode: card.querySelector('[data-role="result-mode"]').value,
+        sql_template: card.querySelector('[data-role="sql-template"]').value,
+        sql_params: readObjectRows(card.querySelector('[data-role="sql-params"]')),
+        outputs: readOutputs(card.querySelector('[data-role="outputs"]')),
+        on_fail: readFailPolicy(card.querySelector('[data-role="fail-policy"]'))
+      };
+      if (!item.description) {
+        delete item.description;
+      }
+      if (item.outputs.length === 0) {
+        delete item.outputs;
+      }
+      if (options.renameCopy) {
+        item.name = uniqueCopyName(item.name, collectNodeNames(card));
+      }
+      return item;
+    }
+
+    function readStepCardData(card, options = {}) {
+      const consumes = [];
+      card.querySelectorAll('[data-role="consumes"] .dynamic-row').forEach((row) => {
+        const from = row.querySelector('[data-role="from"]').value.trim();
+        const alias = row.querySelector('[data-role="alias"]').value.trim();
+        if (from || alias) {
+          consumes.push({ from, alias });
+        }
+      });
+
+      const item = {
+        name: card.querySelector('[data-role="name"]').value.trim(),
+        description: card.querySelector('[data-role="description"]').value.trim(),
+        type: card.querySelector('[data-role="type"]').value,
+        datasource: card.querySelector('[data-role="datasource"]').value.trim(),
+        result_mode: card.querySelector('[data-role="result-mode"]').value,
+        sql_template: card.querySelector('[data-role="sql-template"]').value,
+        sql_params: readObjectRows(card.querySelector('[data-role="sql-params"]')),
+        outputs: readOutputs(card.querySelector('[data-role="outputs"]')),
+        consumes
+      };
+      if (!item.description) {
+        delete item.description;
+      }
+      if (item.consumes.length === 0) {
+        delete item.consumes;
+      }
+      if (options.renameCopy) {
+        item.name = uniqueCopyName(item.name, collectNodeNames(card));
+      }
+      return item;
+    }
+
+    function insertAfter(newNode, referenceNode) {
+      referenceNode.parentNode.insertBefore(newNode, referenceNode.nextSibling);
+    }
+
+    function highlightTarget(element) {
+      window.clearTimeout(highlightTimerId);
+      const target = element.closest(".field, .dynamic-row, .item-card, .panel") || element;
+      target.classList.add("field-target");
+      highlightTimerId = window.setTimeout(() => {
+        target.classList.remove("field-target");
+      }, 1800);
+    }
+
+    function resolveIssueField(path) {
+      if (!path) {
+        return null;
+      }
+      if (path === "context.datasource") return document.getElementById("context-datasource");
+      if (path === "context.sql_template") return document.getElementById("context-sql");
+      if (path === "context.outputs") return document.getElementById("context-outputs");
+      if (path === "on_fail.decision") return document.getElementById("on-fail-decision");
+      if (path === "on_fail.divider") return document.getElementById("on-fail-divider");
+      if (path === "on_fail.message_cn") return document.getElementById("on-fail-message-cn");
+      if (path === "on_fail.message_en") return document.getElementById("on-fail-message-en");
+
+      const precheckMatch = path.match(/^prechecks\[(\d+)\]\.(.+)$/);
+      if (precheckMatch) {
+        const [, rawIndex, rest] = precheckMatch;
+        const card = prechecksListEl.querySelectorAll(".precheck-card")[Number(rawIndex)];
+        if (!card) return null;
+        if (rest === "name") return card.querySelector('[data-role="name"]');
+        if (rest === "datasource") return card.querySelector('[data-role="datasource"]');
+        if (rest === "sql_template") return card.querySelector('[data-role="sql-template"]');
+        if (rest === "outputs") return card.querySelector('[data-role="outputs"]');
+        if (rest === "on_fail.decision") return card.querySelector('[data-role="decision"]');
+        if (rest === "on_fail.divider") return card.querySelector('[data-role="divider"]');
+        if (rest === "on_fail.message_cn") return card.querySelector('[data-role="message-cn"]');
+        if (rest === "on_fail.message_en") return card.querySelector('[data-role="message-en"]');
+      }
+
+      const stepConsumeMatch = path.match(/^steps\[(\d+)\]\.consumes\[(\d+)\]\.(from|alias)$/);
+      if (stepConsumeMatch) {
+        const [, rawIndex, rawConsumeIndex, role] = stepConsumeMatch;
+        const card = stepsListEl.querySelectorAll(".step-card")[Number(rawIndex)];
+        if (!card) return null;
+        const row = card.querySelectorAll('[data-role="consumes"] .dynamic-row')[Number(rawConsumeIndex)];
+        return row?.querySelector(`[data-role="${role}"]`) || null;
+      }
+
+      const stepMatch = path.match(/^steps\[(\d+)\]\.(.+)$/);
+      if (stepMatch) {
+        const [, rawIndex, rest] = stepMatch;
+        const card = stepsListEl.querySelectorAll(".step-card")[Number(rawIndex)];
+        if (!card) return null;
+        if (rest === "name") return card.querySelector('[data-role="name"]');
+        if (rest === "datasource") return card.querySelector('[data-role="datasource"]');
+        if (rest === "sql_template") return card.querySelector('[data-role="sql-template"]');
+        if (rest === "outputs") return card.querySelector('[data-role="outputs"]');
+      }
+
+      return null;
+    }
+
+    function focusIssueField(path) {
+      const field = resolveIssueField(path);
+      if (!field) {
+        return;
+      }
+      field.scrollIntoView({ behavior: "smooth", block: "center" });
+      field.focus({ preventScroll: true });
+      highlightTarget(field);
+    }
+
+    function openImportDialog() {
+      importJsonStatusEl.textContent = "";
+      importJsonStatusEl.className = "dialog-status";
+      importJsonInputEl.value = previewEl.textContent || "";
+      if (typeof importDialogEl.showModal === "function") {
+        importDialogEl.showModal();
+      } else {
+        importDialogEl.setAttribute("open", "open");
+      }
+      importJsonInputEl.focus();
+      importJsonInputEl.select();
+    }
+
+    function closeImportDialog() {
+      if (typeof importDialogEl.close === "function") {
+        importDialogEl.close();
+      } else {
+        importDialogEl.removeAttribute("open");
+      }
+    }
+
+    function importJsonToForm() {
+      try {
+        const data = JSON.parse(importJsonInputEl.value);
+        importJsonStatusEl.textContent = "";
+        importJsonStatusEl.className = "dialog-status";
+        loadDsl(data);
+        closeImportDialog();
+      } catch (error) {
+        importJsonStatusEl.textContent = `导入失败：${error.message}`;
+        importJsonStatusEl.className = "dialog-status error";
+      }
+    }
+
     function collectDsl() {
       const context = {
         type: document.getElementById("context-type").value,
@@ -992,82 +1530,23 @@
 
       const variables = {};
       variablesListEl.querySelectorAll(".variable-card").forEach((card) => {
-        const name = card.querySelector('[data-role="variable-name"]').value.trim();
+        const { name, data } = readVariableCardData(card);
         if (!name) {
           return;
         }
-        const when = [];
-        card.querySelectorAll('[data-role="conditions"] .dynamic-row').forEach((row) => {
-          const condition = row.querySelector('[data-role="condition"]').value.trim();
-          const value = row.querySelector('[data-role="value"]').value;
-          if (condition) {
-            when.push({
-              condition,
-              value: parseValue(value)
-            });
-          }
-        });
-
-        variables[name] = {
-          when,
-          default: parseValue(card.querySelector('[data-role="variable-default"]').value)
-        };
+        variables[name] = data;
       });
 
       dsl.variables = variables;
 
       const prechecks = [];
       prechecksListEl.querySelectorAll(".precheck-card").forEach((card) => {
-        const item = {
-          name: card.querySelector('[data-role="name"]').value.trim(),
-          description: card.querySelector('[data-role="description"]').value.trim(),
-          type: card.querySelector('[data-role="type"]').value,
-          datasource: card.querySelector('[data-role="datasource"]').value.trim(),
-          result_mode: card.querySelector('[data-role="result-mode"]').value,
-          sql_template: card.querySelector('[data-role="sql-template"]').value,
-          sql_params: readObjectRows(card.querySelector('[data-role="sql-params"]')),
-          outputs: readOutputs(card.querySelector('[data-role="outputs"]')),
-          on_fail: readFailPolicy(card.querySelector('[data-role="fail-policy"]'))
-        };
-        if (!item.description) {
-          delete item.description;
-        }
-        if (item.outputs.length === 0) {
-          delete item.outputs;
-        }
-        prechecks.push(item);
+        prechecks.push(readPrecheckCardData(card));
       });
       dsl.prechecks = prechecks;
 
       stepsListEl.querySelectorAll(".step-card").forEach((card) => {
-        const consumes = [];
-        card.querySelectorAll('[data-role="consumes"] .dynamic-row').forEach((row) => {
-          const from = row.querySelector('[data-role="from"]').value.trim();
-          const alias = row.querySelector('[data-role="alias"]').value.trim();
-          if (from || alias) {
-            consumes.push({ from, alias });
-          }
-        });
-
-        const item = {
-          name: card.querySelector('[data-role="name"]').value.trim(),
-          description: card.querySelector('[data-role="description"]').value.trim(),
-          type: card.querySelector('[data-role="type"]').value,
-          datasource: card.querySelector('[data-role="datasource"]').value.trim(),
-          result_mode: card.querySelector('[data-role="result-mode"]').value,
-          sql_template: card.querySelector('[data-role="sql-template"]').value,
-          sql_params: readObjectRows(card.querySelector('[data-role="sql-params"]')),
-          outputs: readOutputs(card.querySelector('[data-role="outputs"]')),
-          consumes
-        };
-
-        if (!item.description) {
-          delete item.description;
-        }
-        if (item.consumes.length === 0) {
-          delete item.consumes;
-        }
-        dsl.steps.push(item);
+        dsl.steps.push(readStepCardData(card));
       });
 
       if (context.datasource || context.sql_template.trim() || context.outputs.length > 0 || Object.keys(context.sql_params).length > 0) {
@@ -1080,11 +1559,14 @@
         delete dsl.prechecks;
       }
 
-      return dsl;
+      return buildOrderedDsl(dsl);
     }
 
     function validateDsl(dsl) {
       const issues = [];
+      const pushIssue = (path, message) => {
+        issues.push({ path, message });
+      };
       const precheckNames = new Set();
       const stepNames = new Set();
       const stepOutputMap = new Map();
@@ -1092,104 +1574,104 @@
 
       if (dsl.context) {
         if (!dsl.context.datasource) {
-          issues.push("context.datasource 不能为空。");
+          pushIssue("context.datasource", "context.datasource 不能为空。");
         }
         if (!dsl.context.sql_template.trim()) {
-          issues.push("context.sql_template 不能为空。");
+          pushIssue("context.sql_template", "context.sql_template 不能为空。");
         }
         if (!Array.isArray(dsl.context.outputs) || dsl.context.outputs.length === 0) {
-          issues.push("context 存在时，context.outputs 不能为空。");
+          pushIssue("context.outputs", "context 存在时，context.outputs 不能为空。");
         }
       }
 
       (dsl.prechecks || []).forEach((item, index) => {
-        if (!item.name) issues.push(`prechecks[${index}].name 不能为空。`);
-        if (RESERVED_NODE_NAMES.has(item.name)) issues.push(`prechecks[${index}].name 不能使用保留名称 ${item.name}。`);
-        if (precheckNames.has(item.name)) issues.push(`prechecks[${index}].name 不能重复。`);
+        if (!item.name) pushIssue(`prechecks[${index}].name`, `prechecks[${index}].name 不能为空。`);
+        if (RESERVED_NODE_NAMES.has(item.name)) pushIssue(`prechecks[${index}].name`, `prechecks[${index}].name 不能使用保留名称 ${item.name}。`);
+        if (precheckNames.has(item.name)) pushIssue(`prechecks[${index}].name`, `prechecks[${index}].name 不能重复。`);
         if (item.name) precheckNames.add(item.name);
-        if (!item.sql_template.trim()) issues.push(`prechecks[${index}].sql_template 不能为空。`);
-        if (!item.on_fail.decision) issues.push(`prechecks[${index}].on_fail.decision 不能为空。`);
+        if (!item.sql_template.trim()) pushIssue(`prechecks[${index}].sql_template`, `prechecks[${index}].sql_template 不能为空。`);
+        if (!item.on_fail.decision) pushIssue(`prechecks[${index}].on_fail.decision`, `prechecks[${index}].on_fail.decision 不能为空。`);
         if (item.on_fail.decision && item.on_fail.decision !== "exists" && !EXISTS_CALL_PATTERN.test(item.on_fail.decision.trim())) {
-          issues.push(`prechecks[${index}].on_fail.decision 仅支持 exists 或 exists($path)。`);
+          pushIssue(`prechecks[${index}].on_fail.decision`, `prechecks[${index}].on_fail.decision 仅支持 exists 或 exists($path)。`);
         }
         if (item.on_fail.mode === "sub_repeat") {
           const cnSegments = (item.on_fail.message_cn.match(/\[[^\]]*]/g) || []).length;
           const enSegments = (item.on_fail.message_en.match(/\[[^\]]*]/g) || []).length;
           if (cnSegments !== 1 || enSegments !== 1) {
-            issues.push(`prechecks[${index}] 使用 sub_repeat 时，message_cn / message_en 必须且只能包含一段 []。`);
+            pushIssue(`prechecks[${index}].on_fail.message_cn`, `prechecks[${index}] 使用 sub_repeat 时，message_cn / message_en 必须且只能包含一段 []。`);
           }
           if (!item.on_fail.divider && !(item.on_fail.divider_cn && item.on_fail.divider_en)) {
-            issues.push(`prechecks[${index}] 使用 sub_repeat 时，必须配置 divider，或同时配置 divider_cn / divider_en。`);
+            pushIssue(`prechecks[${index}].on_fail.divider`, `prechecks[${index}] 使用 sub_repeat 时，必须配置 divider，或同时配置 divider_cn / divider_en。`);
           }
         }
       });
 
       dsl.steps.forEach((item, index) => {
-        if (!item.name) issues.push(`steps[${index}].name 不能为空。`);
-        if (RESERVED_NODE_NAMES.has(item.name)) issues.push(`steps[${index}].name 不能使用保留名称 ${item.name}。`);
-        if (stepNames.has(item.name) || precheckNames.has(item.name)) issues.push(`steps[${index}].name 不能与已有 step / precheck 重名。`);
+        if (!item.name) pushIssue(`steps[${index}].name`, `steps[${index}].name 不能为空。`);
+        if (RESERVED_NODE_NAMES.has(item.name)) pushIssue(`steps[${index}].name`, `steps[${index}].name 不能使用保留名称 ${item.name}。`);
+        if (stepNames.has(item.name) || precheckNames.has(item.name)) pushIssue(`steps[${index}].name`, `steps[${index}].name 不能与已有 step / precheck 重名。`);
         if (item.name) stepNames.add(item.name);
-        if (!item.sql_template.trim()) issues.push(`steps[${index}].sql_template 不能为空。`);
+        if (!item.sql_template.trim()) pushIssue(`steps[${index}].sql_template`, `steps[${index}].sql_template 不能为空。`);
         stepOutputMap.set(item.name, Array.isArray(item.outputs) ? item.outputs : []);
         stepResultModeMap.set(item.name, item.result_mode);
 
         (item.consumes || []).forEach((consume, consumeIndex) => {
           if (!consume.from || !consume.alias) {
-            issues.push(`steps[${index}].consumes[${consumeIndex}] 的 from 和 alias 都必须填写。`);
+            pushIssue(`steps[${index}].consumes[${consumeIndex}].from`, `steps[${index}].consumes[${consumeIndex}] 的 from 和 alias 都必须填写。`);
             return;
           }
           if (!SQL_ALIAS_PATTERN.test(consume.alias)) {
-            issues.push(`steps[${index}].consumes[${consumeIndex}].alias 必须是合法 SQL 标识符。`);
+            pushIssue(`steps[${index}].consumes[${consumeIndex}].alias`, `steps[${index}].consumes[${consumeIndex}].alias 必须是合法 SQL 标识符。`);
           }
           if (consume.from === "$context") {
             if (!dsl.context) {
-              issues.push(`steps[${index}].consumes[${consumeIndex}].from 引用了 $context，但当前未配置 context。`);
+              pushIssue(`steps[${index}].consumes[${consumeIndex}].from`, `steps[${index}].consumes[${consumeIndex}].from 引用了 $context，但当前未配置 context。`);
             } else if (!Array.isArray(dsl.context.outputs) || dsl.context.outputs.length === 0) {
-              issues.push(`steps[${index}].consumes[${consumeIndex}] 引用 $context 时，context.outputs 不能为空。`);
+              pushIssue(`steps[${index}].consumes[${consumeIndex}].from`, `steps[${index}].consumes[${consumeIndex}] 引用 $context 时，context.outputs 不能为空。`);
             }
             return;
           }
           const match = consume.from.match(/^\$steps\.([A-Za-z_]\w*)$/);
           if (!match) {
-            issues.push(`steps[${index}].consumes[${consumeIndex}].from 仅支持 $context 或 $steps.<step_name>。`);
+            pushIssue(`steps[${index}].consumes[${consumeIndex}].from`, `steps[${index}].consumes[${consumeIndex}].from 仅支持 $context 或 $steps.<step_name>。`);
             return;
           }
           const sourceStepName = match[1];
           const previousSteps = dsl.steps.slice(0, index).map((step) => step.name);
           if (!previousSteps.includes(sourceStepName)) {
-            issues.push(`steps[${index}].consumes[${consumeIndex}] 只能引用当前步骤之前已执行的 step。`);
+            pushIssue(`steps[${index}].consumes[${consumeIndex}].from`, `steps[${index}].consumes[${consumeIndex}] 只能引用当前步骤之前已执行的 step。`);
             return;
           }
           const sourceOutputs = stepOutputMap.get(sourceStepName) || [];
           if (sourceOutputs.length === 0) {
-            issues.push(`steps[${index}].consumes[${consumeIndex}] 引用的 step 必须声明 outputs。`);
+            pushIssue(`steps[${index}].consumes[${consumeIndex}].from`, `steps[${index}].consumes[${consumeIndex}] 引用的 step 必须声明 outputs。`);
           }
         });
       });
 
       if (!dsl.on_fail.decision) {
-        issues.push("on_fail.decision 不能为空。");
+        pushIssue("on_fail.decision", "on_fail.decision 不能为空。");
       } else if (dsl.on_fail.decision.trim() === "exists") {
-        issues.push("on_fail.decision 不支持裸 exists，请改为 exists($path)。");
+        pushIssue("on_fail.decision", "on_fail.decision 不支持裸 exists，请改为 exists($path)。");
       }
       if (dsl.on_fail.mode === "sub_repeat") {
         const cnSegments = (dsl.on_fail.message_cn.match(/\[[^\]]*]/g) || []).length;
         const enSegments = (dsl.on_fail.message_en.match(/\[[^\]]*]/g) || []).length;
         if (cnSegments !== 1 || enSegments !== 1) {
-          issues.push("on_fail 使用 sub_repeat 时，message_cn / message_en 必须且只能包含一段 []。");
+          pushIssue("on_fail.message_cn", "on_fail 使用 sub_repeat 时，message_cn / message_en 必须且只能包含一段 []。");
         }
         if (!dsl.on_fail.divider && !(dsl.on_fail.divider_cn && dsl.on_fail.divider_en)) {
-          issues.push("on_fail 使用 sub_repeat 时，必须配置 divider，或同时配置 divider_cn / divider_en。");
+          pushIssue("on_fail.divider", "on_fail 使用 sub_repeat 时，必须配置 divider，或同时配置 divider_cn / divider_en。");
         }
       }
       if (!dsl.on_fail.message_cn.trim()) {
-        issues.push("on_fail.message_cn 不能为空。");
+        pushIssue("on_fail.message_cn", "on_fail.message_cn 不能为空。");
       }
       if (!dsl.on_fail.message_en.trim()) {
-        issues.push("on_fail.message_en 不能为空。");
+        pushIssue("on_fail.message_en", "on_fail.message_en 不能为空。");
       }
       if (/\{steps\./.test(dsl.on_fail.message_cn) || /\{steps\./.test(dsl.on_fail.message_en)) {
-        issues.push("全局路径占位符必须写成 {$path}，不能写成 {steps.xxx} 这种缺少 $ 的形式。");
+        pushIssue("on_fail.message_cn", "全局路径占位符必须写成 {$path}，不能写成 {steps.xxx} 这种缺少 $ 的形式。");
       }
 
       const onFailRefs = [
@@ -1203,15 +1685,15 @@
           const [, stepName, fieldName] = match;
           const outputs = stepOutputMap.get(stepName);
           if (!outputs) {
-            issues.push(`on_fail 引用了不存在的 step：${stepName}。`);
+            pushIssue("on_fail.decision", `on_fail 引用了不存在的 step：${stepName}。`);
             continue;
           }
           if (!outputs.includes(fieldName)) {
-            issues.push(`on_fail 引用了 step ${stepName} 未导出的字段 ${fieldName}。`);
+            pushIssue("on_fail.decision", `on_fail 引用了 step ${stepName} 未导出的字段 ${fieldName}。`);
             continue;
           }
           if (dsl.on_fail.mode === "single" && stepResultModeMap.get(stepName) === "records") {
-            issues.push(`on_fail 在 single 模式下不能引用 records 结果的字段：$steps.${stepName}.${fieldName}。`);
+            pushIssue("on_fail.decision", `on_fail 在 single 模式下不能引用 records 结果的字段：$steps.${stepName}.${fieldName}。`);
           }
         }
       });
@@ -1233,9 +1715,13 @@
         statusEl.className = "status error";
         statusEl.textContent = `发现 ${issues.length} 个提醒`;
         issues.forEach((issue) => {
-          const node = document.createElement("div");
-          node.className = "issue";
-          node.textContent = issue;
+          const node = document.createElement("button");
+          node.type = "button";
+          node.className = "issue issue-action";
+          node.textContent = issue.message;
+          if (issue.path) {
+            node.dataset.path = issue.path;
+          }
           issuesEl.appendChild(node);
         });
       } else {
@@ -1270,6 +1756,7 @@
       document.getElementById("on-fail-divider-en").value = data.divider_en || "";
       document.getElementById("on-fail-message-cn").value = data.message_cn || "";
       document.getElementById("on-fail-message-en").value = data.message_en || "";
+      syncFailPolicyVisibility(document.querySelector("#on-fail-mode").closest(".grid"));
     }
 
     function loadDsl(data) {
@@ -1343,6 +1830,48 @@
         return;
       }
 
+      const copyCardButton = event.target.closest("[data-copy-card]");
+      if (copyCardButton) {
+        const card = copyCardButton.closest(".item-card");
+        const type = copyCardButton.dataset.copyCard;
+        if (type === "variable") {
+          const copied = readVariableCardData(card, { renameCopy: true });
+          const node = createVariableCard(copied.name, copied.data);
+          insertAfter(node, card);
+          refreshPreview();
+          node.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        if (type === "precheck") {
+          const node = createPrecheckCard(readPrecheckCardData(card, { renameCopy: true }));
+          insertAfter(node, card);
+          refreshPreview();
+          node.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        if (type === "step") {
+          const node = createStepCard(readStepCardData(card, { renameCopy: true }));
+          insertAfter(node, card);
+          refreshPreview();
+          node.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        return;
+      }
+
+      const moveCardButton = event.target.closest("[data-move-card]");
+      if (moveCardButton) {
+        const card = moveCardButton.closest(".item-card");
+        const direction = moveCardButton.dataset.moveCard;
+        if (direction === "up" && card.previousElementSibling) {
+          card.parentNode.insertBefore(card, card.previousElementSibling);
+          refreshPreview();
+        }
+        if (direction === "down" && card.nextElementSibling) {
+          card.parentNode.insertBefore(card.nextElementSibling, card);
+          refreshPreview();
+        }
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+
       const addButton = event.target.closest("[data-add]");
       if (addButton) {
         const action = addButton.dataset.add;
@@ -1387,6 +1916,21 @@
       }
     }
 
+    issuesEl.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-path]");
+      if (!button) {
+        return;
+      }
+      focusIssueField(button.dataset.path);
+    });
+    document.getElementById("open-import-dialog").addEventListener("click", openImportDialog);
+    document.getElementById("cancel-import").addEventListener("click", closeImportDialog);
+    document.getElementById("confirm-import").addEventListener("click", importJsonToForm);
+    importDialogEl.addEventListener("click", (event) => {
+      if (event.target === importDialogEl) {
+        closeImportDialog();
+      }
+    });
     document.getElementById("load-sample").addEventListener("click", () => loadDsl(SAMPLE_DSL));
     document.getElementById("reset-form").addEventListener("click", resetDsl);
     document.getElementById("copy-json").addEventListener("click", copyJson);
@@ -1413,10 +1957,69 @@
 
     document.body.addEventListener("click", handleCollectionActions);
     document.body.addEventListener("input", () => {
-      refreshPreview();
+      scheduleRefreshPreview();
     });
-    document.body.addEventListener("change", () => {
-      refreshPreview();
+    document.body.addEventListener("change", (event) => {
+      const modeTarget = event.target.closest('[data-role="mode"], #on-fail-mode');
+      if (modeTarget) {
+        syncFailPolicyVisibility(modeTarget.closest(".grid"));
+      }
+      scheduleRefreshPreview();
+    });
+    document.body.addEventListener("focusin", (event) => {
+      updateAutocomplete(event.target);
+    });
+    document.body.addEventListener("click", (event) => {
+      if (event.target.closest(".autocomplete-panel")) {
+        return;
+      }
+      if (event.target.dataset.refAutocomplete === "true") {
+        updateAutocomplete(event.target);
+        return;
+      }
+      hideAutocomplete();
+    });
+    document.body.addEventListener("input", (event) => {
+      updateAutocomplete(event.target);
+    });
+    document.body.addEventListener("keydown", (event) => {
+      if (!autocompleteState.matches.length) {
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        autocompleteState.activeIndex = (autocompleteState.activeIndex + 1) % autocompleteState.matches.length;
+        renderAutocomplete();
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        autocompleteState.activeIndex = (autocompleteState.activeIndex - 1 + autocompleteState.matches.length) % autocompleteState.matches.length;
+        renderAutocomplete();
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        applyAutocompleteSelection(autocompleteState.activeIndex);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        hideAutocomplete();
+      }
+    });
+    autocompleteEl.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      const option = event.target.closest("[data-index]");
+      if (!option) {
+        return;
+      }
+      applyAutocompleteSelection(Number(option.dataset.index));
+    });
+    window.addEventListener("resize", () => {
+      if (autocompleteState.target) {
+        positionAutocomplete(autocompleteState.target);
+      }
     });
 
     try {
