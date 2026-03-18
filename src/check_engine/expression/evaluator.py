@@ -4,10 +4,22 @@ from __future__ import annotations
 
 import ast
 import re
+from dataclasses import dataclass
+from types import CodeType
 from typing import Any
 
 from ..exceptions import DSLExecutionError
 from ..runtime.state import ExecutionState
+
+
+@dataclass(frozen=True)
+class CompiledExpression:
+    """预编译后的 DSL 表达式。"""
+
+    source: str
+    python_expression: str
+    references: tuple[str, ...]
+    code: CodeType
 
 
 class _SafeExpressionValidator(ast.NodeVisitor):
@@ -56,22 +68,15 @@ class ExpressionEvaluator:
     REF_PATTERN = re.compile(r"\$[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
     NULL_PATTERN = re.compile(r"\bnull\b")
 
-    def evaluate(self, expression: str, state: ExecutionState) -> Any:
+    def compile(self, expression: str) -> CompiledExpression:
         if expression == "exists":
             raise DSLExecutionError("Keyword 'exists' is only valid for precheck failure decision and must not be evaluated directly.")
 
-        ref_env = {}
-
-        def exists(value: Any) -> bool:
-            if value is None:
-                return False
-            if isinstance(value, (str, bytes, list, tuple, dict, set)):
-                return len(value) > 0
-            return True
+        references: list[str] = []
 
         def replace_reference(match: re.Match[str]) -> str:
-            ref_name = "__ref_{0}".format(len(ref_env))
-            ref_env[ref_name] = state.resolve_reference(match.group(0))
+            ref_name = "__ref_{0}".format(len(references))
+            references.append(match.group(0))
             return ref_name
 
         python_expr = self.REF_PATTERN.sub(replace_reference, expression)
@@ -83,8 +88,31 @@ class ExpressionEvaluator:
             raise DSLExecutionError(f"Expression syntax error: {expression}") from exc
 
         _SafeExpressionValidator().visit(tree)
+        code = compile(tree, "<dsl-expression>", "eval")
+        return CompiledExpression(
+            source=expression,
+            python_expression=python_expr,
+            references=tuple(references),
+            code=code,
+        )
+
+    def evaluate(self, expression: str, state: ExecutionState) -> Any:
+        return self.evaluate_compiled(self.compile(expression), state)
+
+    def evaluate_compiled(self, expression: CompiledExpression, state: ExecutionState) -> Any:
+        def exists(value: Any) -> bool:
+            if value is None:
+                return False
+            if isinstance(value, (str, bytes, list, tuple, dict, set)):
+                return len(value) > 0
+            return True
+
+        ref_env = {
+            "__ref_{0}".format(index): state.resolve_reference(reference)
+            for index, reference in enumerate(expression.references)
+        }
 
         try:
-            return eval(compile(tree, "<dsl-expression>", "eval"), {"__builtins__": {}}, {**ref_env, "exists": exists})
+            return eval(expression.code, {"__builtins__": {}}, {**ref_env, "exists": exists})
         except Exception as exc:  # noqa: BLE001
-            raise DSLExecutionError(f"Expression evaluation failed: {expression}") from exc
+            raise DSLExecutionError(f"Expression evaluation failed: {expression.source}") from exc

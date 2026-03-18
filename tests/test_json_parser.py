@@ -53,5 +53,6 @@ class JsonDslParserTestCase(unittest.TestCase):
         self.assertEqual(document.variables["threshold"].default, 888)
 
 
+
 if __name__ == "__main__":
     unittest.main()

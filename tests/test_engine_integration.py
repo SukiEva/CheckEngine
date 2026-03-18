@@ -122,6 +122,11 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "final")
         self.assertIn("阈值800", result.message_cn)
 
+    def test_engine_allows_configuring_compile_cache_size(self) -> None:
+        engine = DslEngine(compile_cache_size=1)
+
+        self.assertEqual(engine.compile_cache_size, 1)
+
     def test_execute_on_fail_exists_with_records_field_reference(self) -> None:
         self._insert_header("FAIL_RECORDS_EXISTS", "flow1", "scenario1")
         self._insert_journal("FAIL_RECORDS_EXISTS", "USD", "1", "user", "2024-01-01", 1.0, 321)

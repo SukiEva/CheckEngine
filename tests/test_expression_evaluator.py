@@ -46,6 +46,11 @@ class ExpressionEvaluatorTestCase(unittest.TestCase):
         expression = "$steps.exchange_rate.final_amount > $variables.threshold"
         self.assertTrue(self.evaluator.evaluate(expression, self.state))
 
+    def test_evaluate_compiled_expression(self) -> None:
+        compiled = self.evaluator.compile("$steps.exchange_rate.final_amount > $variables.threshold")
+
+        self.assertTrue(self.evaluator.evaluate_compiled(compiled, self.state))
+
 
 if __name__ == "__main__":
     unittest.main()
