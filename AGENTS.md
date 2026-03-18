@@ -225,6 +225,13 @@ docs/
 - 进行代码改动前，应先阅读已有规范和样例，不要凭空假设 DSL 结构。
 - 产出文档时，优先写清边界、约束、失败语义和示例。
 
+## 编码规范补充
+
+- 新增或修改类型注解时，若类型可能为空，统一使用 `Optional[...]`，不要使用 `X | None` 写法。
+- 若某个类方法不依赖 `self` 或 `cls`，应显式声明为 `@staticmethod`，不要保留实例方法形式。
+- `DslEngine.execute`、`execute_document`、`execute_compiled` 及相关执行链路中，`datasource_registry` 应显式标注为 `DatasourceRegistry`，不要回退成宽泛的 `Any`。
+- Agent 在修改代码时，应主动遵守以上风格；若发现已有代码与该规范冲突，优先在本次改动范围内一并收敛。
+
 ## Git 约定
 
 - 每次实际修改文件后，默认进行一次独立提交。
