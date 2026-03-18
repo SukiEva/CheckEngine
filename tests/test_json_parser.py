@@ -21,7 +21,7 @@ class JsonDslParserTestCase(unittest.TestCase):
         document = self.parser.parse(self.example_path.read_text(encoding="utf-8"))
 
         self.assertEqual(document.context.datasource, "saas_db")
-        self.assertEqual(document.context.outputs, ["flow", "scenario"])
+        self.assertEqual(document.context.outputs, ("flow", "scenario"))
         self.assertEqual(document.variables["threshold"].default, 500)
         self.assertEqual(len(document.prechecks), 2)
         self.assertEqual(document.steps[1].consumes[0].alias, "am")
@@ -41,15 +41,15 @@ class JsonDslParserTestCase(unittest.TestCase):
         )
 
         self.assertIsNone(document.context)
-        self.assertEqual(document.variables, {})
-        self.assertEqual(document.prechecks, [])
+        self.assertEqual(dict(document.variables), {})
+        self.assertEqual(document.prechecks, ())
 
     def test_parse_constant_variable_with_empty_when(self) -> None:
         document = self.parser.parse(
             '{"variables": {"threshold": {"when": [], "default": 888}}, "steps": [{"name": "s1", "type": "sql", "datasource": "db", "result_mode": "record", "sql_template": "select 1 as v", "sql_params": {}, "outputs": ["v"]}], "on_fail": {"decision": "$variables.threshold > 100", "mode": "single", "message_cn": "x", "message_en": "y"}}'
         )
 
-        self.assertEqual(document.variables["threshold"].when, [])
+        self.assertEqual(document.variables["threshold"].when, ())
         self.assertEqual(document.variables["threshold"].default, 888)
 
 

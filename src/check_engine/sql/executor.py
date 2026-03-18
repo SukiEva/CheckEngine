@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextlib import contextmanager
 from typing import Any, Optional
 
@@ -32,7 +33,7 @@ class SqlExecutor:
 
         try:
             datasource = datasource_registry.get(node.datasource)
-            rows = self._run_sql(datasource, final_sql, final_params)
+            rows = self._run_sql(datasource, final_sql, final_params, node.result_mode)
             exported_data, exported_fields = self._project_outputs(node, node_name, rows)
         except Exception as exc:  # noqa: BLE001
             if isinstance(exc, DSLExecutionError):
@@ -48,7 +49,7 @@ class SqlExecutor:
             exported_fields=exported_fields,
         )
 
-    def _resolve_sql_params(self, sql_params: dict[str, Any], state: Any) -> dict[str, Any]:
+    def _resolve_sql_params(self, sql_params: Mapping[str, Any], state: Any) -> dict[str, Any]:
         resolved: dict[str, Any] = {}
         for key, value in sql_params.items():
             resolved[key] = state.resolve_reference(value) if isinstance(value, str) and value.startswith("$") else value
@@ -62,7 +63,7 @@ class SqlExecutor:
             return cte_sql + ", " + stripped[4:].lstrip()
         return cte_sql + " " + sql_template
 
-    def _run_sql(self, datasource: Any, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    def _run_sql(self, datasource: Any, sql: str, params: dict[str, Any], result_mode: str = "records") -> list[dict[str, Any]]:
         if not hasattr(datasource, "get_session"):
             raise DSLExecutionError(
                 "Datasource must provide get_session and execute SQL through a SQLAlchemy Session.",
@@ -74,7 +75,23 @@ class SqlExecutor:
         session_cm = self._open_session(datasource)
         with session_cm as session:
             result = session.execute(sqlalchemy_text(sql), params)
-            return [dict(row) for row in result.mappings().all()]
+            mappings = result.mappings()
+            if result_mode == "record":
+                return [dict(row) for row in self._fetch_record_rows(mappings)]
+            iterable_rows = mappings if hasattr(mappings, "__iter__") else mappings.all()
+            return [dict(row) for row in iterable_rows]
+
+    def _fetch_record_rows(self, mappings: Any) -> list[Any]:
+        if hasattr(mappings, "fetchmany"):
+            return list(mappings.fetchmany(2))
+
+        iterable_rows = mappings if hasattr(mappings, "__iter__") else mappings.all()
+        rows = []
+        for row in iterable_rows:
+            rows.append(row)
+            if len(rows) == 2:
+                break
+        return rows
 
     def _open_session(self, datasource: Any) -> Any:
         session_or_cm = datasource.get_session()
@@ -93,26 +110,29 @@ class SqlExecutor:
         if not fields and rows:
             fields = list(rows[0].keys())
 
-        self._ensure_output_columns_exist(rows, fields)
-
         if node.result_mode == "record":
             row = rows[0] if rows else {}
-            return ({field: row.get(field) for field in fields} if fields else {}), fields
+            self._ensure_output_columns_exist(row, fields)
+            return ({field: row[field] for field in fields} if fields else {}), fields
 
         if not fields:
-            return [dict(row) for row in rows], fields
-        return [{field: row.get(field) for field in fields} for row in rows], fields
+            return rows, fields
 
-    def _ensure_output_columns_exist(self, rows: list[dict[str, Any]], fields: list[str]) -> None:
-        if not rows or not fields:
-            return
+        projected_rows = []
         for row in rows:
-            missing_fields = [field for field in fields if field not in row]
-            if missing_fields:
-                raise DSLExecutionError(
-                    "Declared outputs do not match returned columns: {0}".format(", ".join(missing_fields)),
-                    code=ExecutionErrorCode.OUTPUT_COLUMN_MISMATCH,
-                )
+            self._ensure_output_columns_exist(row, fields)
+            projected_rows.append({field: row[field] for field in fields})
+        return projected_rows, fields
+
+    def _ensure_output_columns_exist(self, row: dict[str, Any], fields: list[str]) -> None:
+        if not fields:
+            return
+        missing_fields = [field for field in fields if field not in row]
+        if missing_fields:
+            raise DSLExecutionError(
+                "Declared outputs do not match returned columns: {0}".format(", ".join(missing_fields)),
+                code=ExecutionErrorCode.OUTPUT_COLUMN_MISMATCH,
+            )
 
     def _result_mismatch_code(self, node_name: str) -> ExecutionErrorCode:
         if node_name == "context":

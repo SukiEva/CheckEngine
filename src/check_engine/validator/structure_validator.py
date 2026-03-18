@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import NoReturn
+from typing import Mapping, NoReturn, Sequence
 
 from ..dsl.models import ContextNode, DslDocument, FailPolicy, PrecheckNode, SqlNode, StepNode, VariableDefinition
 from ..exceptions import DSLValidationError, ValidationErrorCode
@@ -30,7 +30,7 @@ class StructureValidator:
         self._validate_global_node_names(document.prechecks, document.steps)
         self._validate_fail_policy(document.on_fail, "on_fail")
 
-    def _validate_top_level_fields(self, raw: dict[str, object]) -> None:
+    def _validate_top_level_fields(self, raw: Mapping[str, object]) -> None:
         unknown_fields = sorted(set(raw.keys()) - self.VALID_TOP_LEVEL_FIELDS)
         if unknown_fields:
             self._raise(
@@ -43,10 +43,10 @@ class StructureValidator:
         if not context.outputs:
             self._raise(ValidationErrorCode.MISSING_OUTPUTS, "context.outputs must not be empty.")
 
-    def _validate_variables(self, variables: dict[str, VariableDefinition], raw_variables: dict[str, object]) -> None:
+    def _validate_variables(self, variables: Mapping[str, VariableDefinition], raw_variables: Mapping[str, object]) -> None:
         for name, definition in variables.items():
             raw_definition = raw_variables.get(name)
-            if not isinstance(raw_definition, dict) or "default" not in raw_definition:
+            if not isinstance(raw_definition, Mapping) or "default" not in raw_definition:
                 self._raise(ValidationErrorCode.MISSING_REQUIRED_FIELD, f"variables.{name}.default is required.")
             for index, item in enumerate(definition.when):
                 if not item.condition.strip():
@@ -55,7 +55,7 @@ class StructureValidator:
                         f"variables.{name}.when[{index}].condition must not be empty.",
                     )
 
-    def _validate_prechecks(self, prechecks: list[PrecheckNode]) -> None:
+    def _validate_prechecks(self, prechecks: Sequence[PrecheckNode]) -> None:
         names = set()
         for index, node in enumerate(prechecks):
             if node.name in names:
@@ -72,7 +72,7 @@ class StructureValidator:
                     f"prechecks[{index}].on_fail.decision only supports 'exists' or 'exists($path)'."
                 )
 
-    def _validate_steps(self, steps: list[StepNode]) -> None:
+    def _validate_steps(self, steps: Sequence[StepNode]) -> None:
         names = set()
         for index, node in enumerate(steps):
             if node.name in names:
@@ -116,7 +116,7 @@ class StructureValidator:
             self._raise(ValidationErrorCode.MISSING_REQUIRED_FIELD, f"{path}.sql_template must not be empty.")
         self._validate_outputs(node.outputs, f"{path}.outputs")
 
-    def _validate_outputs(self, outputs: list[str], path: str) -> None:
+    def _validate_outputs(self, outputs: Sequence[str], path: str) -> None:
         seen = set()
         for index, output in enumerate(outputs):
             if output in seen:
@@ -162,7 +162,7 @@ class StructureValidator:
         if name in self.RESERVED_NODE_NAMES:
             self._raise(ValidationErrorCode.RESERVED_NODE_NAME, f"{path} uses reserved node name: {name}")
 
-    def _validate_global_node_names(self, prechecks: list[PrecheckNode], steps: list[StepNode]) -> None:
+    def _validate_global_node_names(self, prechecks: Sequence[PrecheckNode], steps: Sequence[StepNode]) -> None:
         precheck_names = {node.name for node in prechecks}
         for index, node in enumerate(steps):
             if node.name in precheck_names:

@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import MappingProxyType
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine.engine import DslEngine
 from check_engine.exceptions import DSLExecutionError, ExecutionErrorCode
-from check_engine.runtime.state import NodeExecutionResult
+from check_engine.runtime.state import ExecutionResult, NodeExecutionResult
 
 
 class _FailingSqlExecutor:
@@ -104,6 +105,20 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(result.failed_node, "on_fail")
         self.assertEqual(result.error_code, ExecutionErrorCode.TEMPLATE_RENDER_FAILED.value)
 
+    def test_set_context_result_accepts_mapping_view(self) -> None:
+        from check_engine.runtime.state import ExecutionState
+
+        state = ExecutionState.new({})
+        result = NodeExecutionResult(
+            raw_rows=[{"v": 1}],
+            exported_data=MappingProxyType({"v": 1}),
+            exported_fields=["v"],
+        )
+
+        state.set_context_result(result)
+
+        self.assertEqual(state.resolve_reference("$context.v"), 1)
+
     def test_execute_pass_result_has_empty_runtime_error_fields(self) -> None:
         engine = DslEngine(sql_executor=_PassingSqlExecutor())
 
@@ -113,6 +128,118 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "pass")
         self.assertIsNone(result.error_code)
         self.assertIsNone(result.error_detail)
+
+    def test_execute_compiled_reuses_shared_compiled_dsl_without_state_leak(self) -> None:
+        class _InputDrivenSqlExecutor:
+            def execute_node(self, node, state, datasource_registry, node_name):
+                value = state.input_data["amount"]
+                return NodeExecutionResult(
+                    raw_rows=[{"v": value}],
+                    exported_data={"v": value},
+                    exported_fields=["v"],
+                )
+
+        engine = DslEngine(sql_executor=_InputDrivenSqlExecutor(), compile_cache_size=2)
+        compiled = engine.compile(self.dsl_text)
+
+        first = engine.execute_compiled(compiled, {"amount": 5}, datasource_registry=object())
+        second = engine.execute_compiled(compiled, {"amount": 20}, datasource_registry=object())
+
+        self.assertTrue(first.passed)
+        self.assertFalse(second.passed)
+        self.assertEqual(first.steps["step_a"]["v"], 5)
+        self.assertEqual(second.steps["step_a"]["v"], 20)
+        self.assertIs(compiled, engine.compile(self.dsl_text))
+
+    def test_execution_result_to_dict_normalizes_mapping_views(self) -> None:
+        result = ExecutionResult(
+            passed=False,
+            phase="final",
+            failed_node="on_fail",
+            error_code=None,
+            error_detail=None,
+            message_cn="x",
+            message_en="y",
+            context=MappingProxyType({"flow": "f1"}),
+            variables=MappingProxyType({"threshold": 1000}),
+            steps=MappingProxyType({"step_a": MappingProxyType({"values": (1, 2)})}),
+        )
+
+        payload = result.to_dict()
+
+        self.assertEqual(
+            payload,
+            {
+                "passed": False,
+                "phase": "final",
+                "failed_node": "on_fail",
+                "error_code": None,
+                "error_detail": None,
+                "message_cn": "x",
+                "message_en": "y",
+                "context": {"flow": "f1"},
+                "variables": {"threshold": 1000},
+                "steps": {"step_a": {"values": [1, 2]}},
+            },
+        )
+
+    def test_execution_result_to_dict_output_is_json_serializable(self) -> None:
+        result = ExecutionResult(
+            passed=True,
+            phase="pass",
+            failed_node=None,
+            error_code=None,
+            error_detail=None,
+            message_cn=None,
+            message_en=None,
+            context=MappingProxyType({"flow": "f1"}),
+            variables=MappingProxyType({"threshold": 1000}),
+            steps=MappingProxyType({"step_a": MappingProxyType({"values": (1, 2)})}),
+        )
+
+        payload = result.to_dict()
+
+        self.assertEqual(
+            json.loads(json.dumps(payload)),
+            {
+                "passed": True,
+                "phase": "pass",
+                "failed_node": None,
+                "error_code": None,
+                "error_detail": None,
+                "message_cn": None,
+                "message_en": None,
+                "context": {"flow": "f1"},
+                "variables": {"threshold": 1000},
+                "steps": {"step_a": {"values": [1, 2]}},
+            },
+        )
+
+    def test_node_execution_result_rows_are_read_only_views(self) -> None:
+        result = NodeExecutionResult(
+            raw_rows=[{"v": 1}],
+            exported_data={"v": 1},
+            exported_fields=["v"],
+        )
+
+        rows = result.as_rows()
+
+        self.assertIsInstance(rows, tuple)
+        with self.assertRaises(TypeError):
+            rows[0]["v"] = 2
+
+
+class ExecutionStateReferenceResolutionTestCase(unittest.TestCase):
+    def test_resolve_step_path_from_read_only_sequence(self) -> None:
+        from check_engine.runtime.state import ExecutionState
+
+        state = ExecutionState.new({})
+        state.step_data["step_a"] = (
+            MappingProxyType({"code": "A"}),
+            MappingProxyType({"code": "B"}),
+        )
+
+        self.assertEqual(state.resolve_reference("$steps.step_a.code"), ["A", "B"])
 
 
 if __name__ == "__main__":

@@ -69,6 +69,26 @@ class MessageRendererTestCase(unittest.TestCase):
         self.assertEqual(message_cn, "结果是：100-USD,200-CNY")
         self.assertEqual(message_en, "result: 100-USD,200-CNY")
 
+    def test_render_sub_repeat_with_tuple_array_paths(self) -> None:
+        self.state.step_data = {
+            "a": {
+                "out1": ("100", "200"),
+                "out2": ("USD", "CNY"),
+            }
+        }
+        policy = FailPolicy(
+            decision="exists($steps.a.out1)",
+            mode="sub_repeat",
+            divider=",",
+            message_cn="结果是：[{$steps.a.out1}-{$steps.a.out2}]",
+            message_en="result: [{$steps.a.out1}-{$steps.a.out2}]",
+        )
+
+        message_cn, message_en = self.renderer.render(policy, self.state)
+
+        self.assertEqual(message_cn, "结果是：100-USD,200-CNY")
+        self.assertEqual(message_en, "result: 100-USD,200-CNY")
+
     def test_render_sub_repeat_with_mismatched_step_array_lengths(self) -> None:
         self.state.step_data = {
             "a": {
@@ -152,6 +172,7 @@ class MessageRendererTestCase(unittest.TestCase):
 
         self.assertEqual(message_cn, "结果：1,200-5.6 | 3,000-7.0")
         self.assertEqual(message_en, "result: 1,200-5.6 | 3,000-7.0")
+
 
 
 if __name__ == "__main__":

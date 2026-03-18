@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import MappingProxyType
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -42,6 +43,13 @@ class ExpressionEvaluatorTestCase(unittest.TestCase):
         expression = "exists($steps.empty_step)"
         self.assertFalse(self.evaluator.evaluate(expression, self.state))
 
+    def test_evaluate_exists_function_on_empty_mapping_proxy(self) -> None:
+        self.state.context_data = MappingProxyType({})
+
+        expression = "exists($context)"
+
+        self.assertFalse(self.evaluator.evaluate(expression, self.state))
+
     def test_evaluate_final_failure_expression(self) -> None:
         expression = "$steps.exchange_rate.final_amount > $variables.threshold"
         self.assertTrue(self.evaluator.evaluate(expression, self.state))
@@ -50,6 +58,16 @@ class ExpressionEvaluatorTestCase(unittest.TestCase):
         compiled = self.evaluator.compile("$steps.exchange_rate.final_amount > $variables.threshold")
 
         self.assertTrue(self.evaluator.evaluate_compiled(compiled, self.state))
+
+    def test_compile_deduplicates_repeated_references(self) -> None:
+        compiled = self.evaluator.compile(
+            "$steps.exchange_rate.final_amount > 0 and $steps.exchange_rate.final_amount > $variables.threshold"
+        )
+
+        self.assertEqual(
+            compiled.references,
+            ("$steps.exchange_rate.final_amount", "$variables.threshold"),
+        )
 
 
 if __name__ == "__main__":

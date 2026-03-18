@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import MappingProxyType
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -49,9 +50,150 @@ class EngineCompileCacheTestCase(unittest.TestCase):
 
         self.assertEqual(parser.parse_count, 1)
         self.assertEqual(validator.validate_count, 1)
-        self.assertIsNot(first, second)
-        self.assertIsNot(first.document, second.document)
+        self.assertIs(first, second)
+        self.assertIs(first.document, second.document)
         self.assertEqual(engine.compile_cache_info().hits, 1)
+
+    def test_compile_returns_immutable_cached_document_content(self) -> None:
+        engine = DslEngine(compile_cache_size=2)
+
+        compiled = engine.compile(self.dsl_text)
+
+        self.assertIsInstance(compiled.document.raw, MappingProxyType)
+        self.assertIsInstance(compiled.document.steps, tuple)
+        self.assertIsInstance(compiled.document.variables, MappingProxyType)
+        self.assertIsInstance(compiled.document.steps[0].outputs, tuple)
+        self.assertIsInstance(compiled.document.steps[0].sql_params, MappingProxyType)
+        with self.assertRaises(AttributeError):
+            compiled.document.steps[0].outputs.append("x")
+        with self.assertRaises(TypeError):
+            compiled.document.variables["threshold"] = object()
+
+
+    def test_compile_freezes_variable_default_nested_value(self) -> None:
+        engine = DslEngine(compile_cache_size=2)
+        dsl_text = json.dumps(
+            {
+                "variables": {
+                    "thresholds": {
+                        "when": [],
+                        "default": {"levels": [100, 200], "flags": {"strict": True}},
+                    }
+                },
+                "steps": [
+                    {
+                        "name": "step_a",
+                        "type": "sql",
+                        "datasource": "db",
+                        "result_mode": "record",
+                        "sql_template": "select 1 as amount",
+                        "sql_params": {},
+                        "outputs": ["amount"],
+                    }
+                ],
+                "on_fail": {
+                    "decision": "false",
+                    "mode": "single",
+                    "message_cn": "ok",
+                    "message_en": "ok",
+                },
+            }
+        )
+
+        compiled = engine.compile(dsl_text)
+        default_value = compiled.document.variables["thresholds"].default
+
+        self.assertIsInstance(default_value, MappingProxyType)
+        self.assertIsInstance(default_value["levels"], tuple)
+        self.assertIsInstance(default_value["flags"], MappingProxyType)
+        with self.assertRaises(TypeError):
+            default_value["flags"]["strict"] = False
+
+    def test_compile_freezes_variable_condition_nested_value(self) -> None:
+        engine = DslEngine(compile_cache_size=2)
+        dsl_text = json.dumps(
+            {
+                "variables": {
+                    "thresholds": {
+                        "when": [
+                            {
+                                "condition": "$input.kind == 'special'",
+                                "value": {"levels": [100, 200], "meta": {"currency": "CNY"}},
+                            }
+                        ],
+                        "default": 0,
+                    }
+                },
+                "steps": [
+                    {
+                        "name": "step_a",
+                        "type": "sql",
+                        "datasource": "db",
+                        "result_mode": "record",
+                        "sql_template": "select 1 as amount",
+                        "sql_params": {},
+                        "outputs": ["amount"],
+                    }
+                ],
+                "on_fail": {
+                    "decision": "false",
+                    "mode": "single",
+                    "message_cn": "ok",
+                    "message_en": "ok",
+                },
+            }
+        )
+
+        compiled = engine.compile(dsl_text)
+        value = compiled.document.variables["thresholds"].when[0].value
+
+        self.assertIsInstance(compiled.document.variables["thresholds"].when, tuple)
+        self.assertIsInstance(value, MappingProxyType)
+        self.assertIsInstance(value["levels"], tuple)
+        self.assertIsInstance(value["meta"], MappingProxyType)
+        with self.assertRaises(TypeError):
+            value["meta"]["currency"] = "USD"
+
+    def test_compile_freezes_step_consumes_sequence(self) -> None:
+        engine = DslEngine(compile_cache_size=2)
+        dsl_text = json.dumps(
+            {
+                "context": {
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "records",
+                    "sql_template": "select 1 as amount",
+                    "sql_params": {},
+                    "outputs": ["amount"],
+                },
+                "steps": [
+                    {
+                        "name": "step_a",
+                        "type": "sql",
+                        "datasource": "db",
+                        "result_mode": "records",
+                        "sql_template": "select amount from ctx",
+                        "sql_params": {},
+                        "outputs": ["amount"],
+                        "consumes": [{"from": "$context", "alias": "ctx"}],
+                    }
+                ],
+                "on_fail": {
+                    "decision": "false",
+                    "mode": "single",
+                    "message_cn": "ok",
+                    "message_en": "ok",
+                },
+            }
+        )
+
+        compiled = engine.compile(dsl_text)
+        consumes = compiled.document.steps[0].consumes
+
+        self.assertIsInstance(consumes, tuple)
+        self.assertEqual(consumes[0].from_path, "$context")
+        with self.assertRaises(AttributeError):
+            consumes.append(object())
 
     def test_compile_cache_can_be_disabled(self) -> None:
         parser = _CountingParser()
