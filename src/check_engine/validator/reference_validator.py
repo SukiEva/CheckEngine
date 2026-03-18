@@ -6,7 +6,7 @@ import re
 from collections.abc import Mapping
 from typing import NoReturn
 
-from ..dsl.models import DslDocument, FailPolicy, PrecheckNode, StepNode, VariableDefinition
+from ..dsl.models import ContextNode, DslDocument, FailPolicy, StepNode, VariableDefinition
 from ..exceptions import DSLValidationError, ValidationErrorCode
 
 
@@ -20,6 +20,9 @@ class ReferenceValidator:
         step_map = {step.name: step for step in document.steps}
         available_variables: set[str] = set()
         all_variables = set(document.variables.keys())
+
+        if document.context is not None:
+            self._validate_context(document.context, document, step_map)
 
         for variable_name, definition in document.variables.items():
             self._validate_variable_definition(variable_name, definition, document, available_variables, step_map)
@@ -50,6 +53,16 @@ class ReferenceValidator:
             step_map=step_map,
         )
 
+    def _validate_context(self, context: ContextNode, document: DslDocument, step_map: dict[str, StepNode]) -> None:
+        self._validate_sql_params(
+            context.sql_params,
+            document,
+            available_steps=set(),
+            available_variables=set(),
+            step_map=step_map,
+            path_prefix="context.sql_params",
+        )
+
     def _validate_variable_definition(
         self,
         variable_name: str,
@@ -76,6 +89,7 @@ class ReferenceValidator:
         available_steps: set[str],
         available_variables: set[str],
         step_map: dict[str, StepNode],
+        path_prefix: str = "sql_params",
     ) -> None:
         for key, value in sql_params.items():
             if isinstance(value, str) and value.startswith("$"):
@@ -84,7 +98,7 @@ class ReferenceValidator:
                     document,
                     available_steps=available_steps,
                     available_variables=available_variables,
-                    path=f"sql_params.{key}",
+                    path=f"{path_prefix}.{key}",
                     step_map=step_map,
                 )
 

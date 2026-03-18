@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from types import CodeType
 from typing import Any
 
-from ..exceptions import DSLExecutionError
+from ..exceptions import DSLExecutionError, ExecutionErrorCode
 from ..runtime.state import ExecutionState
 
 
@@ -114,7 +114,10 @@ class ExpressionEvaluator:
         try:
             return eval(expression.code, {"__builtins__": {}}, {**ref_env, "exists": self._exists})
         except Exception as exc:  # noqa: BLE001
-            raise DSLExecutionError(f"Expression evaluation failed: {expression.source}") from exc
+            raise DSLExecutionError(
+                f"Expression evaluation failed: {expression.source}",
+                code=ExecutionErrorCode.EXPRESSION_EVALUATION_FAILED,
+            ) from exc
 
     @staticmethod
     def _exists(value: Any) -> bool:

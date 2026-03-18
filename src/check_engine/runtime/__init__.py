@@ -1,8 +1,9 @@
 """运行时状态。"""
 
-from .state import ExecutionResult, ExecutionState, NodeExecutionResult
+from .state import ExecutedNodeTrace, ExecutionResult, ExecutionState, NodeExecutionResult
 
 __all__ = [
+    "ExecutedNodeTrace",
     "ExecutionResult",
     "ExecutionState",
     "NodeExecutionResult",

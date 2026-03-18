@@ -180,6 +180,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 "context": {"flow": "f1"},
                 "variables": {"threshold": 1000},
                 "steps": {"step_a": {"values": [1, 2]}},
+                "executed_nodes": [],
             },
         )
 
@@ -212,6 +213,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 "context": {"flow": "f1"},
                 "variables": {"threshold": 1000},
                 "steps": {"step_a": {"values": [1, 2]}},
+                "executed_nodes": [],
             },
         )
 
@@ -228,6 +230,34 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         with self.assertRaises(TypeError):
             rows[0]["v"] = 2
 
+
+
+    def test_execute_result_records_executed_nodes_trace(self) -> None:
+        engine = DslEngine(sql_executor=_PassingSqlExecutor())
+
+        result = engine.execute(self.dsl_text, {}, datasource_registry=object())
+
+        self.assertEqual(
+            [
+                {
+                    "phase": item.phase,
+                    "node_name": item.node_name,
+                    "datasource": item.datasource,
+                    "result_mode": item.result_mode,
+                    "row_count": item.row_count,
+                }
+                for item in result.executed_nodes
+            ],
+            [
+                {
+                    "phase": "step",
+                    "node_name": "step_a",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "row_count": 1,
+                }
+            ],
+        )
 
 class ExecutionStateReferenceResolutionTestCase(unittest.TestCase):
     def test_resolve_step_path_from_read_only_sequence(self) -> None:

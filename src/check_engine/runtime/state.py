@@ -19,6 +19,26 @@ def _to_plain_data(value: Any) -> Any:
 
 
 @dataclass(frozen=True)
+class ExecutedNodeTrace:
+    """单个节点的执行轨迹。"""
+
+    phase: str
+    node_name: str
+    datasource: Optional[str]
+    result_mode: Optional[str]
+    row_count: Optional[int]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "phase": self.phase,
+            "node_name": self.node_name,
+            "datasource": self.datasource,
+            "result_mode": self.result_mode,
+            "row_count": self.row_count,
+        }
+
+
+@dataclass(frozen=True)
 class NodeExecutionResult:
     """节点执行结果。"""
 
@@ -49,6 +69,7 @@ class ExecutionResult:
     context: Mapping[str, Any]
     variables: Mapping[str, Any]
     steps: Mapping[str, Any]
+    executed_nodes: Sequence[ExecutedNodeTrace] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -62,6 +83,7 @@ class ExecutionResult:
             "context": _to_plain_data(self.context),
             "variables": _to_plain_data(self.variables),
             "steps": _to_plain_data(self.steps),
+            "executed_nodes": [item.to_dict() for item in self.executed_nodes],
         }
 
 
@@ -75,6 +97,7 @@ class ExecutionState:
     variables_data: MutableMapping[str, Any] = field(default_factory=dict)
     step_results: MutableMapping[str, NodeExecutionResult] = field(default_factory=dict)
     step_data: MutableMapping[str, Any] = field(default_factory=dict)
+    executed_nodes: list[ExecutedNodeTrace] = field(default_factory=list)
 
     @classmethod
     def new(cls, input_data: Mapping[str, Any]) -> "ExecutionState":
@@ -87,6 +110,25 @@ class ExecutionState:
     def set_step_result(self, step_name: str, result: NodeExecutionResult) -> None:
         self.step_results[step_name] = result
         self.step_data[step_name] = result.exported_data
+
+    def record_node_execution(
+        self,
+        *,
+        phase: str,
+        node_name: str,
+        datasource: Optional[str],
+        result_mode: Optional[str],
+        row_count: Optional[int],
+    ) -> None:
+        self.executed_nodes.append(
+            ExecutedNodeTrace(
+                phase=phase,
+                node_name=node_name,
+                datasource=datasource,
+                result_mode=result_mode,
+                row_count=row_count,
+            )
+        )
 
     def resolve_reference(self, reference: str) -> Any:
         if not reference.startswith("$"):
