@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from ..dsl.models import DslDocument, SqlNode
-from ..exceptions import DSLValidationError
+from ..exceptions import DSLValidationError, ValidationErrorCode
 
 
 class SqlSafetyValidator:
@@ -28,8 +28,17 @@ class SqlSafetyValidator:
     def _validate_sql(self, node: SqlNode, path: str) -> None:
         sql = node.sql_template.strip()
         if not self.LEADING_PATTERN.search(sql):
-            raise DSLValidationError("{0}.sql_template only SELECT/WITH queries are allowed.".format(path))
+            raise DSLValidationError(
+                "{0}.sql_template only SELECT/WITH queries are allowed.".format(path),
+                code=ValidationErrorCode.NON_READONLY_SQL,
+            )
         if self.FORBIDDEN_PATTERN.search(sql):
-            raise DSLValidationError("{0}.sql_template contains non-read-only SQL keyword.".format(path))
+            raise DSLValidationError(
+                "{0}.sql_template contains non-read-only SQL keyword.".format(path),
+                code=ValidationErrorCode.NON_READONLY_SQL,
+            )
         if ";" in sql.rstrip(";"):
-            raise DSLValidationError("{0}.sql_template multiple statements are not supported.".format(path))
+            raise DSLValidationError(
+                "{0}.sql_template multiple statements are not supported.".format(path),
+                code=ValidationErrorCode.NON_READONLY_SQL,
+            )

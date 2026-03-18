@@ -1,5 +1,40 @@
 """ExecDSL 相关异常定义。"""
 
+from enum import Enum
+
+
+class ValidationErrorCode(str, Enum):
+    """DSL 静态校验错误码。"""
+
+    VALIDATION_ERROR = "E1000_VALIDATION_ERROR"
+    UNKNOWN_TOP_LEVEL_FIELD = "E1001_UNKNOWN_TOP_LEVEL_FIELD"
+    MISSING_REQUIRED_FIELD = "E1002_MISSING_REQUIRED_FIELD"
+    INVALID_FIELD_TYPE = "E1003_INVALID_FIELD_TYPE"
+    DUPLICATE_NODE_NAME = "E1004_DUPLICATE_NODE_NAME"
+    RESERVED_NODE_NAME = "E1005_RESERVED_NODE_NAME"
+    UNRESOLVED_PATH = "E1006_UNRESOLVED_PATH"
+    MISSING_OUTPUTS = "E1007_MISSING_OUTPUTS"
+    INVALID_CONSUMES_REF = "E1008_INVALID_CONSUMES_REF"
+    INVALID_CONSUMES_ALIAS = "E1009_INVALID_CONSUMES_ALIAS"
+    INVALID_EXPRESSION = "E1010_INVALID_EXPRESSION"
+    INVALID_MESSAGE_TEMPLATE = "E1011_INVALID_MESSAGE_TEMPLATE"
+    INVALID_RESULT_MODE = "E1012_INVALID_RESULT_MODE"
+    NON_READONLY_SQL = "E1013_NON_READONLY_SQL"
+
+
+class ExecutionErrorCode(str, Enum):
+    """DSL 运行时错误码。"""
+
+    EXECUTION_ERROR = "E2000_EXECUTION_ERROR"
+    CONTEXT_RESULT_MISMATCH = "E2001_CONTEXT_RESULT_MISMATCH"
+    STEP_RESULT_MISMATCH = "E2002_STEP_RESULT_MISMATCH"
+    OUTPUT_COLUMN_MISMATCH = "E2003_OUTPUT_COLUMN_MISMATCH"
+    ARRAY_LENGTH_MISMATCH = "E2004_ARRAY_LENGTH_MISMATCH"
+    SINGLE_MODE_MULTI_ROWS = "E2005_SINGLE_MODE_MULTI_ROWS"
+    TEMPLATE_RENDER_FAILED = "E2006_TEMPLATE_RENDER_FAILED"
+    SQL_EXECUTION_FAILED = "E2007_SQL_EXECUTION_FAILED"
+    DATASOURCE_NOT_FOUND = "E2008_DATASOURCE_NOT_FOUND"
+
 
 class DSLParseError(ValueError):
     """DSL 文本解析失败。"""
@@ -8,6 +43,14 @@ class DSLParseError(ValueError):
 class DSLValidationError(ValueError):
     """DSL 静态校验失败。"""
 
+    def __init__(self, message: str, *, code: ValidationErrorCode = ValidationErrorCode.VALIDATION_ERROR) -> None:
+        super().__init__(message)
+        self.code = code
+
 
 class DSLExecutionError(RuntimeError):
     """DSL 运行时执行失败。"""
+
+    def __init__(self, message: str, *, code: ExecutionErrorCode = ExecutionErrorCode.EXECUTION_ERROR) -> None:
+        super().__init__(message)
+        self.code = code

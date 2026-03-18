@@ -74,7 +74,11 @@
       "sql_template": "SELECT func, SUM(amount) as total_amount FROM jounrnal WHERE header_id = :source_object_id group by func",
       "sql_params": {
         "source_object_id": "$input.source_object_id"
-      }
+      },
+      "outputs": [
+        "func",
+        "total_amount"
+      ]
     },
     {
       "name": "exchange_rate",
@@ -99,6 +103,6 @@
     "decision": "$steps.exchange_rate.final_amount > $variables.threshold",
     "mode": "single",
     "message_cn": "金额{$steps.exchange_rate.final_amount}超过阈值{$variables.threshold}",
-    "message_en": "The amount {steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}."
+    "message_en": "The amount {$steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}."
   }
 }

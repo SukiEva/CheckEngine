@@ -6,7 +6,7 @@ import re
 from typing import Any, Optional
 
 from ..dsl.models import FailPolicy
-from ..exceptions import DSLExecutionError
+from ..exceptions import DSLExecutionError, ExecutionErrorCode
 from ..runtime.state import ExecutionState
 
 
@@ -39,7 +39,10 @@ class MessageRenderer:
     ) -> str:
         if policy.mode == "single":
             if len(rows) > 1:
-                raise DSLExecutionError("single mode requires at most one result row.")
+                raise DSLExecutionError(
+                    "single mode requires at most one result row.",
+                    code=ExecutionErrorCode.SINGLE_MODE_MULTI_ROWS,
+                )
             row = rows[0] if rows else None
             return self._render_once(template, state, row)
 
@@ -52,7 +55,10 @@ class MessageRenderer:
         if policy.mode == "sub_repeat":
             return self._render_sub_repeat(template, policy, locale, state, rows)
 
-        raise DSLExecutionError(f"Unknown message rendering mode: {policy.mode}")
+        raise DSLExecutionError(
+            f"Unknown message rendering mode: {policy.mode}",
+            code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
+        )
 
     def _render_sub_repeat(
         self,
@@ -90,7 +96,10 @@ class MessageRenderer:
 
         token_lengths = {len(values) for values in array_tokens.values()}
         if len(token_lengths) != 1:
-            raise DSLExecutionError("sub_repeat list placeholders must have the same length.")
+            raise DSLExecutionError(
+                "sub_repeat list placeholders must have the same length.",
+                code=ExecutionErrorCode.ARRAY_LENGTH_MISMATCH,
+            )
 
         token_size = token_lengths.pop()
         rendered: list[str] = []
@@ -130,19 +139,31 @@ class MessageRenderer:
             if self.IMPLICIT_PATH_PATTERN.match(token):
                 return state.resolve_path(token)
             if row is None:
-                raise DSLExecutionError(f"Cannot resolve row-level placeholder in template: {token}")
+                raise DSLExecutionError(
+                    f"Cannot resolve row-level placeholder in template: {token}",
+                    code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
+                )
             if token not in row:
-                raise DSLExecutionError(f"Template placeholder field does not exist: {token}")
+                raise DSLExecutionError(
+                    f"Template placeholder field does not exist: {token}",
+                    code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
+                )
             return row[token]
 
         def replace_format(match: re.Match[str]) -> str:
             token, format_spec = self._split_format_token(match.group(1).strip())
             if format_spec is None:
-                raise DSLExecutionError(f"Formatted placeholder must include format spec: {match.group(0)}")
+                raise DSLExecutionError(
+                    f"Formatted placeholder must include format spec: {match.group(0)}",
+                    code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
+                )
             try:
                 return format(resolve_token(token), format_spec)
             except Exception as exc:  # noqa: BLE001
-                raise DSLExecutionError(f"Failed to format placeholder: {match.group(0)}") from exc
+                raise DSLExecutionError(
+                    f"Failed to format placeholder: {match.group(0)}",
+                    code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
+                ) from exc
 
         def replace(match: re.Match[str]) -> str:
             token = match.group(1).strip()
@@ -175,10 +196,16 @@ class MessageRenderer:
             return policy.divider
         if locale == "cn":
             if policy.divider_cn is None:
-                raise DSLExecutionError("sub_repeat divider_cn is required when divider is not set.")
+                raise DSLExecutionError(
+                    "sub_repeat divider_cn is required when divider is not set.",
+                    code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
+                )
             return policy.divider_cn
         if policy.divider_en is None:
-            raise DSLExecutionError("sub_repeat divider_en is required when divider is not set.")
+            raise DSLExecutionError(
+                "sub_repeat divider_en is required when divider is not set.",
+                code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
+            )
         return policy.divider_en
 
     def _stringify(self, value: Any) -> str:
