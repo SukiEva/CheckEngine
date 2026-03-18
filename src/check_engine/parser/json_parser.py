@@ -91,15 +91,7 @@ class JsonDslParser:
     def _parse_context(self, value: Any) -> ContextNode:
         path = DslField.CONTEXT.value
         mapping = self._expect_dict(value, path)
-        return ContextNode(
-            type=self._expect_string(mapping.get(DslField.TYPE.value), f"{path}.{DslField.TYPE.value}"),
-            datasource=self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{path}.{DslField.DATASOURCE.value}"),
-            result_mode=self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{path}.{DslField.RESULT_MODE.value}"),
-            sql_template=self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{path}.{DslField.SQL_TEMPLATE.value}"),
-            sql_params=self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{path}.{DslField.SQL_PARAMS.value}"),
-            outputs=self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{path}.{DslField.OUTPUTS.value}"),
-            description=self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{path}.{DslField.DESCRIPTION.value}"),
-        )
+        return ContextNode(**self._parse_sql_node_fields(mapping, path))
 
     def _parse_variables(self, value: Any) -> Mapping[str, VariableDefinition]:
         path = DslField.VARIABLES.value
@@ -134,17 +126,12 @@ class JsonDslParser:
         for index, item in enumerate(items):
             node_path = f"{path}[{index}]"
             mapping = self._expect_dict(item, node_path)
+            sql_node_fields = self._parse_sql_node_fields(mapping, node_path)
             nodes.append(
                 PrecheckNode(
                     name=self._expect_string(mapping.get(DslField.NAME.value), f"{node_path}.{DslField.NAME.value}"),
-                    description=self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{node_path}.{DslField.DESCRIPTION.value}"),
-                    type=self._expect_string(mapping.get(DslField.TYPE.value), f"{node_path}.{DslField.TYPE.value}"),
-                    datasource=self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{node_path}.{DslField.DATASOURCE.value}"),
-                    result_mode=self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{node_path}.{DslField.RESULT_MODE.value}"),
-                    sql_template=self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{node_path}.{DslField.SQL_TEMPLATE.value}"),
-                    sql_params=self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{node_path}.{DslField.SQL_PARAMS.value}"),
-                    outputs=self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{node_path}.{DslField.OUTPUTS.value}"),
                     on_fail=self._parse_fail_policy(mapping.get(DslField.ON_FAIL.value), f"{node_path}.{DslField.ON_FAIL.value}"),
+                    **sql_node_fields,
                 )
             )
         return nodes
@@ -158,6 +145,7 @@ class JsonDslParser:
             mapping = self._expect_dict(item, node_path)
             consumes_path = f"{node_path}.{DslField.CONSUMES.value}"
             raw_consumes = self._expect_list(mapping.get(DslField.CONSUMES.value, []), consumes_path)
+            sql_node_fields = self._parse_sql_node_fields(mapping, node_path)
             consumes = [
                 ConsumeSpec(
                     from_path=self._expect_string(
@@ -174,14 +162,8 @@ class JsonDslParser:
             nodes.append(
                 StepNode(
                     name=self._expect_string(mapping.get(DslField.NAME.value), f"{node_path}.{DslField.NAME.value}"),
-                    description=self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{node_path}.{DslField.DESCRIPTION.value}"),
-                    type=self._expect_string(mapping.get(DslField.TYPE.value), f"{node_path}.{DslField.TYPE.value}"),
-                    datasource=self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{node_path}.{DslField.DATASOURCE.value}"),
-                    result_mode=self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{node_path}.{DslField.RESULT_MODE.value}"),
-                    sql_template=self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{node_path}.{DslField.SQL_TEMPLATE.value}"),
-                    sql_params=self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{node_path}.{DslField.SQL_PARAMS.value}"),
-                    outputs=self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{node_path}.{DslField.OUTPUTS.value}"),
                     consumes=consumes,
+                    **sql_node_fields,
                 )
             )
         return nodes
@@ -201,6 +183,17 @@ class JsonDslParser:
     def _parse_string_list(self, value: Any, path: str) -> Sequence[str]:
         items = self._expect_list(value, path)
         return [self._expect_string(item, f"{path}[{index}]") for index, item in enumerate(items)]
+
+    def _parse_sql_node_fields(self, mapping: Mapping[str, Any], path: str) -> dict[str, Any]:
+        return {
+            "type": self._expect_string(mapping.get(DslField.TYPE.value), f"{path}.{DslField.TYPE.value}"),
+            "datasource": self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{path}.{DslField.DATASOURCE.value}"),
+            "result_mode": self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{path}.{DslField.RESULT_MODE.value}"),
+            "sql_template": self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{path}.{DslField.SQL_TEMPLATE.value}"),
+            "sql_params": self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{path}.{DslField.SQL_PARAMS.value}"),
+            "outputs": self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{path}.{DslField.OUTPUTS.value}"),
+            "description": self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{path}.{DslField.DESCRIPTION.value}"),
+        }
 
     @staticmethod
     def _expect_dict(value: Any, path: str) -> Mapping[str, Any]:
