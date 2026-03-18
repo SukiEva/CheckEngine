@@ -376,5 +376,105 @@ class ValidatorTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.code, ValidationErrorCode.NON_READONLY_SQL)
 
 
+    def test_context_sql_params_invalid_reference_raises(self) -> None:
+        data = {
+            "context": {
+                "type": "sql",
+                "datasource": "db",
+                "result_mode": "record",
+                "sql_template": "select 1 as flow",
+                "sql_params": {"source_object_id": "$steps.step_a.v"},
+                "outputs": ["flow"],
+            },
+            "steps": [
+                {
+                    "name": "step_a",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "false",
+                "mode": "single",
+                "message_cn": "ok",
+                "message_en": "ok",
+            },
+        }
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            self.reference_validator.validate(document)
+        self.assertEqual(ctx.exception.code, ValidationErrorCode.UNRESOLVED_PATH)
+
+    def test_context_sql_params_only_allow_input_scope(self) -> None:
+        data = {
+            "context": {
+                "type": "sql",
+                "datasource": "db",
+                "result_mode": "record",
+                "sql_template": "select 1 as flow",
+                "sql_params": {"source_object_id": "$input.source_object_id"},
+                "outputs": ["flow"],
+            },
+            "variables": {
+                "threshold": {
+                    "when": [],
+                    "default": 1,
+                }
+            },
+            "steps": [
+                {
+                    "name": "step_a",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "false",
+                "mode": "single",
+                "message_cn": "ok",
+                "message_en": "ok",
+            },
+        }
+        document = self.parser.parse(json.dumps(data))
+
+        self.reference_validator.validate(document)
+
+    def test_compile_invalid_expression_returns_validation_error(self) -> None:
+        data = {
+            "steps": [
+                {
+                    "name": "step_a",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "lambda: true",
+                "mode": "single",
+                "message_cn": "x",
+                "message_en": "y",
+            },
+        }
+
+        from check_engine.engine import DslEngine
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            DslEngine().compile(json.dumps(data))
+        self.assertEqual(ctx.exception.code, ValidationErrorCode.INVALID_EXPRESSION)
+
+
 if __name__ == "__main__":
     unittest.main()

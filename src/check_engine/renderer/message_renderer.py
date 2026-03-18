@@ -111,16 +111,11 @@ class MessageRenderer:
 
     def _collect_array_tokens(self, template: str, state: ExecutionState) -> dict[str, list[Any]]:
         token_map: dict[str, list[Any]] = {}
-        for match in self.PLACEHOLDER_PATTERN.finditer(template):
-            token = match.group(1).strip()
+        for token in self._extract_template_tokens(template):
             reference_token, _ = self._split_format_token(token)
-            if reference_token.startswith("$"):
-                value = state.resolve_reference(reference_token)
-            elif self.IMPLICIT_PATH_PATTERN.match(reference_token):
-                value = state.resolve_path(reference_token)
-            else:
+            if not self._is_global_reference_token(reference_token):
                 continue
-
+            value = self._resolve_global_token(reference_token, state)
             if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
                 token_map[reference_token] = list(value)
         return token_map
@@ -132,46 +127,74 @@ class MessageRenderer:
         row: Optional[Mapping[str, Any]],
         overrides: Optional[dict[str, Any]] = None,
     ) -> str:
-        def resolve_token(token: str) -> Any:
-            if overrides is not None and token in overrides:
-                return overrides[token]
-            if token.startswith("$"):
-                return state.resolve_reference(token)
-            if self.IMPLICIT_PATH_PATTERN.match(token):
-                return state.resolve_path(token)
-            if row is None:
-                raise DSLExecutionError(
-                    f"Cannot resolve row-level placeholder in template: {token}",
-                    code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
-                )
-            if token not in row:
-                raise DSLExecutionError(
-                    f"Template placeholder field does not exist: {token}",
-                    code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
-                )
-            return row[token]
+        formatted_template = self.FORMAT_PLACEHOLDER_PATTERN.sub(
+            lambda match: self._render_formatted_placeholder(match, state, row, overrides),
+            template,
+        )
+        return self.PLACEHOLDER_PATTERN.sub(
+            lambda match: self._stringify(
+                self._resolve_token_value(match.group(1).strip(), state, row, overrides)
+            ),
+            formatted_template,
+        )
 
-        def replace_format(match: re.Match[str]) -> str:
-            token, format_spec = self._split_format_token(match.group(1).strip())
-            if format_spec is None:
-                raise DSLExecutionError(
-                    f"Formatted placeholder must include format spec: {match.group(0)}",
-                    code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
-                )
-            try:
-                return format(resolve_token(token), format_spec)
-            except Exception as exc:  # noqa: BLE001
-                raise DSLExecutionError(
-                    f"Failed to format placeholder: {match.group(0)}",
-                    code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
-                ) from exc
+    def _render_formatted_placeholder(
+        self,
+        match: re.Match[str],
+        state: ExecutionState,
+        row: Optional[Mapping[str, Any]],
+        overrides: Optional[dict[str, Any]],
+    ) -> str:
+        token, format_spec = self._split_format_token(match.group(1).strip())
+        if format_spec is None:
+            raise DSLExecutionError(
+                f"Formatted placeholder must include format spec: {match.group(0)}",
+                code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
+            )
+        try:
+            value = self._resolve_token_value(token, state, row, overrides)
+            return format(value, format_spec)
+        except DSLExecutionError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise DSLExecutionError(
+                f"Failed to format placeholder: {match.group(0)}",
+                code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
+            ) from exc
 
-        def replace(match: re.Match[str]) -> str:
-            token = match.group(1).strip()
-            return self._stringify(resolve_token(token))
+    def _resolve_token_value(
+        self,
+        token: str,
+        state: ExecutionState,
+        row: Optional[Mapping[str, Any]],
+        overrides: Optional[dict[str, Any]],
+    ) -> Any:
+        if overrides is not None and token in overrides:
+            return overrides[token]
+        if self._is_global_reference_token(token):
+            return self._resolve_global_token(token, state)
+        if row is None:
+            raise DSLExecutionError(
+                f"Cannot resolve row-level placeholder in template: {token}",
+                code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
+            )
+        if token not in row:
+            raise DSLExecutionError(
+                f"Template placeholder field does not exist: {token}",
+                code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
+            )
+        return row[token]
 
-        formatted_template = self.FORMAT_PLACEHOLDER_PATTERN.sub(replace_format, template)
-        return self.PLACEHOLDER_PATTERN.sub(replace, formatted_template)
+    def _extract_template_tokens(self, template: str) -> list[str]:
+        return [match.group(1).strip() for match in self.PLACEHOLDER_PATTERN.finditer(template)]
+
+    def _is_global_reference_token(self, token: str) -> bool:
+        return token.startswith("$") or self.IMPLICIT_PATH_PATTERN.match(token) is not None
+
+    def _resolve_global_token(self, token: str, state: ExecutionState) -> Any:
+        if token.startswith("$"):
+            return state.resolve_reference(token)
+        return state.resolve_path(token)
 
     def _split_format_token(self, token: str) -> tuple[str, Optional[str]]:
         if ":" not in token:

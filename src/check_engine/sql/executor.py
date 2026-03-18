@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
-from typing import Any, Optional
+from typing import Any, Optional, Protocol
 
 from ..dsl.models import SqlNode, StepNode
 from ..exceptions import DSLExecutionError, ExecutionErrorCode
 from ..runtime.state import NodeExecutionResult
 from .cte_builder import CteBuilder
+from .datasource import DatasourceLike, DatasourceRegistry, SessionLike
+
+
+class ExecutionStateLike(Protocol):
+    """执行器依赖的最小运行时状态协议。"""
+
+    def resolve_reference(self, reference: str) -> Any:
+        """解析运行时路径。"""
+
+    def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
+        """返回可供 consumes 构造 CTE 的行和字段。"""
 
 
 class SqlExecutor:
@@ -21,8 +32,8 @@ class SqlExecutor:
     def execute_node(
         self,
         node: SqlNode,
-        state: Any,
-        datasource_registry: Any,
+        state: ExecutionStateLike,
+        datasource_registry: DatasourceRegistry,
         node_name: str,
     ) -> NodeExecutionResult:
         resolved_params = self._resolve_sql_params(node.sql_params, state)
@@ -49,7 +60,7 @@ class SqlExecutor:
             exported_fields=exported_fields,
         )
 
-    def _resolve_sql_params(self, sql_params: Mapping[str, Any], state: Any) -> dict[str, Any]:
+    def _resolve_sql_params(self, sql_params: Mapping[str, Any], state: ExecutionStateLike) -> dict[str, Any]:
         resolved: dict[str, Any] = {}
         for key, value in sql_params.items():
             resolved[key] = state.resolve_reference(value) if isinstance(value, str) and value.startswith("$") else value
@@ -58,12 +69,45 @@ class SqlExecutor:
     def _merge_with_clause(self, cte_sql: str, sql_template: str) -> str:
         if not cte_sql:
             return sql_template
-        stripped = sql_template.lstrip()
-        if stripped[:4].lower() == "with":
-            return cte_sql + ", " + stripped[4:].lstrip()
+
+        leading_prefix, stripped = self._split_leading_comments(sql_template)
+        lowered = stripped.lower()
+        cte_definitions = cte_sql[4:].lstrip()
+        if lowered.startswith("with recursive"):
+            remainder = stripped[len("with recursive"):].lstrip()
+            return f"{leading_prefix}WITH RECURSIVE {cte_definitions}, {remainder}"
+        if lowered.startswith("with"):
+            remainder = stripped[4:].lstrip()
+            return f"{leading_prefix}WITH {cte_definitions}, {remainder}"
         return cte_sql + " " + sql_template
 
-    def _run_sql(self, datasource: Any, sql: str, params: dict[str, Any], result_mode: str = "records") -> list[dict[str, Any]]:
+    def _split_leading_comments(self, sql: str) -> tuple[str, str]:
+        index = 0
+        length = len(sql)
+        while index < length:
+            if sql[index].isspace():
+                index += 1
+                continue
+            if sql.startswith("--", index):
+                line_end = sql.find("\n", index)
+                index = length if line_end == -1 else line_end + 1
+                continue
+            if sql.startswith("/*", index):
+                comment_end = sql.find("*/", index + 2)
+                if comment_end == -1:
+                    return sql, ""
+                index = comment_end + 2
+                continue
+            break
+        return sql[:index], sql[index:]
+
+    def _run_sql(
+        self,
+        datasource: DatasourceLike,
+        sql: str,
+        params: dict[str, Any],
+        result_mode: str = "records",
+    ) -> list[dict[str, Any]]:
         if not hasattr(datasource, "get_session"):
             raise DSLExecutionError(
                 "Datasource must provide get_session and execute SQL through a SQLAlchemy Session.",
@@ -93,7 +137,7 @@ class SqlExecutor:
                 break
         return rows
 
-    def _open_session(self, datasource: Any) -> Any:
+    def _open_session(self, datasource: DatasourceLike) -> Any:
         session_or_cm = datasource.get_session()
         if hasattr(session_or_cm, "__enter__") and hasattr(session_or_cm, "__exit__"):
             return session_or_cm
@@ -124,7 +168,7 @@ class SqlExecutor:
             projected_rows.append({field: row[field] for field in fields})
         return projected_rows, fields
 
-    def _ensure_output_columns_exist(self, row: dict[str, Any], fields: list[str]) -> None:
+    def _ensure_output_columns_exist(self, row: Mapping[str, Any], fields: list[str]) -> None:
         if not fields:
             return
         missing_fields = [field for field in fields if field not in row]

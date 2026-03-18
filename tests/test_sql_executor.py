@@ -104,6 +104,17 @@ class SqlExecutorTestCase(unittest.TestCase):
         self.assertEqual(datasource.last_session.last_result.mappings_result.fetchmany_calls, [2])
 
 
+    def test_merge_with_clause_supports_existing_recursive_with_and_comments(self) -> None:
+        executor = SqlExecutor()
+
+        merged = executor._merge_with_clause(
+            "WITH ctx(amount) AS (VALUES (:v))",
+            "/* leading comment */\nWITH RECURSIVE base AS (SELECT 1 AS amount) SELECT amount FROM base",
+        )
+
+        self.assertTrue(merged.startswith("/* leading comment */\nWITH RECURSIVE ctx(amount) AS (VALUES (:v)), base AS"))
+
+
 class SqlExecutorRuntimeErrorTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.executor = SqlExecutor()

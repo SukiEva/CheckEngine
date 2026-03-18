@@ -21,6 +21,7 @@ class ResultBuilder:
             context=state.context_data,
             variables=state.variables_data,
             steps=state.step_data,
+            executed_nodes=tuple(state.executed_nodes),
         )
 
     def build_failure(
@@ -45,6 +46,7 @@ class ResultBuilder:
             context=state.context_data,
             variables=state.variables_data,
             steps=state.step_data,
+            executed_nodes=tuple(state.executed_nodes),
         )
 
     def build_runtime_failure(
@@ -65,4 +67,5 @@ class ResultBuilder:
             context=state.context_data,
             variables=state.variables_data,
             steps=state.step_data,
+            executed_nodes=tuple(state.executed_nodes),
         )
