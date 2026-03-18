@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from typing import Any, Optional
 
 from ..dsl.models import SqlNode, StepNode
-from ..exceptions import DSLExecutionError
+from ..exceptions import DSLExecutionError, ExecutionErrorCode
 from ..runtime.state import NodeExecutionResult
 from .cte_builder import CteBuilder
 
@@ -33,11 +33,14 @@ class SqlExecutor:
         try:
             datasource = datasource_registry.get(node.datasource)
             rows = self._run_sql(datasource, final_sql, final_params)
-            exported_data, exported_fields = self._project_outputs(node, rows)
+            exported_data, exported_fields = self._project_outputs(node, node_name, rows)
         except Exception as exc:  # noqa: BLE001
             if isinstance(exc, DSLExecutionError):
                 raise
-            raise DSLExecutionError(f"SQL node execution failed: {node_name}") from exc
+            raise DSLExecutionError(
+                f"SQL node execution failed: {node_name}",
+                code=ExecutionErrorCode.SQL_EXECUTION_FAILED,
+            ) from exc
 
         return NodeExecutionResult(
             raw_rows=rows,
@@ -61,7 +64,10 @@ class SqlExecutor:
 
     def _run_sql(self, datasource: Any, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         if not hasattr(datasource, "get_session"):
-            raise DSLExecutionError("Datasource must provide get_session and execute SQL through a SQLAlchemy Session.")
+            raise DSLExecutionError(
+                "Datasource must provide get_session and execute SQL through a SQLAlchemy Session.",
+                code=ExecutionErrorCode.DATASOURCE_NOT_FOUND,
+            )
 
         from sqlalchemy import text as sqlalchemy_text
 
@@ -76,13 +82,18 @@ class SqlExecutor:
             return session_or_cm
         return contextmanager(datasource.get_session)()
 
-    def _project_outputs(self, node: SqlNode, rows: list[dict[str, Any]]) -> tuple[Any, list[str]]:
-        if node.result_mode == "record" and len(rows) > 1:
-            raise DSLExecutionError("record mode returned multiple rows.")
+    def _project_outputs(self, node: SqlNode, node_name: str, rows: list[dict[str, Any]]) -> tuple[Any, list[str]]:
+        if node.result_mode == "record" and len(rows) != 1:
+            raise DSLExecutionError(
+                "record mode must return exactly one row.",
+                code=self._result_mismatch_code(node_name),
+            )
 
         fields = list(node.outputs)
         if not fields and rows:
             fields = list(rows[0].keys())
+
+        self._ensure_output_columns_exist(rows, fields)
 
         if node.result_mode == "record":
             row = rows[0] if rows else {}
@@ -91,3 +102,19 @@ class SqlExecutor:
         if not fields:
             return [dict(row) for row in rows], fields
         return [{field: row.get(field) for field in fields} for row in rows], fields
+
+    def _ensure_output_columns_exist(self, rows: list[dict[str, Any]], fields: list[str]) -> None:
+        if not rows or not fields:
+            return
+        for row in rows:
+            missing_fields = [field for field in fields if field not in row]
+            if missing_fields:
+                raise DSLExecutionError(
+                    "Declared outputs do not match returned columns: {0}".format(", ".join(missing_fields)),
+                    code=ExecutionErrorCode.OUTPUT_COLUMN_MISMATCH,
+                )
+
+    def _result_mismatch_code(self, node_name: str) -> ExecutionErrorCode:
+        if node_name == "context":
+            return ExecutionErrorCode.CONTEXT_RESULT_MISMATCH
+        return ExecutionErrorCode.STEP_RESULT_MISMATCH

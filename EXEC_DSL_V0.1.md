@@ -38,6 +38,15 @@
 - `steps`：主执行步骤
 - `on_fail`：最终失败判定与失败消息
 
+硬规则：
+
+- 顶层只允许以下五个字段：`context`、`variables`、`prechecks`、`steps`、`on_fail`
+- 不允许出现未知顶层字段
+- `steps` 必须存在且必须为数组
+- `on_fail` 必须存在且必须为对象
+- `steps` 可以为空数组，但 `on_fail` 不允许为空对象
+- 顶层最小可执行结构必须满足本节“最小可执行 DSL 形态”
+
 ## 2. 执行顺序
 
 执行顺序固定为：
@@ -77,6 +86,13 @@
 
 - 不支持扁平引用，例如 `$steps.final_amount`
 - 步骤输出必须通过 `$steps.<step_name>.<field>` 访问
+- 所有路径引用必须能在校验阶段静态解析，禁止悬空引用
+
+命名硬规则：
+
+- `prechecks[].name` 与 `steps[].name` 必须全局唯一
+- 节点名称不得与保留作用域名冲突，例如：`input`、`context`、`variables`、`steps`、`on_fail`
+- 所有对节点输出的引用都必须通过带命名空间的路径完成
 
 ## 4. outputs 语义
 
@@ -92,11 +108,13 @@
 - 不做全局字段提升
 - 只允许带命名空间引用
 
-建议约束：
+硬规则：
 
 - 若声明了 `context`，则必须声明 `outputs`
-- 被 `consumes` 引用的 `step` 必须声明 `outputs`
-- 被表达式引用的 `step` 应声明 `outputs`
+- 被 `consumes` 引用的节点必须声明 `outputs`
+- 被表达式、`sql_params`、消息模板引用的字段，必须在对应节点的 `outputs` 白名单中
+- `outputs` 必须为非空数组
+- `outputs` 中的字段名不得重复
 
 ## 5. consumes 语义
 
@@ -129,6 +147,14 @@ FROM am
 
 该设计支持跨数据源，由执行器统一控制中间数据流。
 
+硬规则：
+
+- `consumes[].from` 只能引用 `context` 或当前步骤之前已经执行完成的 `steps`
+- 禁止前向引用、禁止自引用、禁止形成循环依赖
+- `consumes[].alias` 在当前步骤内必须唯一
+- `consumes[].alias` 必须是合法 SQL 标识符：仅允许字母、数字、下划线，且不能以数字开头
+- CTE 列顺序由被消费节点的 `outputs` 顺序决定，不允许依赖数据库返回列顺序
+
 ## 6. 节点定义
 
 ### 6.1 context
@@ -158,6 +184,10 @@ FROM am
 - `sql_template`：SQL 模板
 - `sql_params`：SQL 参数映射
 - `outputs`：导出字段
+
+硬规则：
+
+- `context` 若存在，则必须同时声明 `type`、`datasource`、`result_mode`、`sql_template`、`sql_params`、`outputs`
 
 ### 6.2 variables
 
@@ -201,6 +231,14 @@ FROM am
 - 不进行条件匹配
 - 直接返回 `default`
 
+硬规则：
+
+- `variables` 中每个变量名必须唯一
+- `when` 必须为数组
+- `when` 中每一项必须同时包含 `condition` 与 `value`
+- `default` 为必填
+- `variables.when[].condition` 仅允许使用本规范第 7 节定义的受限表达式语法
+
 ### 6.3 prechecks[]
 
 前置检查节点。
@@ -234,6 +272,12 @@ FROM am
 - 若 `on_fail.decision` 命中，则立即失败返回
 - 不再继续执行后续 `prechecks`、`steps`、顶层 `on_fail`
 
+硬规则：
+
+- 每个 `precheck` 必须声明 `name`、`type`、`datasource`、`result_mode`、`sql_template`、`sql_params`、`on_fail`
+- `prechecks[].on_fail.decision` 只允许 `exists` 或 `exists($path)`，不允许其它函数调用
+- `prechecks[].on_fail.mode` 必须是 `single`、`sub_repeat`、`full_repeat` 之一
+
 ### 6.4 steps[]
 
 主执行步骤节点。
@@ -265,6 +309,11 @@ FROM am
 - 可通过 `consumes` 使用前序节点结果
 - 导出字段供后续步骤和顶层 `on_fail` 使用
 
+硬规则：
+
+- 每个 `step` 必须声明 `name`、`type`、`datasource`、`result_mode`、`sql_template`、`sql_params`
+- 若 `step` 被后续节点引用、被 `consumes` 消费、被表达式引用、或被消息模板引用，则必须声明 `outputs`
+
 ### 6.5 顶层 on_fail
 
 最终失败判定节点。
@@ -287,6 +336,12 @@ FROM am
 - 若 `decision` 为假，则整条规则通过
 - 顶层 `on_fail.decision` 允许使用 `exists($path)` 判断某个路径是否“非空存在”
 
+硬规则：
+
+- 顶层 `on_fail` 必须声明 `decision`、`mode`、`message_cn`、`message_en`
+- 顶层 `on_fail.mode` 当前固定为 `single`
+- 顶层 `on_fail.decision` 不允许使用裸 `exists`，必须写成 `exists($path)`
+
 ## 7. decision 表达式规则
 
 当前建议支持：
@@ -308,6 +363,18 @@ FROM am
 - `v0.1` 不支持其它函数调用
 - `v0.1` 不支持复杂脚本表达式
 - `v0.1` 不支持自定义 Python 逻辑
+
+硬规则：
+
+- 表达式中只允许使用：比较运算 `==` `!=` `>` `>=` `<` `<=`，逻辑运算 `and` `or` `not`，集合运算 `in`，空值字面量 `null`，以及内置函数 `exists($path)`
+- 除 `exists(...)` 外，禁止任意函数调用
+- 禁止任意脚本执行能力与自定义 Python 逻辑
+- 表达式中的所有路径必须能静态解析
+- `exists` 语义固定如下：
+  - 对 `records` 结果：非空结果集为真
+  - 对数组路径：非空数组为真
+  - 对标量路径：非 `null` 为真
+  - 对不存在路径：视为校验失败，不允许隐式按 `false` 处理
 
 ## 8. 消息渲染规则
 
@@ -371,6 +438,14 @@ FROM am
 
 - `sub_repeat` 必须且只能出现一段 `[]`
 
+硬规则：
+
+- `sub_repeat` 必须且只能出现一段 `[]`
+- `single` 模式下不得引用数组路径
+- `message_cn` 与 `message_en` 必须在校验期通过模板语法检查
+- 模板中的所有 `{$path}` 必须能静态解析
+- 行级字段占位符 `{field}` 只能用于具备行上下文的渲染场景
+
 ### 8.2 full_repeat
 
 规则：
@@ -408,6 +483,13 @@ FROM am
 - `record` 返回多行时报错
 - `single` 配合多行 `records` 时，报运行时错误
 
+硬规则：
+
+- `result_mode = record` 时，SQL 结果必须恰好返回 1 行；返回 0 行或多于 1 行都视为运行时错误
+- `result_mode = records` 时，SQL 结果允许返回 0 到 N 行
+- `record` 节点的导出字段在运行时固定为标量
+- `records` 节点的导出字段在运行时固定为按列暴露的数组，且所有导出字段数组长度必须一致
+
 ## 10. 标准执行结果
 
 成功：
@@ -417,6 +499,8 @@ FROM am
   "passed": true,
   "phase": "pass",
   "failed_node": null,
+  "error_code": null,
+  "error_detail": null,
   "message_cn": null,
   "message_en": null
 }
@@ -429,6 +513,8 @@ FROM am
   "passed": false,
   "phase": "precheck",
   "failed_node": "check_rate_null",
+  "error_code": null,
+  "error_detail": null,
   "message_cn": "存在汇率为空的记录: ...",
   "message_en": "There are records with null exchange rates: ..."
 }
@@ -441,10 +527,32 @@ FROM am
   "passed": false,
   "phase": "final",
   "failed_node": "on_fail",
+  "error_code": null,
+  "error_detail": null,
   "message_cn": "金额1000超过阈值800",
   "message_en": "The amount 1000 exceeds the threshold 800."
 }
 ```
+
+运行时失败：
+
+```json
+{
+  "passed": false,
+  "phase": "runtime",
+  "failed_node": "exchange_rate",
+  "error_code": "E2007_SQL_EXECUTION_FAILED",
+  "error_detail": "SQL node execution failed: exchange_rate",
+  "message_cn": "SQL node execution failed: exchange_rate",
+  "message_en": "SQL node execution failed: exchange_rate"
+}
+```
+
+补充说明：
+
+- `pass` / `precheck` / `final` 三类结果中，`error_code` 与 `error_detail` 固定为 `null`
+- `runtime` 结果表示执行器、SQL、引用解析、消息渲染等执行期错误
+- `runtime.failed_node` 应尽量标识出错节点，例如：`context`、具体 `step.name`、具体 `precheck.name`、`variables.<name>`、`on_fail`
 
 ## 11. 建议的 v0.1 边界
 
@@ -457,3 +565,117 @@ FROM am
 - 顶层 `on_fail.decision` 支持表达式与 `exists($path)`（不支持裸 `exists`）
 - 不支持循环、自定义脚本与除 `exists(...)` 外的函数调用
 - 不支持无作用域的字段引用
+
+硬规则：
+
+- `sql_template` 只允许只读 SQL，即 `SELECT` 或 `WITH ... SELECT`
+- 禁止 `INSERT`、`UPDATE`、`DELETE`、DDL 与多语句 SQL
+- 执行器不得自动将只读节点改写为写操作
+
+## 12. 引用合法矩阵
+
+为避免解析器、校验器与执行器对“哪些位置可以引用哪些作用域”产生歧义，`v0.1` 固定采用以下引用合法矩阵。
+
+### 12.1 引用矩阵
+
+| 使用位置 | 允许引用的作用域 |
+| --- | --- |
+| `context.sql_params` | `$input` |
+| `variables.when[].condition` | `$input`、`$context`、已完成求值的 `$variables` |
+| `variables.when[].value` / `variables.default` | JSON 标量、数组、对象字面量；若实现支持路径引用，则仅允许 `$input`、`$context`、已完成求值的 `$variables` |
+| `prechecks[].sql_params` | `$input`、`$context`、`$variables` |
+| `prechecks[].on_fail.decision` | 裸 `exists`；或 `$input`、`$context`、`$variables`、当前 `precheck` 结果路径上的 `exists($path)` |
+| `prechecks[].on_fail.message_*` | 当前 `precheck` 行级字段、`$input`、`$context`、`$variables` |
+| `steps[].sql_params` | `$input`、`$context`、`$variables`、前序 `steps.outputs` |
+| `steps[].consumes[].from` | `$context`、前序 `steps` |
+| 顶层 `on_fail.decision` | `$input`、`$context`、`$variables`、全部 `steps.outputs` |
+| 顶层 `on_fail.message_*` | `$input`、`$context`、`$variables`、全部 `steps.outputs` |
+
+### 12.2 补充硬规则
+
+- `variables` 按声明顺序求值；后声明变量可以引用先声明变量，反之不允许
+- `prechecks` 之间不建立运行时结果作用域；后续 `precheck` 不允许直接引用前一个 `precheck` 的 SQL 结果
+- `steps` 之间的字段引用必须通过显式命名空间路径完成；若当前步骤需要在 SQL 中使用前序步骤结果，优先通过 `consumes` 声明数据依赖
+- 顶层 `on_fail` 不允许直接引用 `prechecks` 的结果
+
+## 13. 建议的错误码
+
+为提升执行结果可观测性，建议在 `v0.1` 内部实现中区分“校验错误码”和“运行时错误码”。以下错误码可作为推荐保留字。
+
+### 13.1 校验错误码（建议）
+
+| 错误码 | 含义 |
+| --- | --- |
+| `E1001_UNKNOWN_TOP_LEVEL_FIELD` | 出现未知顶层字段 |
+| `E1002_MISSING_REQUIRED_FIELD` | 缺少必填字段 |
+| `E1003_INVALID_FIELD_TYPE` | 字段类型非法 |
+| `E1004_DUPLICATE_NODE_NAME` | `precheck` 或 `step` 名称重复 |
+| `E1005_RESERVED_NODE_NAME` | 节点名称使用保留作用域名 |
+| `E1006_UNRESOLVED_PATH` | 路径无法静态解析 |
+| `E1007_MISSING_OUTPUTS` | 被引用或被消费节点未声明 `outputs` |
+| `E1008_INVALID_CONSUMES_REF` | `consumes` 引用了非法节点、前向节点或形成循环 |
+| `E1009_INVALID_CONSUMES_ALIAS` | `consumes.alias` 非法或重复 |
+| `E1010_INVALID_EXPRESSION` | 表达式使用了不支持的语法 |
+| `E1011_INVALID_MESSAGE_TEMPLATE` | 消息模板语法不合法 |
+| `E1012_INVALID_RESULT_MODE` | `result_mode` 非 `record` / `records` |
+| `E1013_NON_READONLY_SQL` | `sql_template` 不是只读 SQL |
+
+### 13.2 运行时错误码（建议）
+
+| 错误码 | 含义 |
+| --- | --- |
+| `E2001_CONTEXT_RESULT_MISMATCH` | `context` 返回结果与 `result_mode` 不匹配 |
+| `E2002_STEP_RESULT_MISMATCH` | `step` 返回结果与 `result_mode` 不匹配 |
+| `E2003_OUTPUT_COLUMN_MISMATCH` | 实际返回列与 `outputs` 不一致 |
+| `E2004_ARRAY_LENGTH_MISMATCH` | `records` 导出字段按列展开后数组长度不一致 |
+| `E2005_SINGLE_MODE_MULTI_ROWS` | `single` 模式下出现多行结果 |
+| `E2006_TEMPLATE_RENDER_FAILED` | 消息模板渲染失败 |
+| `E2007_SQL_EXECUTION_FAILED` | SQL 执行报错 |
+| `E2008_DATASOURCE_NOT_FOUND` | 数据源不存在或不可用 |
+
+### 13.3 错误结果建议字段
+
+若执行器要增强可观测性，建议在标准结果之外补充以下调试字段：
+
+- `error_code`
+- `error_detail`
+- `executed_nodes`
+- `decision_snapshot`
+
+## 14. Validator 检查清单（建议实现顺序）
+
+为便于后续实现 `parser -> validator -> executor` 的最小闭环，建议按以下顺序实现 validator。
+
+### 14.1 结构校验
+
+- 顶层字段集合是否合法
+- `steps`、`on_fail` 是否存在且类型正确
+- `context`、`variables`、`prechecks` 的类型是否正确
+- 各节点必填字段是否齐全
+
+### 14.2 命名与引用校验
+
+- `prechecks[].name`、`steps[].name` 是否唯一
+- 是否使用保留作用域名
+- 所有路径是否能静态解析
+- 各使用位置是否满足第 12 节引用合法矩阵
+
+### 14.3 outputs / consumes 校验
+
+- 被引用、被消费节点是否声明 `outputs`
+- `outputs` 是否为空、是否重复
+- `consumes.from` 是否只引用合法前序节点
+- `consumes.alias` 是否合法且唯一
+
+### 14.4 表达式与模板校验
+
+- `decision` 与 `variables.when[].condition` 是否只使用受限表达式语法
+- `exists` 的使用位置是否符合约束
+- `message_cn` / `message_en` 模板语法是否合法
+- `single` / `sub_repeat` / `full_repeat` 是否与结果形状兼容
+
+### 14.5 SQL 与结果模式校验
+
+- `sql_template` 是否为只读 SQL
+- `result_mode` 是否属于 `record` / `records`
+- `record` / `records` 与消息模式、导出字段形状的组合是否合法

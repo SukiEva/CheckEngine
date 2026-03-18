@@ -9,6 +9,7 @@ from typing import Any, Callable, Optional
 
 from .dsl.models import DslDocument, PrecheckNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
+from .exceptions import DSLExecutionError
 from .parser import JsonDslParser
 from .renderer import MessageRenderer
 from .result import ResultBuilder
@@ -104,63 +105,77 @@ class DslEngine:
     ) -> ExecutionResult:
         document = compiled_dsl.document
         state = ExecutionState.new(input_data=input_data)
-
         if document.context is not None:
-            context_result = self.sql_executor.execute_node(
-                document.context,
-                state=state,
-                datasource_registry=datasource_registry,
-                node_name="context",
-            )
-            state.set_context_result(context_result)
+            try:
+                context_result = self.sql_executor.execute_node(
+                    document.context,
+                    state=state,
+                    datasource_registry=datasource_registry,
+                    node_name="context",
+                )
+                state.set_context_result(context_result)
+            except DSLExecutionError as exc:
+                return self.result_builder.build_runtime_failure(exc, state, failed_node="context")
 
         for variable_name, definition in document.variables.items():
-            state.variables_data[variable_name] = self._evaluate_variable(
-                definition,
-                compiled_dsl.variable_conditions.get(variable_name, ()),
-                state,
-            )
+            try:
+                state.variables_data[variable_name] = self._evaluate_variable(
+                    definition,
+                    compiled_dsl.variable_conditions.get(variable_name, ()),
+                    state,
+                )
+            except DSLExecutionError as exc:
+                return self.result_builder.build_runtime_failure(exc, state, failed_node=f"variables.{variable_name}")
 
         for precheck in document.prechecks:
-            result = self.sql_executor.execute_node(
-                precheck,
-                state=state,
-                datasource_registry=datasource_registry,
-                node_name=precheck.name,
-            )
-            if self._should_fail_precheck(
-                precheck,
-                result.raw_rows,
-                state,
-                compiled_dsl.precheck_decisions.get(precheck.name),
-            ):
-                message_cn, message_en = self.message_renderer.render(precheck.on_fail, state, result.raw_rows)
+            try:
+                result = self.sql_executor.execute_node(
+                    precheck,
+                    state=state,
+                    datasource_registry=datasource_registry,
+                    node_name=precheck.name,
+                )
+                if self._should_fail_precheck(
+                    precheck,
+                    result.raw_rows,
+                    state,
+                    compiled_dsl.precheck_decisions.get(precheck.name),
+                ):
+                    message_cn, message_en = self.message_renderer.render(precheck.on_fail, state, result.raw_rows)
+                    return self.result_builder.build_failure(
+                        phase="precheck",
+                        failed_node=precheck.name,
+                        message_cn=message_cn,
+                        message_en=message_en,
+                        state=state,
+                    )
+            except DSLExecutionError as exc:
+                return self.result_builder.build_runtime_failure(exc, state, failed_node=precheck.name)
+
+        for step in document.steps:
+            try:
+                result = self.sql_executor.execute_node(
+                    step,
+                    state=state,
+                    datasource_registry=datasource_registry,
+                    node_name=step.name,
+                )
+                state.set_step_result(step.name, result)
+            except DSLExecutionError as exc:
+                return self.result_builder.build_runtime_failure(exc, state, failed_node=step.name)
+
+        try:
+            if self._should_fail_by_expression(compiled_dsl.on_fail_decision, state):
+                message_cn, message_en = self.message_renderer.render(document.on_fail, state)
                 return self.result_builder.build_failure(
-                    phase="precheck",
-                    failed_node=precheck.name,
+                    phase="final",
+                    failed_node="on_fail",
                     message_cn=message_cn,
                     message_en=message_en,
                     state=state,
                 )
-
-        for step in document.steps:
-            result = self.sql_executor.execute_node(
-                step,
-                state=state,
-                datasource_registry=datasource_registry,
-                node_name=step.name,
-            )
-            state.set_step_result(step.name, result)
-
-        if self._should_fail_by_expression(compiled_dsl.on_fail_decision, state):
-            message_cn, message_en = self.message_renderer.render(document.on_fail, state)
-            return self.result_builder.build_failure(
-                phase="final",
-                failed_node="on_fail",
-                message_cn=message_cn,
-                message_en=message_en,
-                state=state,
-            )
+        except DSLExecutionError as exc:
+            return self.result_builder.build_runtime_failure(exc, state, failed_node="on_fail")
 
         return self.result_builder.build_pass(state)
 

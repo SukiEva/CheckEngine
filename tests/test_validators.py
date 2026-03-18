@@ -9,7 +9,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from check_engine.exceptions import DSLParseError, DSLValidationError
+from check_engine.exceptions import DSLParseError, DSLValidationError, ValidationErrorCode
 from check_engine.parser import JsonDslParser
 from check_engine.validator import DslValidator, ReferenceValidator, StructureValidator
 
@@ -202,6 +202,134 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError):
             self.reference_validator.validate(document)
+
+    def test_unknown_top_level_field_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["unexpected"] = {}
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            self.structure_validator.validate(document)
+        self.assertEqual(ctx.exception.code, ValidationErrorCode.UNKNOWN_TOP_LEVEL_FIELD)
+
+    def test_on_fail_mode_must_be_single(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["on_fail"]["mode"] = "full_repeat"
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.structure_validator.validate(document)
+
+    def test_reserved_step_name_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["steps"][0]["name"] = "context"
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            self.structure_validator.validate(document)
+        self.assertEqual(ctx.exception.code, ValidationErrorCode.RESERVED_NODE_NAME)
+
+    def test_variable_default_is_required(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["variables"]["threshold"].pop("default")
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.structure_validator.validate(document)
+
+    def test_variable_cannot_reference_later_variable(self) -> None:
+        data = {
+            "variables": {
+                "threshold": {
+                    "when": [{"condition": "$variables.limit > 0", "value": 1}],
+                    "default": 0,
+                },
+                "limit": {
+                    "when": [],
+                    "default": 10,
+                },
+            },
+            "steps": [
+                {
+                    "name": "s1",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "$variables.threshold > 100",
+                "mode": "single",
+                "message_cn": "ok",
+                "message_en": "ok",
+            },
+        }
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            self.reference_validator.validate(document)
+        self.assertEqual(ctx.exception.code, ValidationErrorCode.UNRESOLVED_PATH)
+
+    def test_consumed_step_without_outputs_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["steps"][0].pop("outputs")
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            self.reference_validator.validate(document)
+        self.assertEqual(ctx.exception.code, ValidationErrorCode.MISSING_OUTPUTS)
+
+    def test_duplicate_consume_alias_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["steps"][1]["consumes"].append(
+            {
+                "from": "$steps.query_aggregate_amount",
+                "alias": "am",
+            }
+        )
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            self.structure_validator.validate(document)
+        self.assertEqual(ctx.exception.code, ValidationErrorCode.INVALID_CONSUMES_ALIAS)
+
+    def test_on_fail_single_mode_disallows_records_output_reference(self) -> None:
+        data = {
+            "steps": [
+                {
+                    "name": "s1",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "records",
+                    "sql_template": "select 1 as amount",
+                    "sql_params": {},
+                    "outputs": ["amount"],
+                }
+            ],
+            "on_fail": {
+                "decision": "false",
+                "mode": "single",
+                "message_cn": "金额{$steps.s1.amount}",
+                "message_en": "Amount {$steps.s1.amount}",
+            },
+        }
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            self.reference_validator.validate(document)
+        self.assertEqual(ctx.exception.code, ValidationErrorCode.INVALID_MESSAGE_TEMPLATE)
+
+    def test_non_readonly_sql_raises_with_error_code(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["steps"][0]["sql_template"] = "update t set c = 1"
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            self.validator.validate(document)
+        self.assertEqual(ctx.exception.code, ValidationErrorCode.NON_READONLY_SQL)
 
 
 if __name__ == "__main__":
