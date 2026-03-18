@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, Optional, Protocol, TypeVar
 
-from .dsl import DslDocument, EXISTS_DECISION, PrecheckNode, SqlNode, VariableDefinition
+from .dsl import DslDocument, EXISTS_DECISION, FailPolicy, PrecheckNode, SqlNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
 from .exceptions import DSLExecutionError, DSLValidationError, ValidationErrorCode
 from .parser import JsonDslParser
@@ -18,6 +18,31 @@ from .sql import DatasourceRegistry, SqlExecutor
 from .validator import DslValidator
 
 RuntimeValueT = TypeVar("RuntimeValueT")
+
+
+class SqlExecutorLike(Protocol):
+    """引擎依赖的最小 SQL 执行器协议。"""
+
+    def execute_node(
+        self,
+        node: SqlNode,
+        state: ExecutionState,
+        datasource_registry: DatasourceRegistry,
+        node_name: str,
+    ) -> NodeExecutionResult:
+        ...
+
+
+class MessageRendererLike(Protocol):
+    """引擎依赖的最小消息渲染器协议。"""
+
+    def render(
+        self,
+        policy: FailPolicy,
+        state: ExecutionState,
+        rows: Optional[Sequence[Mapping[str, Any]]] = None,
+    ) -> tuple[str, str]:
+        ...
 
 
 @dataclass(frozen=True)
@@ -42,8 +67,8 @@ class DslEngine:
         parser: Optional[JsonDslParser] = None,
         validator: Optional[DslValidator] = None,
         expression_evaluator: Optional[ExpressionEvaluator] = None,
-        sql_executor: Optional[SqlExecutor] = None,
-        message_renderer: Optional[MessageRenderer] = None,
+        sql_executor: Optional[SqlExecutorLike] = None,
+        message_renderer: Optional[MessageRendererLike] = None,
         result_builder: Optional[ResultBuilder] = None,
         compile_cache_size: int = 128,
     ) -> None:
@@ -131,12 +156,13 @@ class DslEngine:
     ) -> Optional[ExecutionResult]:
         if document.context is None:
             return None
+        context_node = document.context
         result, runtime_failure = self._run_runtime_action(
             state=state,
             failed_node="context",
             action=lambda: self._execute_sql_node(
                 phase="context",
-                node=document.context,
+                node=context_node,
                 state=state,
                 datasource_registry=datasource_registry,
                 node_name="context",
@@ -144,6 +170,8 @@ class DslEngine:
         )
         if runtime_failure is not None:
             return runtime_failure
+        if result is None:
+            raise RuntimeError("context execution result is unexpectedly None.")
         state.set_context_result(result)
         return None
 
@@ -189,12 +217,16 @@ class DslEngine:
             )
             if runtime_failure is not None:
                 return runtime_failure
+            if result is None:
+                raise RuntimeError("precheck execution result is unexpectedly None.")
             if self._should_fail_precheck(
                 precheck,
                 result.raw_rows,
                 state,
                 compiled_dsl.precheck_decisions.get(precheck.name),
             ):
+                if precheck.on_fail is None:
+                    raise RuntimeError("precheck.on_fail is unexpectedly None.")
                 message_cn, message_en = self.message_renderer.render(precheck.on_fail, state, result.raw_rows)
                 return self.result_builder.build_failure(
                     phase="precheck",
@@ -225,6 +257,8 @@ class DslEngine:
             )
             if runtime_failure is not None:
                 return runtime_failure
+            if result is None:
+                raise RuntimeError("step execution result is unexpectedly None.")
             state.set_step_result(step.name, result)
         return None
 
@@ -236,6 +270,8 @@ class DslEngine:
         )
         if runtime_failure is not None:
             return runtime_failure
+        if should_fail is None:
+            raise RuntimeError("final decision result is unexpectedly None.")
         if should_fail:
             rendered_message, runtime_failure = self._run_runtime_action(
                 state=state,
@@ -244,6 +280,8 @@ class DslEngine:
             )
             if runtime_failure is not None:
                 return runtime_failure
+            if rendered_message is None:
+                raise RuntimeError("rendered failure message is unexpectedly None.")
             message_cn, message_en = rendered_message
             return self.result_builder.build_failure(
                 phase="final",
@@ -289,6 +327,18 @@ class DslEngine:
 
     def _compile_document(self, document: DslDocument) -> CompiledDsl:
         self.validator.validate(document)
+        precheck_decisions: dict[str, Optional[CompiledExpression]] = {}
+        for precheck in document.prechecks:
+            if precheck.on_fail is None:
+                raise DSLValidationError(
+                    f"prechecks.{precheck.name}.on_fail must be provided.",
+                    code=ValidationErrorCode.MISSING_REQUIRED_FIELD,
+                )
+            precheck_decisions[precheck.name] = (
+                None
+                if precheck.on_fail.decision == EXISTS_DECISION
+                else self._compile_expression(precheck.on_fail.decision, f"prechecks.{precheck.name}.on_fail.decision")
+            )
         return CompiledDsl(
             document=document,
             variable_conditions={
@@ -298,14 +348,7 @@ class DslEngine:
                 )
                 for variable_name, definition in document.variables.items()
             },
-            precheck_decisions={
-                precheck.name: (
-                    None
-                    if precheck.on_fail.decision == EXISTS_DECISION
-                    else self._compile_expression(precheck.on_fail.decision, f"prechecks.{precheck.name}.on_fail.decision")
-                )
-                for precheck in document.prechecks
-            },
+            precheck_decisions=precheck_decisions,
             on_fail_decision=self._compile_expression(document.on_fail.decision, "on_fail.decision"),
         )
 
@@ -336,6 +379,8 @@ class DslEngine:
         state: ExecutionState,
         compiled_expression: Optional[CompiledExpression],
     ) -> bool:
+        if precheck.on_fail is None:
+            raise ValueError("precheck.on_fail must not be None.")
         if precheck.on_fail.decision == EXISTS_DECISION:
             return len(rows) > 0
         if compiled_expression is None:

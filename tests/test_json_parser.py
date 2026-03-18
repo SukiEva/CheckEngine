@@ -19,6 +19,8 @@ class JsonDslParserTestCase(unittest.TestCase):
 
     def test_parse_example_json(self) -> None:
         document = self.parser.parse(self.example_path.read_text(encoding="utf-8"))
+        if document.context is None:
+            self.fail("example JSON should define context block")
 
         self.assertEqual(document.context.datasource, "saas_db")
         self.assertEqual(document.context.outputs, ("flow", "scenario"))

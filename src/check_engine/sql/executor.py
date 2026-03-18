@@ -3,24 +3,24 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from contextlib import contextmanager
-from typing import Any, Optional, Protocol
+from contextlib import AbstractContextManager, contextmanager
+from typing import Any, Optional, Protocol, cast
 
 from ..dsl import RESULT_MODE_RECORD, RESULT_MODE_RECORDS, SqlNode, StepNode
 from ..exceptions import DSLExecutionError, ExecutionErrorCode
 from ..runtime import NodeExecutionResult
 from .cte_builder import CteBuilder
-from .datasource import DatasourceLike, DatasourceRegistry, SessionLike
+from .datasource import DatasourceLike, DatasourceRegistry
 
 
 class ExecutionStateLike(Protocol):
     """执行器依赖的最小运行时状态协议。"""
 
     def resolve_reference(self, reference: str) -> Any:
-        """解析运行时路径。"""
+        ...
 
     def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
-        """返回可供 consumes 构造 CTE 的行和字段。"""
+        ...
 
 
 class SqlExecutor:
@@ -37,7 +37,7 @@ class SqlExecutor:
         node_name: str,
     ) -> NodeExecutionResult:
         resolved_params = self._resolve_sql_params(node.sql_params, state)
-        consumes = node.consumes if isinstance(node, StepNode) else []
+        consumes = node.consumes if isinstance(node, StepNode) else ()
         cte_sql, cte_params = self.cte_builder.build(consumes, state)
         final_sql = self._merge_with_clause(cte_sql, node.sql_template)
         final_params = {**cte_params, **resolved_params}
@@ -143,11 +143,16 @@ class SqlExecutor:
         return mappings if hasattr(mappings, "__iter__") else mappings.all()
 
     @staticmethod
-    def _open_session(datasource: DatasourceLike) -> Any:
+    def _open_session(datasource: DatasourceLike) -> AbstractContextManager[Any]:
         session_or_cm = datasource.get_session()
         if hasattr(session_or_cm, "__enter__") and hasattr(session_or_cm, "__exit__"):
-            return session_or_cm
-        return contextmanager(datasource.get_session)()
+            return cast(AbstractContextManager[Any], session_or_cm)
+        return SqlExecutor._wrap_session_iterator(session_or_cm)
+
+    @staticmethod
+    @contextmanager
+    def _wrap_session_iterator(session_iterator: Any) -> Any:
+        yield next(session_iterator)
 
     def _project_outputs(self, node: SqlNode, node_name: str, rows: list[dict[str, Any]]) -> tuple[Any, list[str]]:
         if node.result_mode == RESULT_MODE_RECORD and len(rows) != 1:

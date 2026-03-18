@@ -93,7 +93,7 @@ class ExecutionState:
 
     input_data: Mapping[str, Any]
     context_result: Optional[NodeExecutionResult] = None
-    context_data: MutableMapping[str, Any] = field(default_factory=dict)
+    context_data: Mapping[str, Any] = field(default_factory=dict)
     variables_data: MutableMapping[str, Any] = field(default_factory=dict)
     step_results: MutableMapping[str, NodeExecutionResult] = field(default_factory=dict)
     step_data: MutableMapping[str, Any] = field(default_factory=dict)

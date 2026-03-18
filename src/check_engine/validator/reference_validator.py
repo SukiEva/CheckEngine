@@ -38,6 +38,11 @@ class ReferenceValidator:
             available_variables.add(variable_name)
 
         for index, precheck in enumerate(document.prechecks):
+            if precheck.on_fail is None:
+                self._raise(
+                    ValidationErrorCode.MISSING_REQUIRED_FIELD,
+                    f"prechecks[{index}].on_fail must be provided.",
+                )
             self._validate_sql_params(precheck.sql_params, document, available_steps=set(), available_variables=all_variables, step_map=step_map)
             self._validate_fail_policy(precheck.on_fail, document, available_steps=set(), available_variables=all_variables, path=f"prechecks[{index}].on_fail", step_map=step_map)
 

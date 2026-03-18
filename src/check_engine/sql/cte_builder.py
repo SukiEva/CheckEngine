@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
+from typing import Protocol
 
 from ..dsl import ConsumeSpec
 from ..exceptions import DSLExecutionError
-from ..runtime import ExecutionState
+
+
+class ConsumableRowsState(Protocol):
+    """CTE 构造依赖的最小状态协议。"""
+
+    def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
+        ...
 
 
 class CteBuilder:
     """将前序结果集转换为当前 SQL 可消费的 CTE。"""
 
-    def build(self, consumes: list[ConsumeSpec], state: ExecutionState) -> tuple[str, dict[str, Any]]:
+    def build(self, consumes: Sequence[ConsumeSpec], state: ConsumableRowsState) -> tuple[str, dict[str, Any]]:
         if not consumes:
             return "", {}
 
@@ -30,7 +38,7 @@ class CteBuilder:
     def _build_single_cte(
         self,
         alias: str,
-        rows: list[dict[str, Any]],
+        rows: Sequence[Mapping[str, Any]],
         fields: list[str],
     ) -> tuple[str, dict[str, Any]]:
         if not fields:

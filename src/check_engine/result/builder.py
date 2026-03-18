@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from collections.abc import Mapping, Sequence
+from typing import Any, Optional, TypedDict
 
 from ..exceptions import DSLExecutionError
-from ..runtime import ExecutionResult, ExecutionState
+from ..runtime import ExecutedNodeTrace, ExecutionResult, ExecutionState
+
+
+class _StatePayload(TypedDict):
+    context: Mapping[str, Any]
+    variables: Mapping[str, Any]
+    steps: Mapping[str, Any]
+    executed_nodes: Sequence[ExecutedNodeTrace]
 
 
 class ResultBuilder:
@@ -88,7 +96,7 @@ class ResultBuilder:
         )
 
     @staticmethod
-    def _state_payload(state: ExecutionState) -> dict[str, object]:
+    def _state_payload(state: ExecutionState) -> _StatePayload:
         return {
             "context": state.context_data,
             "variables": state.variables_data,
