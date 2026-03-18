@@ -436,30 +436,17 @@
 
         <section class="panel">
           <h2>On Fail</h2>
+          <div class="small-note" style="margin-bottom: 12px;">根据当前硬规则，顶层 <code>on_fail.mode</code> 固定为 <code>single</code>，不再配置 divider。</div>
           <div class="grid">
             <div class="field">
               <label for="on-fail-decision">decision</label>
               <input id="on-fail-decision" placeholder="exists($steps.exchange_rate.final_amount) 或表达式" />
             </div>
             <div class="field">
-              <label for="on-fail-mode">mode</label>
+              <label for="on-fail-mode">mode（固定）</label>
               <select id="on-fail-mode">
                 <option value="single">single</option>
-                <option value="sub_repeat">sub_repeat</option>
-                <option value="full_repeat">full_repeat</option>
               </select>
-            </div>
-            <div class="field">
-              <label for="on-fail-divider">divider</label>
-              <input id="on-fail-divider" placeholder="sub_repeat: 优先用 divider，否则需同时配置 divider_cn/en" />
-            </div>
-            <div class="field">
-              <label for="on-fail-divider-cn">divider_cn</label>
-              <input id="on-fail-divider-cn" placeholder="默认中文分隔符" />
-            </div>
-            <div class="field">
-              <label for="on-fail-divider-en">divider_en</label>
-              <input id="on-fail-divider-en" placeholder="默认英文分隔符" />
             </div>
             <div class="field full">
               <label for="on-fail-message-cn">message_cn</label>
@@ -467,7 +454,7 @@
             </div>
             <div class="field full">
               <label for="on-fail-message-en">message_en</label>
-              <textarea id="on-fail-message-en" placeholder="The amount {steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}."></textarea>
+              <textarea id="on-fail-message-en" placeholder="The amount {$steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}."></textarea>
             </div>
           </div>
         </section>
@@ -492,6 +479,7 @@
             <p>3. <code>sql_params</code> 原样保留，适合填 <code>$input.xxx</code>、<code>$context.xxx</code> 这类路径。</p>
             <p>4. <code>sub_repeat</code> 模板里请保留一段 <code>[]</code> 用于标记重复片段。</p>
             <p>5. 消息模板支持 <code>f{$path:format_spec}</code>，例如 <code>f{$steps.a.out1:,}</code>。</p>
+            <p>6. 顶层 <code>on_fail</code> 当前固定使用 <code>single</code>，不要配置 divider。</p>
           </div>
         </section>
 
@@ -615,13 +603,10 @@
         }
       ],
       on_fail: {
-        decision: "exists($steps.exchange_rate.final_amount)",
+        decision: "$steps.exchange_rate.final_amount > $variables.threshold",
         mode: "single",
         message_cn: "金额{$steps.exchange_rate.final_amount}超过阈值{$variables.threshold}",
-        message_en: "The amount {steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}.",
-        divider: "",
-        divider_cn: "",
-        divider_en: ""
+        message_en: "The amount {$steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}."
       }
     };
 
@@ -632,6 +617,10 @@
     const previewEl = document.getElementById("json-preview");
     const issuesEl = document.getElementById("issues");
     const statusEl = document.getElementById("status");
+    const RESERVED_NODE_NAMES = new Set(["input", "context", "variables", "steps", "on_fail"]);
+    const EXISTS_CALL_PATTERN = /^exists\(\s*\$[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*\)$/;
+    const SQL_ALIAS_PATTERN = /^[A-Za-z_]\w*$/;
+    const STEP_SCOPE_PATTERN = /\$steps\.([A-Za-z_]\w*)\.([A-Za-z_]\w*)/g;
 
     function createButton(label, className, dataset = {}) {
       const button = document.createElement("button");
@@ -982,13 +971,6 @@
         }
       };
 
-      const onFailDivider = document.getElementById("on-fail-divider").value.trim();
-      const onFailDividerCn = document.getElementById("on-fail-divider-cn").value.trim();
-      const onFailDividerEn = document.getElementById("on-fail-divider-en").value.trim();
-      if (onFailDivider) dsl.on_fail.divider = onFailDivider;
-      if (onFailDividerCn) dsl.on_fail.divider_cn = onFailDividerCn;
-      if (onFailDividerEn) dsl.on_fail.divider_en = onFailDividerEn;
-
       const variables = {};
       variablesListEl.querySelectorAll(".variable-card").forEach((card) => {
         const name = card.querySelector('[data-role="variable-name"]').value.trim();
@@ -1084,6 +1066,9 @@
 
     function validateDsl(dsl) {
       const issues = [];
+      const precheckNames = new Set();
+      const stepNames = new Set();
+      const stepOutputMap = new Map();
 
       if (dsl.context) {
         if (!dsl.context.datasource) {
@@ -1092,20 +1077,73 @@
         if (!dsl.context.sql_template.trim()) {
           issues.push("context.sql_template 不能为空。");
         }
+        if (!Array.isArray(dsl.context.outputs) || dsl.context.outputs.length === 0) {
+          issues.push("context 存在时，context.outputs 不能为空。");
+        }
       }
 
       (dsl.prechecks || []).forEach((item, index) => {
         if (!item.name) issues.push(`prechecks[${index}].name 不能为空。`);
+        if (RESERVED_NODE_NAMES.has(item.name)) issues.push(`prechecks[${index}].name 不能使用保留名称 ${item.name}。`);
+        if (precheckNames.has(item.name)) issues.push(`prechecks[${index}].name 不能重复。`);
+        if (item.name) precheckNames.add(item.name);
         if (!item.sql_template.trim()) issues.push(`prechecks[${index}].sql_template 不能为空。`);
         if (!item.on_fail.decision) issues.push(`prechecks[${index}].on_fail.decision 不能为空。`);
-        if (item.on_fail.mode === "sub_repeat" && !item.on_fail.message_cn.includes("[")) {
-          issues.push(`prechecks[${index}] 使用 sub_repeat 时，message_cn 建议包含 []。`);
+        if (item.on_fail.decision && item.on_fail.decision !== "exists" && !EXISTS_CALL_PATTERN.test(item.on_fail.decision.trim())) {
+          issues.push(`prechecks[${index}].on_fail.decision 仅支持 exists 或 exists($path)。`);
+        }
+        if (item.on_fail.mode === "sub_repeat") {
+          const cnSegments = (item.on_fail.message_cn.match(/\[[^\]]*]/g) || []).length;
+          const enSegments = (item.on_fail.message_en.match(/\[[^\]]*]/g) || []).length;
+          if (cnSegments !== 1 || enSegments !== 1) {
+            issues.push(`prechecks[${index}] 使用 sub_repeat 时，message_cn / message_en 必须且只能包含一段 []。`);
+          }
+          if (!item.on_fail.divider && !(item.on_fail.divider_cn && item.on_fail.divider_en)) {
+            issues.push(`prechecks[${index}] 使用 sub_repeat 时，必须配置 divider，或同时配置 divider_cn / divider_en。`);
+          }
         }
       });
 
       dsl.steps.forEach((item, index) => {
         if (!item.name) issues.push(`steps[${index}].name 不能为空。`);
+        if (RESERVED_NODE_NAMES.has(item.name)) issues.push(`steps[${index}].name 不能使用保留名称 ${item.name}。`);
+        if (stepNames.has(item.name) || precheckNames.has(item.name)) issues.push(`steps[${index}].name 不能与已有 step / precheck 重名。`);
+        if (item.name) stepNames.add(item.name);
         if (!item.sql_template.trim()) issues.push(`steps[${index}].sql_template 不能为空。`);
+        stepOutputMap.set(item.name, Array.isArray(item.outputs) ? item.outputs : []);
+
+        (item.consumes || []).forEach((consume, consumeIndex) => {
+          if (!consume.from || !consume.alias) {
+            issues.push(`steps[${index}].consumes[${consumeIndex}] 的 from 和 alias 都必须填写。`);
+            return;
+          }
+          if (!SQL_ALIAS_PATTERN.test(consume.alias)) {
+            issues.push(`steps[${index}].consumes[${consumeIndex}].alias 必须是合法 SQL 标识符。`);
+          }
+          if (consume.from === "$context") {
+            if (!dsl.context) {
+              issues.push(`steps[${index}].consumes[${consumeIndex}].from 引用了 $context，但当前未配置 context。`);
+            } else if (!Array.isArray(dsl.context.outputs) || dsl.context.outputs.length === 0) {
+              issues.push(`steps[${index}].consumes[${consumeIndex}] 引用 $context 时，context.outputs 不能为空。`);
+            }
+            return;
+          }
+          const match = consume.from.match(/^\$steps\.([A-Za-z_]\w*)$/);
+          if (!match) {
+            issues.push(`steps[${index}].consumes[${consumeIndex}].from 仅支持 $context 或 $steps.<step_name>。`);
+            return;
+          }
+          const sourceStepName = match[1];
+          const previousSteps = dsl.steps.slice(0, index).map((step) => step.name);
+          if (!previousSteps.includes(sourceStepName)) {
+            issues.push(`steps[${index}].consumes[${consumeIndex}] 只能引用当前步骤之前已执行的 step。`);
+            return;
+          }
+          const sourceOutputs = stepOutputMap.get(sourceStepName) || [];
+          if (sourceOutputs.length === 0) {
+            issues.push(`steps[${index}].consumes[${consumeIndex}] 引用的 step 必须声明 outputs。`);
+          }
+        });
       });
 
       if (!dsl.on_fail.decision) {
@@ -1113,12 +1151,38 @@
       } else if (dsl.on_fail.decision.trim() === "exists") {
         issues.push("on_fail.decision 不支持裸 exists，请改为 exists($path)。");
       }
+      if (dsl.on_fail.mode !== "single") {
+        issues.push("顶层 on_fail.mode 当前固定为 single。");
+      }
       if (!dsl.on_fail.message_cn.trim()) {
         issues.push("on_fail.message_cn 不能为空。");
       }
       if (!dsl.on_fail.message_en.trim()) {
         issues.push("on_fail.message_en 不能为空。");
       }
+      if (/\{steps\./.test(dsl.on_fail.message_cn) || /\{steps\./.test(dsl.on_fail.message_en)) {
+        issues.push("全局路径占位符必须写成 {$path}，不能写成 {steps.xxx} 这种缺少 $ 的形式。");
+      }
+
+      const onFailRefs = [
+        dsl.on_fail.decision,
+        dsl.on_fail.message_cn,
+        dsl.on_fail.message_en
+      ];
+      onFailRefs.forEach((text) => {
+        if (!text) return;
+        for (const match of text.matchAll(STEP_SCOPE_PATTERN)) {
+          const [, stepName, fieldName] = match;
+          const outputs = stepOutputMap.get(stepName);
+          if (!outputs) {
+            issues.push(`on_fail 引用了不存在的 step：${stepName}。`);
+            continue;
+          }
+          if (!outputs.includes(fieldName)) {
+            issues.push(`on_fail 引用了 step ${stepName} 未导出的字段 ${fieldName}。`);
+          }
+        }
+      });
 
       return issues;
     }
@@ -1168,10 +1232,7 @@
 
     function fillOnFail(data) {
       document.getElementById("on-fail-decision").value = data.decision || "";
-      document.getElementById("on-fail-mode").value = data.mode || "single";
-      document.getElementById("on-fail-divider").value = data.divider || "";
-      document.getElementById("on-fail-divider-cn").value = data.divider_cn || "";
-      document.getElementById("on-fail-divider-en").value = data.divider_en || "";
+      document.getElementById("on-fail-mode").value = "single";
       document.getElementById("on-fail-message-cn").value = data.message_cn || "";
       document.getElementById("on-fail-message-en").value = data.message_en || "";
     }
