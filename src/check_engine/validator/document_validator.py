@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from ..dsl.models import DslDocument
+from ..dsl import DslDocument
 from .reference_validator import ReferenceValidator
 from .sql_validator import SqlSafetyValidator
 from .structure_validator import StructureValidator

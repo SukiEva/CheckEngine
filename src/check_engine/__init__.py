@@ -2,7 +2,7 @@
 
 from .engine import CompiledDsl, DslEngine
 from .exceptions import DSLExecutionError, DSLParseError, DSLValidationError
-from .sql.datasource import StaticDatasourceRegistry
+from .sql import StaticDatasourceRegistry
 
 __all__ = [
     "CompiledDsl",

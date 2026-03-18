@@ -6,9 +6,9 @@ import re
 from collections.abc import Sequence
 from typing import Any, Mapping, Optional
 
-from ..dsl.models import FailPolicy
+from ..dsl import FAIL_MODE_FULL_REPEAT, FAIL_MODE_SINGLE, FAIL_MODE_SUB_REPEAT, FailPolicy
 from ..exceptions import DSLExecutionError, ExecutionErrorCode
-from ..runtime.state import ExecutionState
+from ..runtime import ExecutionState
 
 
 class MessageRenderer:
@@ -38,7 +38,7 @@ class MessageRenderer:
         state: ExecutionState,
         rows: Sequence[Mapping[str, Any]],
     ) -> str:
-        if policy.mode == "single":
+        if policy.mode == FAIL_MODE_SINGLE:
             if len(rows) > 1:
                 raise DSLExecutionError(
                     "single mode requires at most one result row.",
@@ -47,13 +47,13 @@ class MessageRenderer:
             row = rows[0] if rows else None
             return self._render_once(template, state, row)
 
-        if policy.mode == "full_repeat":
+        if policy.mode == FAIL_MODE_FULL_REPEAT:
             if not rows:
                 return self._render_once(template, state, None)
             divider = self._resolve_full_repeat_divider(policy, locale)
             return divider.join(self._render_once(template, state, row) for row in rows)
 
-        if policy.mode == "sub_repeat":
+        if policy.mode == FAIL_MODE_SUB_REPEAT:
             return self._render_sub_repeat(template, policy, locale, state, rows)
 
         raise DSLExecutionError(
@@ -191,18 +191,21 @@ class MessageRenderer:
     def _is_global_reference_token(self, token: str) -> bool:
         return token.startswith("$") or self.IMPLICIT_PATH_PATTERN.match(token) is not None
 
-    def _resolve_global_token(self, token: str, state: ExecutionState) -> Any:
+    @staticmethod
+    def _resolve_global_token(token: str, state: ExecutionState) -> Any:
         if token.startswith("$"):
             return state.resolve_reference(token)
         return state.resolve_path(token)
 
-    def _split_format_token(self, token: str) -> tuple[str, Optional[str]]:
+    @staticmethod
+    def _split_format_token(token: str) -> tuple[str, Optional[str]]:
         if ":" not in token:
             return token, None
         name, format_spec = token.split(":", 1)
         return name.strip(), format_spec
 
-    def _resolve_full_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
+    @staticmethod
+    def _resolve_full_repeat_divider(policy: FailPolicy, locale: str) -> str:
         if locale == "cn":
             if policy.divider_cn is not None:
                 return policy.divider_cn
@@ -215,7 +218,8 @@ class MessageRenderer:
             return policy.divider
         return " "
 
-    def _resolve_sub_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
+    @staticmethod
+    def _resolve_sub_repeat_divider(policy: FailPolicy, locale: str) -> str:
         if policy.divider is not None:
             return policy.divider
         if locale == "cn":
@@ -232,7 +236,8 @@ class MessageRenderer:
             )
         return policy.divider_en
 
-    def _stringify(self, value: Any) -> str:
+    @staticmethod
+    def _stringify(value: Any) -> str:
         if value is None:
             return ""
         return str(value)
