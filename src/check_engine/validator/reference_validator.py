@@ -6,7 +6,16 @@ import re
 from collections.abc import Mapping
 from typing import NoReturn
 
-from ..dsl import ContextNode, DslDocument, FailPolicy, StepNode, VariableDefinition
+from ..dsl import (
+    ContextNode,
+    DslDocument,
+    EXISTS_DECISION,
+    FAIL_MODE_SINGLE,
+    RESULT_MODE_RECORDS,
+    FailPolicy,
+    StepNode,
+    VariableDefinition,
+)
 from ..exceptions import DSLValidationError, ValidationErrorCode
 
 
@@ -141,7 +150,7 @@ class ReferenceValidator:
         path: str,
         step_map: dict[str, StepNode],
     ) -> None:
-        if policy.decision != "exists":
+        if policy.decision != EXISTS_DECISION:
             for reference in self._extract_references(policy.decision):
                 self._validate_reference(
                     reference,
@@ -165,7 +174,7 @@ class ReferenceValidator:
                     path=f"{path}.{field_name}",
                     step_map=step_map,
                 )
-                if path == "on_fail" and policy.mode == "single":
+                if path == "on_fail" and policy.mode == FAIL_MODE_SINGLE:
                     self._validate_single_mode_message_reference(reference, step_map, f"{path}.{field_name}")
 
     def _validate_reference(
@@ -223,7 +232,7 @@ class ReferenceValidator:
         parts = self._split_reference(reference)
         if len(parts) == 3 and parts[0] == "steps":
             step = self._find_step(step_map, parts[1])
-            if step.result_mode == "records":
+            if step.result_mode == RESULT_MODE_RECORDS:
                 self._raise(
                     ValidationErrorCode.INVALID_MESSAGE_TEMPLATE,
                     f"{path} cannot reference array outputs in single mode: {reference}",

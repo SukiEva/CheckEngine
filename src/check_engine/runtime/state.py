@@ -131,10 +131,7 @@ class ExecutionState:
         )
 
     def resolve_reference(self, reference: str) -> Any:
-        if not reference.startswith("$"):
-            raise DSLExecutionError(f"Invalid reference path: {reference}", code=ExecutionErrorCode.EXECUTION_ERROR)
-
-        parts = reference[1:].split(".")
+        parts = self._parse_reference_parts(reference)
         root = parts[0]
         if root == "input":
             return self._resolve_from_mapping(self.input_data, parts[1:], reference)
@@ -143,22 +140,17 @@ class ExecutionState:
         if root == "variables":
             return self._resolve_from_mapping(self.variables_data, parts[1:], reference)
         if root == "steps":
-            if len(parts) < 2:
-                raise DSLExecutionError(
-                    f"Steps reference must include step name: {reference}",
-                    code=ExecutionErrorCode.EXECUTION_ERROR,
-                )
-            step_name = parts[1]
-            if step_name not in self.step_data:
-                raise DSLExecutionError(f"Step execution result not found: {reference}", code=ExecutionErrorCode.EXECUTION_ERROR)
-            return self._resolve_from_mapping_or_object(self.step_data[step_name], parts[2:], reference)
+            step_name = self._require_step_name(parts, reference)
+            step_value = self._get_step_data(step_name, reference)
+            return self._resolve_from_mapping_or_object(step_value, parts[2:], reference)
         raise DSLExecutionError(f"Unknown scope: {reference}", code=ExecutionErrorCode.EXECUTION_ERROR)
 
     def resolve_path(self, path: str) -> Any:
         return self.resolve_reference(path if path.startswith("$") else "$" + path)
 
     def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
-        if from_path == "$context":
+        parts = self._parse_reference_parts(from_path)
+        if parts == ["context"]:
             if self.context_result is None:
                 raise DSLExecutionError(
                     "Context result is missing; cannot build consumes.",
@@ -166,20 +158,19 @@ class ExecutionState:
                 )
             return self._rows_and_fields(self.context_result)
 
-        if not from_path.startswith("$steps."):
+        if parts[0] != "steps":
             raise DSLExecutionError(
                 f"Unsupported consumes.from reference: {from_path}",
                 code=ExecutionErrorCode.EXECUTION_ERROR,
             )
 
-        parts = from_path[1:].split(".")
         if len(parts) != 2:
             raise DSLExecutionError(
                 f"consumes.from only supports referencing whole step outputs: {from_path}",
                 code=ExecutionErrorCode.EXECUTION_ERROR,
             )
 
-        step_name = parts[1]
+        step_name = self._require_step_name(parts, from_path)
         if step_name not in self.step_results:
             raise DSLExecutionError(
                 f"consumes.from references a non-existent step output: {from_path}",
@@ -250,3 +241,23 @@ class ExecutionState:
     @staticmethod
     def _is_projectable_sequence(value: Any) -> bool:
         return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
+
+    @staticmethod
+    def _parse_reference_parts(reference: str) -> list[str]:
+        if not reference.startswith("$"):
+            raise DSLExecutionError(f"Invalid reference path: {reference}", code=ExecutionErrorCode.EXECUTION_ERROR)
+        return reference[1:].split(".")
+
+    @staticmethod
+    def _require_step_name(parts: list[str], reference: str) -> str:
+        if len(parts) < 2 or not parts[1]:
+            raise DSLExecutionError(
+                f"Steps reference must include step name: {reference}",
+                code=ExecutionErrorCode.EXECUTION_ERROR,
+            )
+        return parts[1]
+
+    def _get_step_data(self, step_name: str, reference: str) -> Any:
+        if step_name not in self.step_data:
+            raise DSLExecutionError(f"Step execution result not found: {reference}", code=ExecutionErrorCode.EXECUTION_ERROR)
+        return self.step_data[step_name]

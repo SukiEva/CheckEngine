@@ -6,7 +6,7 @@ import re
 from collections.abc import Sequence
 from typing import Any, Mapping, Optional
 
-from ..dsl import FailPolicy
+from ..dsl import FAIL_MODE_FULL_REPEAT, FAIL_MODE_SINGLE, FAIL_MODE_SUB_REPEAT, FailPolicy
 from ..exceptions import DSLExecutionError, ExecutionErrorCode
 from ..runtime import ExecutionState
 
@@ -38,7 +38,7 @@ class MessageRenderer:
         state: ExecutionState,
         rows: Sequence[Mapping[str, Any]],
     ) -> str:
-        if policy.mode == "single":
+        if policy.mode == FAIL_MODE_SINGLE:
             if len(rows) > 1:
                 raise DSLExecutionError(
                     "single mode requires at most one result row.",
@@ -47,13 +47,13 @@ class MessageRenderer:
             row = rows[0] if rows else None
             return self._render_once(template, state, row)
 
-        if policy.mode == "full_repeat":
+        if policy.mode == FAIL_MODE_FULL_REPEAT:
             if not rows:
                 return self._render_once(template, state, None)
             divider = self._resolve_full_repeat_divider(policy, locale)
             return divider.join(self._render_once(template, state, row) for row in rows)
 
-        if policy.mode == "sub_repeat":
+        if policy.mode == FAIL_MODE_SUB_REPEAT:
             return self._render_sub_repeat(template, policy, locale, state, rows)
 
         raise DSLExecutionError(

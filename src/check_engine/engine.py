@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Callable, Optional, TypeVar
 
-from .dsl import DslDocument, PrecheckNode, SqlNode, VariableDefinition
+from .dsl import DslDocument, EXISTS_DECISION, PrecheckNode, SqlNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
 from .exceptions import DSLExecutionError, DSLValidationError, ValidationErrorCode
 from .parser import JsonDslParser
@@ -301,7 +301,7 @@ class DslEngine:
             precheck_decisions={
                 precheck.name: (
                     None
-                    if precheck.on_fail.decision == "exists"
+                    if precheck.on_fail.decision == EXISTS_DECISION
                     else self._compile_expression(precheck.on_fail.decision, f"prechecks.{precheck.name}.on_fail.decision")
                 )
                 for precheck in document.prechecks
@@ -336,7 +336,7 @@ class DslEngine:
         state: ExecutionState,
         compiled_expression: Optional[CompiledExpression],
     ) -> bool:
-        if precheck.on_fail.decision == "exists":
+        if precheck.on_fail.decision == EXISTS_DECISION:
             return len(rows) > 0
         if compiled_expression is None:
             raise ValueError("compiled_expression must not be None when precheck decision is not bare exists.")

@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, Optional, Protocol
 
-from ..dsl import SqlNode, StepNode
+from ..dsl import RESULT_MODE_RECORD, RESULT_MODE_RECORDS, SqlNode, StepNode
 from ..exceptions import DSLExecutionError, ExecutionErrorCode
 from ..runtime import NodeExecutionResult
 from .cte_builder import CteBuilder
@@ -108,7 +108,7 @@ class SqlExecutor:
         datasource: DatasourceLike,
         sql: str,
         params: dict[str, Any],
-        result_mode: str = "records",
+        result_mode: str = RESULT_MODE_RECORDS,
     ) -> list[dict[str, Any]]:
         if not hasattr(datasource, "get_session"):
             raise DSLExecutionError(
@@ -122,23 +122,25 @@ class SqlExecutor:
         with session_cm as session:
             result = session.execute(sqlalchemy_text(sql), params)
             mappings = result.mappings()
-            if result_mode == "record":
+            if result_mode == RESULT_MODE_RECORD:
                 return [dict(row) for row in self._fetch_record_rows(mappings)]
-            iterable_rows = mappings if hasattr(mappings, "__iter__") else mappings.all()
-            return [dict(row) for row in iterable_rows]
+            return [dict(row) for row in self._iter_mapping_rows(mappings)]
 
     @staticmethod
     def _fetch_record_rows(mappings: Any) -> list[Any]:
         if hasattr(mappings, "fetchmany"):
             return list(mappings.fetchmany(2))
 
-        iterable_rows = mappings if hasattr(mappings, "__iter__") else mappings.all()
         rows = []
-        for row in iterable_rows:
+        for row in SqlExecutor._iter_mapping_rows(mappings):
             rows.append(row)
             if len(rows) == 2:
                 break
         return rows
+
+    @staticmethod
+    def _iter_mapping_rows(mappings: Any) -> Any:
+        return mappings if hasattr(mappings, "__iter__") else mappings.all()
 
     @staticmethod
     def _open_session(datasource: DatasourceLike) -> Any:
@@ -148,7 +150,7 @@ class SqlExecutor:
         return contextmanager(datasource.get_session)()
 
     def _project_outputs(self, node: SqlNode, node_name: str, rows: list[dict[str, Any]]) -> tuple[Any, list[str]]:
-        if node.result_mode == "record" and len(rows) != 1:
+        if node.result_mode == RESULT_MODE_RECORD and len(rows) != 1:
             raise DSLExecutionError(
                 "record mode must return exactly one row.",
                 code=self._result_mismatch_code(node_name),
@@ -158,19 +160,15 @@ class SqlExecutor:
         if not fields and rows:
             fields = list(rows[0].keys())
 
-        if node.result_mode == "record":
+        if node.result_mode == RESULT_MODE_RECORD:
             row = rows[0] if rows else {}
             self._ensure_output_columns_exist(row, fields)
-            return ({field: row[field] for field in fields} if fields else {}), fields
+            return (self._project_row(row, fields) if fields else {}), fields
 
         if not fields:
             return rows, fields
 
-        projected_rows = []
-        for row in rows:
-            self._ensure_output_columns_exist(row, fields)
-            projected_rows.append({field: row[field] for field in fields})
-        return projected_rows, fields
+        return [self._project_row(row, fields) for row in rows], fields
 
     @staticmethod
     def _ensure_output_columns_exist(row: Mapping[str, Any], fields: list[str]) -> None:
@@ -182,6 +180,11 @@ class SqlExecutor:
                 "Declared outputs do not match returned columns: {0}".format(", ".join(missing_fields)),
                 code=ExecutionErrorCode.OUTPUT_COLUMN_MISMATCH,
             )
+
+    @staticmethod
+    def _project_row(row: Mapping[str, Any], fields: list[str]) -> dict[str, Any]:
+        SqlExecutor._ensure_output_columns_exist(row, fields)
+        return {field: row[field] for field in fields}
 
     @staticmethod
     def _result_mismatch_code(node_name: str) -> ExecutionErrorCode:
