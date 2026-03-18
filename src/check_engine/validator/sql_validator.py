@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from ..dsl.models import DslDocument, SqlNode
+from ..dsl import DslDocument, SqlNode
 from ..exceptions import DSLValidationError, ValidationErrorCode
 
 

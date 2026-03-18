@@ -6,7 +6,7 @@ import re
 from collections.abc import Mapping
 from typing import NoReturn
 
-from ..dsl.models import ContextNode, DslDocument, FailPolicy, StepNode, VariableDefinition
+from ..dsl import ContextNode, DslDocument, FailPolicy, StepNode, VariableDefinition
 from ..exceptions import DSLValidationError, ValidationErrorCode
 
 

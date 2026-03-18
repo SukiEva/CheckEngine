@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..dsl.models import ConsumeSpec
+from ..dsl import ConsumeSpec
 from ..exceptions import DSLExecutionError
-from ..runtime.state import ExecutionState
+from ..runtime import ExecutionState
 
 
 class CteBuilder:

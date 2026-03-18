@@ -7,15 +7,14 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Callable, Optional
 
-from .dsl.models import DslDocument, PrecheckNode, SqlNode, VariableDefinition
+from .dsl import DslDocument, PrecheckNode, SqlNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
 from .exceptions import DSLExecutionError, DSLValidationError, ValidationErrorCode
 from .parser import JsonDslParser
 from .renderer import MessageRenderer
 from .result import ResultBuilder
-from .runtime.state import ExecutionResult, ExecutionState, NodeExecutionResult
-from .sql import SqlExecutor
-from .sql.datasource import DatasourceRegistry
+from .runtime import ExecutionResult, ExecutionState, NodeExecutionResult
+from .sql import DatasourceRegistry, SqlExecutor
 from .validator import DslValidator
 
 

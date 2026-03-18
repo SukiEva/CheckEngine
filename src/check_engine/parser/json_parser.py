@@ -6,7 +6,7 @@ import json
 from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
 
-from ..dsl.models import (
+from ..dsl import (
     ConsumeSpec,
     ContextNode,
     DslDocument,

@@ -6,9 +6,9 @@ from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any, Optional, Protocol
 
-from ..dsl.models import SqlNode, StepNode
+from ..dsl import SqlNode, StepNode
 from ..exceptions import DSLExecutionError, ExecutionErrorCode
-from ..runtime.state import NodeExecutionResult
+from ..runtime import NodeExecutionResult
 from .cte_builder import CteBuilder
 from .datasource import DatasourceLike, DatasourceRegistry, SessionLike
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from ..exceptions import DSLExecutionError
-from ..runtime.state import ExecutionResult, ExecutionState
+from ..runtime import ExecutionResult, ExecutionState
 
 
 class ResultBuilder:

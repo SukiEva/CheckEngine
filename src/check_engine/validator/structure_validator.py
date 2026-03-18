@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Mapping, NoReturn, Sequence
 
-from ..dsl.models import ContextNode, DslDocument, FailPolicy, PrecheckNode, SqlNode, StepNode, VariableDefinition
+from ..dsl import ContextNode, DslDocument, FailPolicy, PrecheckNode, SqlNode, StepNode, VariableDefinition
 from ..exceptions import DSLValidationError, ValidationErrorCode
 
 

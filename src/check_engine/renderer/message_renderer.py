@@ -6,9 +6,9 @@ import re
 from collections.abc import Sequence
 from typing import Any, Mapping, Optional
 
-from ..dsl.models import FailPolicy
+from ..dsl import FailPolicy
 from ..exceptions import DSLExecutionError, ExecutionErrorCode
-from ..runtime.state import ExecutionState
+from ..runtime import ExecutionState
 
 
 class MessageRenderer:
