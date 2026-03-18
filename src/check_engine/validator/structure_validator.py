@@ -126,8 +126,6 @@ class StructureValidator:
     def _validate_fail_policy(self, policy: FailPolicy, path: str) -> None:
         if policy.mode not in self.VALID_FAIL_MODES:
             self._raise(ValidationErrorCode.INVALID_FIELD_TYPE, f"{path}.mode is not supported: {policy.mode}")
-        if path == "on_fail" and policy.mode != "single":
-            self._raise(ValidationErrorCode.INVALID_FIELD_TYPE, "on_fail.mode must be single.")
         decision = policy.decision.strip()
         if not decision:
             self._raise(ValidationErrorCode.MISSING_REQUIRED_FIELD, f"{path}.decision must not be empty.")

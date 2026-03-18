@@ -212,13 +212,35 @@ class ValidatorTestCase(unittest.TestCase):
             self.structure_validator.validate(document)
         self.assertEqual(ctx.exception.code, ValidationErrorCode.UNKNOWN_TOP_LEVEL_FIELD)
 
-    def test_on_fail_mode_must_be_single(self) -> None:
+    def test_on_fail_full_repeat_is_valid(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["on_fail"]["mode"] = "full_repeat"
+        data["on_fail"]["message_cn"] = "金额{$steps.query_aggregate_amount.total_amount}超过阈值{$variables.threshold}"
+        data["on_fail"]["message_en"] = "Amount {$steps.query_aggregate_amount.total_amount} exceeds threshold {$variables.threshold}."
+        document = self.parser.parse(json.dumps(data))
+
+        self.validator.validate(document)
+
+    def test_on_fail_single_mode_cannot_reference_records_output(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["on_fail"]["decision"] = "exists($steps.query_aggregate_amount.total_amount)"
+        data["on_fail"]["message_cn"] = "金额{$steps.query_aggregate_amount.total_amount}超过阈值{$variables.threshold}"
+        data["on_fail"]["message_en"] = "Amount {$steps.query_aggregate_amount.total_amount} exceeds threshold {$variables.threshold}."
         document = self.parser.parse(json.dumps(data))
 
         with self.assertRaises(DSLValidationError):
-            self.structure_validator.validate(document)
+            self.reference_validator.validate(document)
+
+    def test_on_fail_sub_repeat_can_reference_records_output(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["on_fail"]["decision"] = "exists($steps.query_aggregate_amount.total_amount)"
+        data["on_fail"]["mode"] = "sub_repeat"
+        data["on_fail"]["divider"] = "，"
+        data["on_fail"]["message_cn"] = "超限金额: [{$steps.query_aggregate_amount.func}-{$steps.query_aggregate_amount.total_amount}]"
+        data["on_fail"]["message_en"] = "Exceeded amounts: [{$steps.query_aggregate_amount.func}-{$steps.query_aggregate_amount.total_amount}]"
+        document = self.parser.parse(json.dumps(data))
+
+        self.validator.validate(document)
 
     def test_reserved_step_name_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))

@@ -335,11 +335,12 @@ FROM am
 - 若 `decision` 为真，则整条规则失败
 - 若 `decision` 为假，则整条规则通过
 - 顶层 `on_fail.decision` 允许使用 `exists($path)` 判断某个路径是否“非空存在”
+- 顶层 `on_fail.message_*` 的渲染模式与 `prechecks[].on_fail` 一致，可使用 `single`、`sub_repeat`、`full_repeat`
 
 硬规则：
 
 - 顶层 `on_fail` 必须声明 `decision`、`mode`、`message_cn`、`message_en`
-- 顶层 `on_fail.mode` 当前固定为 `single`
+- 顶层 `on_fail.mode` 必须是 `single`、`sub_repeat`、`full_repeat` 之一
 - 顶层 `on_fail.decision` 不允许使用裸 `exists`，必须写成 `exists($path)`
 
 ## 7. decision 表达式规则
@@ -597,6 +598,7 @@ FROM am
 - `prechecks` 之间不建立运行时结果作用域；后续 `precheck` 不允许直接引用前一个 `precheck` 的 SQL 结果
 - `steps` 之间的字段引用必须通过显式命名空间路径完成；若当前步骤需要在 SQL 中使用前序步骤结果，优先通过 `consumes` 声明数据依赖
 - 顶层 `on_fail` 不允许直接引用 `prechecks` 的结果
+- 顶层 `on_fail.message_*` 若使用 `single`，则不得引用来自 `result_mode = records` 的数组输出；若需要渲染数组结果，应改用 `sub_repeat` 或 `full_repeat`
 
 ## 13. 建议的错误码
 

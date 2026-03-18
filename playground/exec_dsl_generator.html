@@ -436,17 +436,30 @@
 
         <section class="panel">
           <h2>On Fail</h2>
-          <div class="small-note" style="margin-bottom: 12px;">根据当前硬规则，顶层 <code>on_fail.mode</code> 固定为 <code>single</code>，不再配置 divider。</div>
           <div class="grid">
             <div class="field">
               <label for="on-fail-decision">decision</label>
               <input id="on-fail-decision" placeholder="exists($steps.exchange_rate.final_amount) 或表达式" />
             </div>
             <div class="field">
-              <label for="on-fail-mode">mode（固定）</label>
+              <label for="on-fail-mode">mode</label>
               <select id="on-fail-mode">
                 <option value="single">single</option>
+                <option value="sub_repeat">sub_repeat</option>
+                <option value="full_repeat">full_repeat</option>
               </select>
+            </div>
+            <div class="field">
+              <label for="on-fail-divider">divider</label>
+              <input id="on-fail-divider" placeholder="sub_repeat 时常用，例如 ," />
+            </div>
+            <div class="field">
+              <label for="on-fail-divider-cn">divider_cn</label>
+              <input id="on-fail-divider-cn" placeholder="中文分隔符" />
+            </div>
+            <div class="field">
+              <label for="on-fail-divider-en">divider_en</label>
+              <input id="on-fail-divider-en" placeholder="英文分隔符" />
             </div>
             <div class="field full">
               <label for="on-fail-message-cn">message_cn</label>
@@ -479,7 +492,7 @@
             <p>3. <code>sql_params</code> 原样保留，适合填 <code>$input.xxx</code>、<code>$context.xxx</code> 这类路径。</p>
             <p>4. <code>sub_repeat</code> 模板里请保留一段 <code>[]</code> 用于标记重复片段。</p>
             <p>5. 消息模板支持 <code>f{$path:format_spec}</code>，例如 <code>f{$steps.a.out1:,}</code>。</p>
-            <p>6. 顶层 <code>on_fail</code> 当前固定使用 <code>single</code>，不要配置 divider。</p>
+            <p>6. 顶层 <code>on_fail</code> 与 <code>precheck.on_fail</code> 一样支持 <code>single</code> / <code>sub_repeat</code> / <code>full_repeat</code>。</p>
           </div>
         </section>
 
@@ -970,6 +983,12 @@
           message_en: document.getElementById("on-fail-message-en").value
         }
       };
+      const onFailDivider = document.getElementById("on-fail-divider").value.trim();
+      const onFailDividerCn = document.getElementById("on-fail-divider-cn").value.trim();
+      const onFailDividerEn = document.getElementById("on-fail-divider-en").value.trim();
+      if (onFailDivider) dsl.on_fail.divider = onFailDivider;
+      if (onFailDividerCn) dsl.on_fail.divider_cn = onFailDividerCn;
+      if (onFailDividerEn) dsl.on_fail.divider_en = onFailDividerEn;
 
       const variables = {};
       variablesListEl.querySelectorAll(".variable-card").forEach((card) => {
@@ -1069,6 +1088,7 @@
       const precheckNames = new Set();
       const stepNames = new Set();
       const stepOutputMap = new Map();
+      const stepResultModeMap = new Map();
 
       if (dsl.context) {
         if (!dsl.context.datasource) {
@@ -1111,6 +1131,7 @@
         if (item.name) stepNames.add(item.name);
         if (!item.sql_template.trim()) issues.push(`steps[${index}].sql_template 不能为空。`);
         stepOutputMap.set(item.name, Array.isArray(item.outputs) ? item.outputs : []);
+        stepResultModeMap.set(item.name, item.result_mode);
 
         (item.consumes || []).forEach((consume, consumeIndex) => {
           if (!consume.from || !consume.alias) {
@@ -1151,8 +1172,15 @@
       } else if (dsl.on_fail.decision.trim() === "exists") {
         issues.push("on_fail.decision 不支持裸 exists，请改为 exists($path)。");
       }
-      if (dsl.on_fail.mode !== "single") {
-        issues.push("顶层 on_fail.mode 当前固定为 single。");
+      if (dsl.on_fail.mode === "sub_repeat") {
+        const cnSegments = (dsl.on_fail.message_cn.match(/\[[^\]]*]/g) || []).length;
+        const enSegments = (dsl.on_fail.message_en.match(/\[[^\]]*]/g) || []).length;
+        if (cnSegments !== 1 || enSegments !== 1) {
+          issues.push("on_fail 使用 sub_repeat 时，message_cn / message_en 必须且只能包含一段 []。");
+        }
+        if (!dsl.on_fail.divider && !(dsl.on_fail.divider_cn && dsl.on_fail.divider_en)) {
+          issues.push("on_fail 使用 sub_repeat 时，必须配置 divider，或同时配置 divider_cn / divider_en。");
+        }
       }
       if (!dsl.on_fail.message_cn.trim()) {
         issues.push("on_fail.message_cn 不能为空。");
@@ -1180,6 +1208,10 @@
           }
           if (!outputs.includes(fieldName)) {
             issues.push(`on_fail 引用了 step ${stepName} 未导出的字段 ${fieldName}。`);
+            continue;
+          }
+          if (dsl.on_fail.mode === "single" && stepResultModeMap.get(stepName) === "records") {
+            issues.push(`on_fail 在 single 模式下不能引用 records 结果的字段：$steps.${stepName}.${fieldName}。`);
           }
         }
       });
@@ -1232,7 +1264,10 @@
 
     function fillOnFail(data) {
       document.getElementById("on-fail-decision").value = data.decision || "";
-      document.getElementById("on-fail-mode").value = "single";
+      document.getElementById("on-fail-mode").value = data.mode || "single";
+      document.getElementById("on-fail-divider").value = data.divider || "";
+      document.getElementById("on-fail-divider-cn").value = data.divider_cn || "";
+      document.getElementById("on-fail-divider-en").value = data.divider_en || "";
       document.getElementById("on-fail-message-cn").value = data.message_cn || "";
       document.getElementById("on-fail-message-en").value = data.message_en || "";
     }

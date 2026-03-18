@@ -136,7 +136,7 @@ class ReferenceValidator:
                     available_variables=list(document.variables.keys()),
                     path=f"{path}.{field_name}",
                 )
-                if path == "on_fail":
+                if path == "on_fail" and policy.mode == "single":
                     self._validate_single_mode_message_reference(reference, document, f"{path}.{field_name}")
 
     def _validate_reference(
