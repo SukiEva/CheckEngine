@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 from ..dsl.models import (
     ConsumeSpec,
@@ -101,7 +101,7 @@ class JsonDslParser:
             description=self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{path}.{DslField.DESCRIPTION.value}"),
         )
 
-    def _parse_variables(self, value: Any) -> dict[str, VariableDefinition]:
+    def _parse_variables(self, value: Any) -> Mapping[str, VariableDefinition]:
         path = DslField.VARIABLES.value
         mapping = self._expect_dict(value, path)
         variables: dict[str, VariableDefinition] = {}
@@ -127,7 +127,7 @@ class JsonDslParser:
 
         return variables
 
-    def _parse_prechecks(self, value: Any) -> list[PrecheckNode]:
+    def _parse_prechecks(self, value: Any) -> Sequence[PrecheckNode]:
         path = DslField.PRECHECKS.value
         items = self._expect_list(value, path)
         nodes: list[PrecheckNode] = []
@@ -149,7 +149,7 @@ class JsonDslParser:
             )
         return nodes
 
-    def _parse_steps(self, value: Any) -> list[StepNode]:
+    def _parse_steps(self, value: Any) -> Sequence[StepNode]:
         path = DslField.STEPS.value
         items = self._expect_list(value, path)
         nodes: list[StepNode] = []
@@ -198,16 +198,16 @@ class JsonDslParser:
             divider_en=self._optional_string(mapping.get(DslField.DIVIDER_EN.value), f"{path}.{DslField.DIVIDER_EN.value}"),
         )
 
-    def _parse_string_list(self, value: Any, path: str) -> list[str]:
+    def _parse_string_list(self, value: Any, path: str) -> Sequence[str]:
         items = self._expect_list(value, path)
         return [self._expect_string(item, f"{path}[{index}]") for index, item in enumerate(items)]
 
-    def _expect_dict(self, value: Any, path: str) -> dict[str, Any]:
+    def _expect_dict(self, value: Any, path: str) -> Mapping[str, Any]:
         if not isinstance(value, dict):
             raise DSLParseError(f"{path} must be an object.")
         return value
 
-    def _expect_list(self, value: Any, path: str) -> list[Any]:
+    def _expect_list(self, value: Any, path: str) -> Sequence[Any]:
         if not isinstance(value, list):
             raise DSLParseError(f"{path} must be a list.")
         return value

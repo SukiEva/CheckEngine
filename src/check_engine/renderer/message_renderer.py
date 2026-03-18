@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from collections.abc import Sequence
+from typing import Any, Mapping, Optional
 
 from ..dsl.models import FailPolicy
 from ..exceptions import DSLExecutionError, ExecutionErrorCode
@@ -21,7 +22,7 @@ class MessageRenderer:
         self,
         policy: FailPolicy,
         state: ExecutionState,
-        rows: Optional[list[dict[str, Any]]] = None,
+        rows: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> tuple[str, str]:
         render_rows = rows or []
         return (
@@ -35,7 +36,7 @@ class MessageRenderer:
         policy: FailPolicy,
         locale: str,
         state: ExecutionState,
-        rows: list[dict[str, Any]],
+        rows: Sequence[Mapping[str, Any]],
     ) -> str:
         if policy.mode == "single":
             if len(rows) > 1:
@@ -50,7 +51,7 @@ class MessageRenderer:
             if not rows:
                 return self._render_once(template, state, None)
             divider = self._resolve_full_repeat_divider(policy, locale)
-            return divider.join([self._render_once(template, state, row) for row in rows])
+            return divider.join(self._render_once(template, state, row) for row in rows)
 
         if policy.mode == "sub_repeat":
             return self._render_sub_repeat(template, policy, locale, state, rows)
@@ -66,7 +67,7 @@ class MessageRenderer:
         policy: FailPolicy,
         locale: str,
         state: ExecutionState,
-        rows: list[dict[str, Any]],
+        rows: Sequence[Mapping[str, Any]],
     ) -> str:
         left = template.index("[")
         right = template.index("]")
@@ -85,7 +86,7 @@ class MessageRenderer:
         self,
         segment: str,
         state: ExecutionState,
-        rows: list[dict[str, Any]],
+        rows: Sequence[Mapping[str, Any]],
     ) -> list[str]:
         if rows:
             return [self._render_once(segment, state, row) for row in rows]
@@ -120,15 +121,15 @@ class MessageRenderer:
             else:
                 continue
 
-            if isinstance(value, list):
-                token_map[reference_token] = value
+            if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+                token_map[reference_token] = list(value)
         return token_map
 
     def _render_once(
         self,
         template: str,
         state: ExecutionState,
-        row: Optional[dict[str, Any]],
+        row: Optional[Mapping[str, Any]],
         overrides: Optional[dict[str, Any]] = None,
     ) -> str:
         def resolve_token(token: str) -> Any:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import MappingProxyType
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -80,6 +81,27 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError):
             self.reference_validator.validate(document)
+
+
+    def test_structure_validator_accepts_frozen_document_collections(self) -> None:
+        document = self.parser.parse(json.dumps(self.example_data))
+
+        self.assertIsInstance(document.steps, tuple)
+        self.assertIsInstance(document.prechecks, tuple)
+        self.assertIsInstance(document.steps[0].outputs, tuple)
+        self.assertIsInstance(document.steps[0].consumes, tuple)
+
+        self.structure_validator.validate(document)
+
+    def test_reference_validator_accepts_frozen_mapping_views(self) -> None:
+        document = self.parser.parse(json.dumps(self.example_data))
+
+        self.assertIsInstance(document.variables, MappingProxyType)
+        self.assertIsInstance(document.steps[0].sql_params, MappingProxyType)
+        if document.prechecks:
+            self.assertIsInstance(document.prechecks[0].sql_params, MappingProxyType)
+
+        self.reference_validator.validate(document)
 
     def test_validate_on_fail_exists_call(self) -> None:
         data = json.loads(json.dumps(self.example_data))

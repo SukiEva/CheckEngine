@@ -17,33 +17,43 @@ from check_engine.sql.executor import SqlExecutor
 class _FakeMappingsResult:
     def __init__(self, rows):
         self._rows = rows
+        self.fetchmany_calls = []
 
     def all(self):
         return self._rows
+
+    def fetchmany(self, size):
+        self.fetchmany_calls.append(size)
+        return self._rows[:size]
 
 
 class _FakeExecuteResult:
     def __init__(self, rows):
         self._rows = rows
+        self.mappings_result = _FakeMappingsResult(self._rows)
 
     def mappings(self):
-        return _FakeMappingsResult(self._rows)
+        return self.mappings_result
 
 
 class _FakeSession:
     def __init__(self, rows):
         self._rows = rows
+        self.last_result = None
 
     def execute(self, _sql, _params):
-        return _FakeExecuteResult(self._rows)
+        self.last_result = _FakeExecuteResult(self._rows)
+        return self.last_result
 
 
 class _FakeDatasource:
     def __init__(self, rows):
         self._rows = rows
+        self.last_session = None
 
     def get_session(self):
         session = _FakeSession(self._rows)
+        self.last_session = session
         try:
             yield session
         finally:
@@ -63,7 +73,7 @@ class _StaticRegistry:
 
 
 class _FailingSqlExecutor(SqlExecutor):
-    def _run_sql(self, datasource, sql, params):
+    def _run_sql(self, datasource, sql, params, result_mode="records"):
         raise RuntimeError("boom")
 
 
@@ -79,6 +89,19 @@ class SqlExecutorTestCase(unittest.TestCase):
         rows = executor._run_sql(datasource, "SELECT 1", {})
 
         self.assertEqual(rows, [{"amount": 10, "code": "A"}, {"amount": 20, "code": "B"}])
+
+    def test_run_sql_record_mode_only_fetches_two_rows(self) -> None:
+        executor = SqlExecutor()
+        datasource = _FakeDatasource([
+            {"amount": 10},
+            {"amount": 20},
+            {"amount": 30},
+        ])
+
+        rows = executor._run_sql(datasource, "SELECT 1", {}, result_mode="record")
+
+        self.assertEqual(rows, [{"amount": 10}, {"amount": 20}])
+        self.assertEqual(datasource.last_session.last_result.mappings_result.fetchmany_calls, [2])
 
 
 class SqlExecutorRuntimeErrorTestCase(unittest.TestCase):

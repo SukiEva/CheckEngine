@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
 from types import CodeType
 from typing import Any
@@ -73,10 +74,15 @@ class ExpressionEvaluator:
             raise DSLExecutionError("Keyword 'exists' is only valid for precheck failure decision and must not be evaluated directly.")
 
         references: list[str] = []
+        ref_names: dict[str, str] = {}
 
         def replace_reference(match: re.Match[str]) -> str:
+            reference = match.group(0)
+            if reference in ref_names:
+                return ref_names[reference]
             ref_name = "__ref_{0}".format(len(references))
-            references.append(match.group(0))
+            references.append(reference)
+            ref_names[reference] = ref_name
             return ref_name
 
         python_expr = self.REF_PATTERN.sub(replace_reference, expression)
@@ -100,19 +106,20 @@ class ExpressionEvaluator:
         return self.evaluate_compiled(self.compile(expression), state)
 
     def evaluate_compiled(self, expression: CompiledExpression, state: ExecutionState) -> Any:
-        def exists(value: Any) -> bool:
-            if value is None:
-                return False
-            if isinstance(value, (str, bytes, list, tuple, dict, set)):
-                return len(value) > 0
-            return True
-
         ref_env = {
             "__ref_{0}".format(index): state.resolve_reference(reference)
             for index, reference in enumerate(expression.references)
         }
 
         try:
-            return eval(expression.code, {"__builtins__": {}}, {**ref_env, "exists": exists})
+            return eval(expression.code, {"__builtins__": {}}, {**ref_env, "exists": self._exists})
         except Exception as exc:  # noqa: BLE001
             raise DSLExecutionError(f"Expression evaluation failed: {expression.source}") from exc
+
+    @staticmethod
+    def _exists(value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, Collection):
+            return len(value) > 0
+        return True

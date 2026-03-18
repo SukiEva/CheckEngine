@@ -2,22 +2,37 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from collections.abc import Mapping, MutableMapping, Sequence
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, Optional
 
 from ..exceptions import DSLExecutionError, ExecutionErrorCode
+
+
+def _to_plain_data(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _to_plain_data(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_to_plain_data(item) for item in value]
+    return value
 
 
 @dataclass(frozen=True)
 class NodeExecutionResult:
     """节点执行结果。"""
 
-    raw_rows: list[dict[str, Any]]
+    raw_rows: Sequence[Mapping[str, Any]]
     exported_data: Any
-    exported_fields: list[str]
+    exported_fields: Sequence[str]
 
-    def as_rows(self) -> list[dict[str, Any]]:
-        return list(self.raw_rows)
+    def __post_init__(self) -> None:
+        frozen_rows = tuple(MappingProxyType(dict(row)) for row in self.raw_rows)
+        object.__setattr__(self, "raw_rows", frozen_rows)
+        object.__setattr__(self, "exported_fields", tuple(self.exported_fields))
+
+    def as_rows(self) -> Sequence[Mapping[str, Any]]:
+        return self.raw_rows
 
 
 @dataclass(frozen=True)
@@ -31,32 +46,43 @@ class ExecutionResult:
     error_detail: Optional[str]
     message_cn: Optional[str]
     message_en: Optional[str]
-    context: dict[str, Any]
-    variables: dict[str, Any]
-    steps: dict[str, Any]
+    context: Mapping[str, Any]
+    variables: Mapping[str, Any]
+    steps: Mapping[str, Any]
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "passed": self.passed,
+            "phase": self.phase,
+            "failed_node": self.failed_node,
+            "error_code": self.error_code,
+            "error_detail": self.error_detail,
+            "message_cn": self.message_cn,
+            "message_en": self.message_en,
+            "context": _to_plain_data(self.context),
+            "variables": _to_plain_data(self.variables),
+            "steps": _to_plain_data(self.steps),
+        }
 
 
 @dataclass
 class ExecutionState:
     """执行过程中的可变状态。"""
 
-    input_data: dict[str, Any]
+    input_data: Mapping[str, Any]
     context_result: Optional[NodeExecutionResult] = None
-    context_data: dict[str, Any] = field(default_factory=dict)
-    variables_data: dict[str, Any] = field(default_factory=dict)
-    step_results: dict[str, NodeExecutionResult] = field(default_factory=dict)
-    step_data: dict[str, Any] = field(default_factory=dict)
+    context_data: MutableMapping[str, Any] = field(default_factory=dict)
+    variables_data: MutableMapping[str, Any] = field(default_factory=dict)
+    step_results: MutableMapping[str, NodeExecutionResult] = field(default_factory=dict)
+    step_data: MutableMapping[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def new(cls, input_data: dict[str, Any]) -> "ExecutionState":
+    def new(cls, input_data: Mapping[str, Any]) -> "ExecutionState":
         return cls(input_data=input_data)
 
     def set_context_result(self, result: NodeExecutionResult) -> None:
         self.context_result = result
-        self.context_data = result.exported_data if isinstance(result.exported_data, dict) else {}
+        self.context_data = dict(result.exported_data) if isinstance(result.exported_data, Mapping) else {}
 
     def set_step_result(self, step_name: str, result: NodeExecutionResult) -> None:
         self.step_results[step_name] = result
@@ -89,7 +115,7 @@ class ExecutionState:
     def resolve_path(self, path: str) -> Any:
         return self.resolve_reference(path if path.startswith("$") else "$" + path)
 
-    def get_consumable_rows(self, from_path: str) -> tuple[list[dict[str, Any]], list[str]]:
+    def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
         if from_path == "$context":
             if self.context_result is None:
                 raise DSLExecutionError(
@@ -120,17 +146,17 @@ class ExecutionState:
 
         return self._rows_and_fields(self.step_results[step_name])
 
-    def _rows_and_fields(self, result: NodeExecutionResult) -> tuple[list[dict[str, Any]], list[str]]:
+    def _rows_and_fields(self, result: NodeExecutionResult) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
         rows = result.as_rows()
         fields = list(result.exported_fields)
         if not fields and rows:
             fields = list(rows[0].keys())
         return rows, fields
 
-    def _resolve_from_mapping(self, mapping: dict[str, Any], parts: list[str], reference: str) -> Any:
+    def _resolve_from_mapping(self, mapping: Mapping[str, Any], parts: list[str], reference: str) -> Any:
         current: Any = mapping
         for part in parts:
-            if not isinstance(current, dict):
+            if not isinstance(current, Mapping):
                 raise DSLExecutionError(
                     f"Cannot resolve reference path further: {reference}",
                     code=ExecutionErrorCode.EXECUTION_ERROR,
@@ -145,7 +171,7 @@ class ExecutionState:
         if not parts:
             return current
         for part in parts:
-            if isinstance(current, dict):
+            if isinstance(current, Mapping):
                 if part not in current:
                     raise DSLExecutionError(
                         f"Referenced field does not exist: {reference}",
@@ -154,10 +180,10 @@ class ExecutionState:
                 current = current[part]
                 continue
 
-            if isinstance(current, list):
+            if self._is_projectable_sequence(current):
                 projected = []
                 for item in current:
-                    if not isinstance(item, dict):
+                    if not isinstance(item, Mapping):
                         raise DSLExecutionError(
                             f"Cannot resolve reference path further: {reference}",
                             code=ExecutionErrorCode.EXECUTION_ERROR,
@@ -176,3 +202,6 @@ class ExecutionState:
                 code=ExecutionErrorCode.EXECUTION_ERROR,
             )
         return current
+
+    def _is_projectable_sequence(self, value: Any) -> bool:
+        return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))

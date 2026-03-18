@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Callable, Optional
@@ -20,20 +20,16 @@ from .validator import DslValidator
 
 @dataclass(frozen=True)
 class CompiledDsl:
-    """已完成解析、校验与表达式预编译的 DSL。"""
+    """已完成解析、校验与表达式预编译的 DSL。
+
+    该对象及其 `document` 默认可被 compile cache 共享复用；
+    调用方不得在其上写入任何运行时状态。
+    """
 
     document: DslDocument
     variable_conditions: dict[str, tuple[CompiledExpression, ...]]
     precheck_decisions: dict[str, Optional[CompiledExpression]]
     on_fail_decision: CompiledExpression
-
-    def clone(self) -> "CompiledDsl":
-        return CompiledDsl(
-            document=deepcopy(self.document),
-            variable_conditions=dict(self.variable_conditions),
-            precheck_decisions=dict(self.precheck_decisions),
-            on_fail_decision=self.on_fail_decision,
-        )
 
 
 class DslEngine:
@@ -59,16 +55,13 @@ class DslEngine:
         self.message_renderer = message_renderer or MessageRenderer()
         self.result_builder = result_builder or ResultBuilder()
         self.compile_cache_size = compile_cache_size
-        self._cache_compiled_results = compile_cache_size > 0
         self._compile_callable = self._build_compile_callable(compile_cache_size)
 
     def compile(self, dsl_text: str) -> CompiledDsl:
+        """编译 DSL，并返回可由缓存共享复用的只读结果。"""
         if not isinstance(dsl_text, str):
             raise TypeError("dsl_text must be a string.")
-        compiled_dsl = self._compile_callable(dsl_text)
-        if not self._cache_compiled_results:
-            return compiled_dsl
-        return compiled_dsl.clone()
+        return self._compile_callable(dsl_text)
 
     def clear_compile_cache(self) -> None:
         cache_clear = getattr(self._compile_callable, "cache_clear", None)
@@ -84,7 +77,7 @@ class DslEngine:
     def execute(
         self,
         dsl_text: str,
-        input_data: dict[str, Any],
+        input_data: Mapping[str, Any],
         datasource_registry: Any,
     ) -> ExecutionResult:
         return self.execute_compiled(self.compile(dsl_text), input_data, datasource_registry)
@@ -92,7 +85,7 @@ class DslEngine:
     def execute_document(
         self,
         document: DslDocument,
-        input_data: dict[str, Any],
+        input_data: Mapping[str, Any],
         datasource_registry: Any,
     ) -> ExecutionResult:
         return self.execute_compiled(self._compile_document(document), input_data, datasource_registry)
@@ -100,7 +93,7 @@ class DslEngine:
     def execute_compiled(
         self,
         compiled_dsl: CompiledDsl,
-        input_data: dict[str, Any],
+        input_data: Mapping[str, Any],
         datasource_registry: Any,
     ) -> ExecutionResult:
         document = compiled_dsl.document
@@ -191,7 +184,7 @@ class DslEngine:
     def _compile_document(self, document: DslDocument) -> CompiledDsl:
         self.validator.validate(document)
         return CompiledDsl(
-            document=deepcopy(document),
+            document=document,
             variable_conditions={
                 variable_name: tuple(self.expression_evaluator.compile(item.condition) for item in definition.when)
                 for variable_name, definition in document.variables.items()
@@ -217,7 +210,7 @@ class DslEngine:
     def _should_fail_precheck(
         self,
         precheck: PrecheckNode,
-        rows: list[dict[str, Any]],
+        rows: Sequence[Mapping[str, Any]],
         state: ExecutionState,
         compiled_expression: Optional[CompiledExpression],
     ) -> bool:
