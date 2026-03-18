@@ -6,12 +6,15 @@ import json
 import sys
 from pathlib import Path
 from types import MappingProxyType
+from typing import Any, cast
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine import DslEngine, DSLValidationError
+from check_engine.dsl import DslDocument
 from check_engine.parser import JsonDslParser
+from check_engine.sql import DatasourceRegistry
 from check_engine.validator import DslValidator
 
 
@@ -20,7 +23,7 @@ class _CountingParser(JsonDslParser):
         super().__init__()
         self.parse_count = 0
 
-    def parse(self, dsl_text: str):
+    def parse(self, dsl_text: str) -> DslDocument:
         self.parse_count += 1
         return super().parse(dsl_text)
 
@@ -30,9 +33,14 @@ class _CountingValidator(DslValidator):
         super().__init__()
         self.validate_count = 0
 
-    def validate(self, document) -> None:
+    def validate(self, document: DslDocument) -> None:
         self.validate_count += 1
         super().validate(document)
+
+
+class _UnusedRegistry:
+    def get(self, name: str) -> Any:
+        raise AssertionError(f"unexpected datasource lookup: {name}")
 
 
 class EngineCompileCacheTestCase(unittest.TestCase):
@@ -52,7 +60,10 @@ class EngineCompileCacheTestCase(unittest.TestCase):
         self.assertEqual(validator.validate_count, 1)
         self.assertIs(first, second)
         self.assertIs(first.document, second.document)
-        self.assertEqual(engine.compile_cache_info().hits, 1)
+        cache_info = engine.compile_cache_info()
+        if cache_info is None:
+            self.fail("compile cache info should not be None when cache is enabled")
+        self.assertEqual(cache_info.hits, 1)
 
     def test_compile_returns_immutable_cached_document_content(self) -> None:
         engine = DslEngine(compile_cache_size=2)
@@ -65,9 +76,9 @@ class EngineCompileCacheTestCase(unittest.TestCase):
         self.assertIsInstance(compiled.document.steps[0].outputs, tuple)
         self.assertIsInstance(compiled.document.steps[0].sql_params, MappingProxyType)
         with self.assertRaises(AttributeError):
-            compiled.document.steps[0].outputs.append("x")
+            cast(Any, compiled.document.steps[0].outputs).append("x")
         with self.assertRaises(TypeError):
-            compiled.document.variables["threshold"] = object()
+            cast(Any, compiled.document.variables)["threshold"] = object()
 
 
     def test_compile_freezes_variable_default_nested_value(self) -> None:
@@ -193,7 +204,7 @@ class EngineCompileCacheTestCase(unittest.TestCase):
         self.assertIsInstance(consumes, tuple)
         self.assertEqual(consumes[0].from_path, "$context")
         with self.assertRaises(AttributeError):
-            consumes.append(object())
+            cast(Any, consumes).append(object())
 
     def test_compile_cache_can_be_disabled(self) -> None:
         parser = _CountingParser()
@@ -227,6 +238,7 @@ class EngineCompileCacheTestCase(unittest.TestCase):
         invalid_document = JsonDslParser().parse(
             '{"steps": [{"name": "s1", "type": "sql", "datasource": "db", "result_mode": "record", "sql_template": "select 1 as value", "sql_params": {}, "outputs": ["value"]}], "on_fail": {"decision": "exists", "mode": "single", "message_cn": "x", "message_en": "y"}}'
         )
+        registry = cast(DatasourceRegistry, _UnusedRegistry())
 
         with self.assertRaisesRegex(DSLValidationError, "on_fail.decision"):
-            engine.execute_document(invalid_document, {"source_object_id": "x"}, datasource_registry=None)
+            engine.execute_document(invalid_document, {"source_object_id": "x"}, datasource_registry=registry)

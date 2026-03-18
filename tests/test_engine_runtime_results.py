@@ -6,22 +6,24 @@ import json
 import sys
 from pathlib import Path
 from types import MappingProxyType
+from typing import Any, Optional, cast
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine.engine import DslEngine
+from check_engine.sql import DatasourceRegistry
 from check_engine.exceptions import DSLExecutionError, ExecutionErrorCode
 from check_engine.runtime.state import ExecutionResult, NodeExecutionResult
 
 
 class _FailingSqlExecutor:
-    def execute_node(self, node, state, datasource_registry, node_name):
+    def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
         raise DSLExecutionError("SQL node execution failed: step_a", code=ExecutionErrorCode.SQL_EXECUTION_FAILED)
 
 
 class _PassingSqlExecutor:
-    def execute_node(self, node, state, datasource_registry, node_name):
+    def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
         return NodeExecutionResult(
             raw_rows=[{"v": 1}],
             exported_data={"v": 1},
@@ -30,8 +32,13 @@ class _PassingSqlExecutor:
 
 
 class _FailingMessageRenderer:
-    def render(self, policy, state, rows=None):
+    def render(self, policy: Any, state: Any, rows: Optional[Any] = None) -> tuple[str, str]:
         raise DSLExecutionError("Message render failed", code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED)
+
+
+class _UnusedRegistry:
+    def get(self, name: str) -> Any:
+        raise AssertionError(f"unexpected datasource lookup: {name}")
 
 
 class EngineRuntimeResultTestCase(unittest.TestCase):
@@ -60,8 +67,9 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
     def test_execute_returns_runtime_failure_result_with_error_code(self) -> None:
         engine = DslEngine(sql_executor=_FailingSqlExecutor())
+        registry = cast(DatasourceRegistry, _UnusedRegistry())
 
-        result = engine.execute(self.dsl_text, {}, datasource_registry=object())
+        result = engine.execute(self.dsl_text, {}, datasource_registry=registry)
 
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "runtime")
@@ -76,6 +84,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             sql_executor=_PassingSqlExecutor(),
             message_renderer=_FailingMessageRenderer(),
         )
+        registry = cast(DatasourceRegistry, _UnusedRegistry())
         dsl_text = json.dumps(
             {
                 "steps": [
@@ -98,7 +107,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             }
         )
 
-        result = engine.execute(dsl_text, {}, datasource_registry=object())
+        result = engine.execute(dsl_text, {}, datasource_registry=registry)
 
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "runtime")
@@ -121,8 +130,9 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
     def test_execute_pass_result_has_empty_runtime_error_fields(self) -> None:
         engine = DslEngine(sql_executor=_PassingSqlExecutor())
+        registry = cast(DatasourceRegistry, _UnusedRegistry())
 
-        result = engine.execute(self.dsl_text, {}, datasource_registry=object())
+        result = engine.execute(self.dsl_text, {}, datasource_registry=registry)
 
         self.assertTrue(result.passed)
         self.assertEqual(result.phase, "pass")
@@ -131,7 +141,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
     def test_execute_compiled_reuses_shared_compiled_dsl_without_state_leak(self) -> None:
         class _InputDrivenSqlExecutor:
-            def execute_node(self, node, state, datasource_registry, node_name):
+            def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
                 value = state.input_data["amount"]
                 return NodeExecutionResult(
                     raw_rows=[{"v": value}],
@@ -141,9 +151,10 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
         engine = DslEngine(sql_executor=_InputDrivenSqlExecutor(), compile_cache_size=2)
         compiled = engine.compile(self.dsl_text)
+        registry = cast(DatasourceRegistry, _UnusedRegistry())
 
-        first = engine.execute_compiled(compiled, {"amount": 5}, datasource_registry=object())
-        second = engine.execute_compiled(compiled, {"amount": 20}, datasource_registry=object())
+        first = engine.execute_compiled(compiled, {"amount": 5}, datasource_registry=registry)
+        second = engine.execute_compiled(compiled, {"amount": 20}, datasource_registry=registry)
 
         self.assertTrue(first.passed)
         self.assertFalse(second.passed)
@@ -228,14 +239,15 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
         self.assertIsInstance(rows, tuple)
         with self.assertRaises(TypeError):
-            rows[0]["v"] = 2
+            cast(Any, rows[0])["v"] = 2
 
 
 
     def test_execute_result_records_executed_nodes_trace(self) -> None:
         engine = DslEngine(sql_executor=_PassingSqlExecutor())
+        registry = cast(DatasourceRegistry, _UnusedRegistry())
 
-        result = engine.execute(self.dsl_text, {}, datasource_registry=object())
+        result = engine.execute(self.dsl_text, {}, datasource_registry=registry)
 
         self.assertEqual(
             [
@@ -264,7 +276,7 @@ class ExecutionStateReferenceResolutionTestCase(unittest.TestCase):
         from check_engine.runtime.state import ExecutionState
 
         state = ExecutionState.new({})
-        state.step_data["step_a"] = (
+        cast(Any, state.step_data)["step_a"] = (
             MappingProxyType({"code": "A"}),
             MappingProxyType({"code": "B"}),
         )

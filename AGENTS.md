@@ -237,6 +237,7 @@ docs/
 
 - 每次实际修改文件后，默认进行一次独立提交。
 - 提交时尽量只提交本次修改的文件，不混入用户的其他草稿改动。
+- 不要提交 `uv.lock`；若本地执行 `uv` 命令生成了该文件，应将其移出提交范围。
 - 提交信息应简洁明确，优先使用英文动词开头的 conventional 风格，例如：
   - `docs: update ExecDSL agent guidance`
   - `feat: add DSL validator skeleton`

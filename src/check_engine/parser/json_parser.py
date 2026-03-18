@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence, cast
 
 from ..dsl import (
     ConsumeSpec,
     ContextNode,
     DslDocument,
     FailPolicy,
+    FailMode,
+    NodeType,
     PrecheckNode,
+    ResultMode,
     StepNode,
     VariableCondition,
     VariableDefinition,
@@ -172,7 +175,7 @@ class JsonDslParser:
         mapping = self._expect_dict(value, path)
         return FailPolicy(
             decision=self._expect_string(mapping.get(DslField.DECISION.value), f"{path}.{DslField.DECISION.value}"),
-            mode=self._expect_string(mapping.get(DslField.MODE.value), f"{path}.{DslField.MODE.value}"),
+            mode=cast(FailMode, self._expect_string(mapping.get(DslField.MODE.value), f"{path}.{DslField.MODE.value}")),
             message_cn=self._expect_string(mapping.get(DslField.MESSAGE_CN.value), f"{path}.{DslField.MESSAGE_CN.value}"),
             message_en=self._expect_string(mapping.get(DslField.MESSAGE_EN.value), f"{path}.{DslField.MESSAGE_EN.value}"),
             divider=self._optional_string(mapping.get(DslField.DIVIDER.value), f"{path}.{DslField.DIVIDER.value}"),
@@ -186,9 +189,12 @@ class JsonDslParser:
 
     def _parse_sql_node_fields(self, mapping: Mapping[str, Any], path: str) -> dict[str, Any]:
         return {
-            "type": self._expect_string(mapping.get(DslField.TYPE.value), f"{path}.{DslField.TYPE.value}"),
+            "type": cast(NodeType, self._expect_string(mapping.get(DslField.TYPE.value), f"{path}.{DslField.TYPE.value}")),
             "datasource": self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{path}.{DslField.DATASOURCE.value}"),
-            "result_mode": self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{path}.{DslField.RESULT_MODE.value}"),
+            "result_mode": cast(
+                ResultMode,
+                self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{path}.{DslField.RESULT_MODE.value}"),
+            ),
             "sql_template": self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{path}.{DslField.SQL_TEMPLATE.value}"),
             "sql_params": self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{path}.{DslField.SQL_PARAMS.value}"),
             "outputs": self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{path}.{DslField.OUTPUTS.value}"),

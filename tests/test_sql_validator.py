@@ -9,8 +9,9 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from check_engine import DSLValidationError
 from check_engine.parser import JsonDslParser
-from check_engine.validator.sql_validator import SqlSafetyValidator
+from check_engine.validator import SqlSafetyValidator
 
 
 class SqlSafetyValidatorEdgeCaseTestCase(unittest.TestCase):
@@ -71,6 +72,34 @@ class SqlSafetyValidatorEdgeCaseTestCase(unittest.TestCase):
         )
 
         self.validator.validate(document)
+
+    def test_rejects_writable_cte_even_if_sql_starts_with_with(self) -> None:
+        document = self.parser.parse(
+            json.dumps(
+                {
+                    "steps": [
+                        {
+                            "name": "step_a",
+                            "type": "sql",
+                            "datasource": "db",
+                            "result_mode": "records",
+                            "sql_template": "WITH changed AS (DELETE FROM orders RETURNING id) SELECT id FROM changed",
+                            "sql_params": {},
+                            "outputs": ["id"],
+                        }
+                    ],
+                    "on_fail": {
+                        "decision": "false",
+                        "mode": "single",
+                        "message_cn": "ok",
+                        "message_en": "ok",
+                    },
+                }
+            )
+        )
+
+        with self.assertRaisesRegex(DSLValidationError, "non-read-only SQL keyword"):
+            self.validator.validate(document)
 
 
 if __name__ == "__main__":

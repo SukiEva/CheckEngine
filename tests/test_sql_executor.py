@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from collections.abc import Generator
+from typing import Any, Optional, cast
 from pathlib import Path
 import unittest
 
@@ -15,43 +17,43 @@ from check_engine.sql.executor import SqlExecutor
 
 
 class _FakeMappingsResult:
-    def __init__(self, rows):
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows
-        self.fetchmany_calls = []
+        self.fetchmany_calls: list[int] = []
 
-    def all(self):
+    def all(self) -> list[dict[str, Any]]:
         return self._rows
 
-    def fetchmany(self, size):
+    def fetchmany(self, size: int) -> list[dict[str, Any]]:
         self.fetchmany_calls.append(size)
         return self._rows[:size]
 
 
 class _FakeExecuteResult:
-    def __init__(self, rows):
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows
         self.mappings_result = _FakeMappingsResult(self._rows)
 
-    def mappings(self):
+    def mappings(self) -> _FakeMappingsResult:
         return self.mappings_result
 
 
 class _FakeSession:
-    def __init__(self, rows):
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows
-        self.last_result = None
+        self.last_result: Optional[_FakeExecuteResult] = None
 
-    def execute(self, _sql, _params):
+    def execute(self, _sql: Any, _params: Any) -> _FakeExecuteResult:
         self.last_result = _FakeExecuteResult(self._rows)
         return self.last_result
 
 
 class _FakeDatasource:
-    def __init__(self, rows):
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows
-        self.last_session = None
+        self.last_session: Optional[_FakeSession] = None
 
-    def get_session(self):
+    def get_session(self) -> Generator[_FakeSession, None, None]:
         session = _FakeSession(self._rows)
         self.last_session = session
         try:
@@ -65,15 +67,15 @@ class _MissingSessionDatasource:
 
 
 class _StaticRegistry:
-    def __init__(self, mapping):
+    def __init__(self, mapping: dict[str, Any]) -> None:
         self._mapping = mapping
 
-    def get(self, name):
+    def get(self, name: str) -> Any:
         return self._mapping[name]
 
 
 class _FailingSqlExecutor(SqlExecutor):
-    def _run_sql(self, datasource, sql, params, result_mode="records"):
+    def _run_sql(self, datasource: Any, sql: str, params: dict[str, Any], result_mode: str = "records") -> list[dict[str, Any]]:
         raise RuntimeError("boom")
 
 
@@ -86,7 +88,7 @@ class SqlExecutorTestCase(unittest.TestCase):
             {"amount": 20, "code": "B"},
         ])
 
-        rows = executor._run_sql(datasource, "SELECT 1", {})
+        rows = executor._run_sql(cast(Any, datasource), "SELECT 1", {})
 
         self.assertEqual(rows, [{"amount": 10, "code": "A"}, {"amount": 20, "code": "B"}])
 
@@ -98,9 +100,11 @@ class SqlExecutorTestCase(unittest.TestCase):
             {"amount": 30},
         ])
 
-        rows = executor._run_sql(datasource, "SELECT 1", {}, result_mode="record")
+        rows = executor._run_sql(cast(Any, datasource), "SELECT 1", {}, result_mode="record")
 
         self.assertEqual(rows, [{"amount": 10}, {"amount": 20}])
+        if datasource.last_session is None or datasource.last_session.last_result is None:
+            self.fail("fake datasource should record the last session and result")
         self.assertEqual(datasource.last_session.last_result.mappings_result.fetchmany_calls, [2])
 
 
@@ -160,7 +164,7 @@ class SqlExecutorRuntimeErrorTestCase(unittest.TestCase):
 
     def test_run_sql_without_datasource_session_raises_error_code(self) -> None:
         with self.assertRaises(DSLExecutionError) as ctx:
-            self.executor._run_sql(_MissingSessionDatasource(), "SELECT 1", {})
+            self.executor._run_sql(cast(Any, _MissingSessionDatasource()), "SELECT 1", {})
         self.assertEqual(ctx.exception.code, ExecutionErrorCode.DATASOURCE_NOT_FOUND)
 
     def test_execute_node_wraps_unknown_sql_errors_with_error_code(self) -> None:
@@ -175,7 +179,7 @@ class SqlExecutorRuntimeErrorTestCase(unittest.TestCase):
         registry = _StaticRegistry({"db": object()})
 
         with self.assertRaises(DSLExecutionError) as ctx:
-            executor.execute_node(node, state=object(), datasource_registry=registry, node_name="step_a")
+            executor.execute_node(node, state=cast(Any, object()), datasource_registry=registry, node_name="step_a")
         self.assertEqual(ctx.exception.code, ExecutionErrorCode.SQL_EXECUTION_FAILED)
 
 

@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-import re
+from collections.abc import Iterator
+from typing import Optional
+
+import sqlparse
+from sqlparse import tokens as sql_tokens
+from sqlparse.sql import Statement, Token
 
 from ..dsl import DslDocument, SqlNode
 from ..exceptions import DSLValidationError, ValidationErrorCode
@@ -11,11 +16,24 @@ from ..exceptions import DSLValidationError, ValidationErrorCode
 class SqlSafetyValidator:
     """保守地限制为只读 SQL。"""
 
-    FORBIDDEN_PATTERN = re.compile(
-        r"\b(insert|update|delete|merge|alter|drop|truncate|create|grant|revoke|comment)\b",
-        re.IGNORECASE,
+    # 仅校验前导 SELECT/WITH 不足以覆盖 PostgreSQL 的 writable CTE，
+    # 例如 `WITH changed AS (DELETE ...) SELECT ...` 仍然会写数据。
+    FORBIDDEN_KEYWORDS = frozenset(
+        {
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "MERGE",
+            "ALTER",
+            "DROP",
+            "TRUNCATE",
+            "CREATE",
+            "GRANT",
+            "REVOKE",
+            "COMMENT",
+        }
     )
-    LEADING_PATTERN = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
+    ALLOWED_LEADING_KEYWORDS = frozenset({"SELECT", "WITH"})
 
     def validate(self, document: DslDocument) -> None:
         if document.context is not None:
@@ -26,54 +44,49 @@ class SqlSafetyValidator:
             self._validate_sql(step, "steps[{0}]".format(index))
 
     def _validate_sql(self, node: SqlNode, path: str) -> None:
-        sql = node.sql_template.strip()
-        normalized_sql = self._normalize_sql(sql)
-        if not self.LEADING_PATTERN.search(normalized_sql):
-            raise DSLValidationError(
-                "{0}.sql_template only SELECT/WITH queries are allowed.".format(path),
-                code=ValidationErrorCode.NON_READONLY_SQL,
-            )
-        if self.FORBIDDEN_PATTERN.search(normalized_sql):
-            raise DSLValidationError(
-                "{0}.sql_template contains non-read-only SQL keyword.".format(path),
-                code=ValidationErrorCode.NON_READONLY_SQL,
-            )
-        if ";" in normalized_sql.rstrip(";"):
+        statements = self._parse_statements(node.sql_template)
+        if len(statements) != 1:
             raise DSLValidationError(
                 "{0}.sql_template multiple statements are not supported.".format(path),
                 code=ValidationErrorCode.NON_READONLY_SQL,
             )
 
+        statement = statements[0]
+        leading_keyword = self._get_leading_keyword(statement)
+        if leading_keyword not in self.ALLOWED_LEADING_KEYWORDS:
+            raise DSLValidationError(
+                "{0}.sql_template only SELECT/WITH queries are allowed.".format(path),
+                code=ValidationErrorCode.NON_READONLY_SQL,
+            )
+
+        if self._find_forbidden_keyword(statement) is not None:
+            raise DSLValidationError(
+                "{0}.sql_template contains non-read-only SQL keyword.".format(path),
+                code=ValidationErrorCode.NON_READONLY_SQL,
+            )
+
     @staticmethod
-    def _normalize_sql(sql: str) -> str:
-        chars = list(sql)
-        index = 0
-        length = len(chars)
-        while index < length:
-            if sql.startswith("--", index):
-                end = sql.find("\n", index)
-                end = length if end == -1 else end
-                for pointer in range(index, end):
-                    chars[pointer] = " "
-                index = end
+    def _parse_statements(sql: str) -> list[Statement]:
+        return [statement for statement in sqlparse.parse(sql) if str(statement).strip()]
+
+    @staticmethod
+    def _get_leading_keyword(statement: Statement) -> str:
+        for token in SqlSafetyValidator._iter_significant_tokens(statement):
+            return token.normalized
+        return ""
+
+    @staticmethod
+    def _find_forbidden_keyword(statement: Statement) -> Optional[str]:
+        for token in SqlSafetyValidator._iter_significant_tokens(statement):
+            if not token.is_keyword:
                 continue
-            if sql.startswith("/*", index):
-                end = sql.find("*/", index + 2)
-                end = length - 2 if end == -1 else end
-                for pointer in range(index, min(end + 2, length)):
-                    chars[pointer] = " "
-                index = min(end + 2, length)
+            if token.normalized in SqlSafetyValidator.FORBIDDEN_KEYWORDS:
+                return token.normalized
+        return None
+
+    @staticmethod
+    def _iter_significant_tokens(statement: Statement) -> Iterator[Token]:
+        for token in statement.flatten():
+            if token.is_whitespace or token.ttype in sql_tokens.Comment:
                 continue
-            if sql[index] in {"'", '"'}:
-                quote = sql[index]
-                chars[index] = " "
-                index += 1
-                while index < length:
-                    chars[index] = " "
-                    if sql[index] == quote and sql[index - 1] != "\\":
-                        index += 1
-                        break
-                    index += 1
-                continue
-            index += 1
-        return "".join(chars)
+            yield token
