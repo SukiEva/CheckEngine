@@ -4,7 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Literal, Mapping, Optional, Sequence
+
+NODE_TYPE_SQL = "sql"
+RESULT_MODE_RECORD = "record"
+RESULT_MODE_RECORDS = "records"
+FAIL_MODE_SUB_REPEAT = "sub_repeat"
+FAIL_MODE_FULL_REPEAT = "full_repeat"
+FAIL_MODE_SINGLE = "single"
+EXISTS_DECISION = "exists"
+
+NodeType = Literal["sql"]
+ResultMode = Literal["record", "records"]
+FailMode = Literal["sub_repeat", "full_repeat", "single"]
 
 
 def _deep_freeze(value: Any) -> Any:
@@ -32,7 +44,7 @@ class FailPolicy:
     """失败判定与消息渲染配置。"""
 
     decision: str
-    mode: str
+    mode: FailMode
     message_cn: str
     message_en: str
     divider: Optional[str] = None
@@ -44,9 +56,9 @@ class FailPolicy:
 class SqlNode:
     """SQL 类型节点的通用字段。"""
 
-    type: str
+    type: NodeType
     datasource: str
-    result_mode: str
+    result_mode: ResultMode
     sql_template: str
     sql_params: Mapping[str, Any] = field(default_factory=dict)
     outputs: Sequence[str] = field(default_factory=list)

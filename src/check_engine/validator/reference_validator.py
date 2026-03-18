@@ -6,7 +6,16 @@ import re
 from collections.abc import Mapping
 from typing import NoReturn
 
-from ..dsl.models import ContextNode, DslDocument, FailPolicy, StepNode, VariableDefinition
+from ..dsl import (
+    ContextNode,
+    DslDocument,
+    EXISTS_DECISION,
+    FAIL_MODE_SINGLE,
+    RESULT_MODE_RECORDS,
+    FailPolicy,
+    StepNode,
+    VariableDefinition,
+)
 from ..exceptions import DSLValidationError, ValidationErrorCode
 
 
@@ -30,6 +39,8 @@ class ReferenceValidator:
 
         for index, precheck in enumerate(document.prechecks):
             self._validate_sql_params(precheck.sql_params, document, available_steps=set(), available_variables=all_variables, step_map=step_map)
+            if precheck.on_fail is None:
+                continue
             self._validate_fail_policy(precheck.on_fail, document, available_steps=set(), available_variables=all_variables, path=f"prechecks[{index}].on_fail", step_map=step_map)
 
         available_steps: set[str] = set()
@@ -141,7 +152,7 @@ class ReferenceValidator:
         path: str,
         step_map: dict[str, StepNode],
     ) -> None:
-        if policy.decision != "exists":
+        if policy.decision != EXISTS_DECISION:
             for reference in self._extract_references(policy.decision):
                 self._validate_reference(
                     reference,
@@ -165,7 +176,7 @@ class ReferenceValidator:
                     path=f"{path}.{field_name}",
                     step_map=step_map,
                 )
-                if path == "on_fail" and policy.mode == "single":
+                if path == "on_fail" and policy.mode == FAIL_MODE_SINGLE:
                     self._validate_single_mode_message_reference(reference, step_map, f"{path}.{field_name}")
 
     def _validate_reference(
@@ -223,7 +234,7 @@ class ReferenceValidator:
         parts = self._split_reference(reference)
         if len(parts) == 3 and parts[0] == "steps":
             step = self._find_step(step_map, parts[1])
-            if step.result_mode == "records":
+            if step.result_mode == RESULT_MODE_RECORDS:
                 self._raise(
                     ValidationErrorCode.INVALID_MESSAGE_TEMPLATE,
                     f"{path} cannot reference array outputs in single mode: {reference}",
@@ -232,7 +243,8 @@ class ReferenceValidator:
     def _extract_references(self, text: str) -> list[str]:
         return self.PATH_PATTERN.findall(text)
 
-    def _split_reference(self, reference: str) -> list[str]:
+    @staticmethod
+    def _split_reference(reference: str) -> list[str]:
         return reference[1:].split(".") if reference.startswith("$") else []
 
     def _find_step(self, step_map: dict[str, StepNode], step_name: str) -> StepNode:
@@ -241,5 +253,6 @@ class ReferenceValidator:
         self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"Step not found: {step_name}")
         raise AssertionError("unreachable")
 
-    def _raise(self, code: ValidationErrorCode, message: str) -> NoReturn:
+    @staticmethod
+    def _raise(code: ValidationErrorCode, message: str) -> NoReturn:
         raise DSLValidationError(message, code=code)

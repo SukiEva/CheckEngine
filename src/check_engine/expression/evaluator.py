@@ -10,7 +10,7 @@ from types import CodeType
 from typing import Any
 
 from ..exceptions import DSLExecutionError, ExecutionErrorCode
-from ..runtime.state import ExecutionState
+from ..runtime import ExecutionState
 
 
 @dataclass(frozen=True)

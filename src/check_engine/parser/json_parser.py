@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence, cast
 
-from ..dsl.models import (
+from ..dsl import (
     ConsumeSpec,
     ContextNode,
     DslDocument,
+    FailMode,
     FailPolicy,
+    NodeType,
     PrecheckNode,
+    ResultMode,
     StepNode,
     VariableCondition,
     VariableDefinition,
@@ -91,15 +94,7 @@ class JsonDslParser:
     def _parse_context(self, value: Any) -> ContextNode:
         path = DslField.CONTEXT.value
         mapping = self._expect_dict(value, path)
-        return ContextNode(
-            type=self._expect_string(mapping.get(DslField.TYPE.value), f"{path}.{DslField.TYPE.value}"),
-            datasource=self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{path}.{DslField.DATASOURCE.value}"),
-            result_mode=self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{path}.{DslField.RESULT_MODE.value}"),
-            sql_template=self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{path}.{DslField.SQL_TEMPLATE.value}"),
-            sql_params=self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{path}.{DslField.SQL_PARAMS.value}"),
-            outputs=self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{path}.{DslField.OUTPUTS.value}"),
-            description=self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{path}.{DslField.DESCRIPTION.value}"),
-        )
+        return ContextNode(**self._parse_sql_node_fields(mapping, path))
 
     def _parse_variables(self, value: Any) -> Mapping[str, VariableDefinition]:
         path = DslField.VARIABLES.value
@@ -134,17 +129,12 @@ class JsonDslParser:
         for index, item in enumerate(items):
             node_path = f"{path}[{index}]"
             mapping = self._expect_dict(item, node_path)
+            sql_node_fields = self._parse_sql_node_fields(mapping, node_path)
             nodes.append(
                 PrecheckNode(
                     name=self._expect_string(mapping.get(DslField.NAME.value), f"{node_path}.{DslField.NAME.value}"),
-                    description=self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{node_path}.{DslField.DESCRIPTION.value}"),
-                    type=self._expect_string(mapping.get(DslField.TYPE.value), f"{node_path}.{DslField.TYPE.value}"),
-                    datasource=self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{node_path}.{DslField.DATASOURCE.value}"),
-                    result_mode=self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{node_path}.{DslField.RESULT_MODE.value}"),
-                    sql_template=self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{node_path}.{DslField.SQL_TEMPLATE.value}"),
-                    sql_params=self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{node_path}.{DslField.SQL_PARAMS.value}"),
-                    outputs=self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{node_path}.{DslField.OUTPUTS.value}"),
                     on_fail=self._parse_fail_policy(mapping.get(DslField.ON_FAIL.value), f"{node_path}.{DslField.ON_FAIL.value}"),
+                    **sql_node_fields,
                 )
             )
         return nodes
@@ -158,6 +148,7 @@ class JsonDslParser:
             mapping = self._expect_dict(item, node_path)
             consumes_path = f"{node_path}.{DslField.CONSUMES.value}"
             raw_consumes = self._expect_list(mapping.get(DslField.CONSUMES.value, []), consumes_path)
+            sql_node_fields = self._parse_sql_node_fields(mapping, node_path)
             consumes = [
                 ConsumeSpec(
                     from_path=self._expect_string(
@@ -174,14 +165,8 @@ class JsonDslParser:
             nodes.append(
                 StepNode(
                     name=self._expect_string(mapping.get(DslField.NAME.value), f"{node_path}.{DslField.NAME.value}"),
-                    description=self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{node_path}.{DslField.DESCRIPTION.value}"),
-                    type=self._expect_string(mapping.get(DslField.TYPE.value), f"{node_path}.{DslField.TYPE.value}"),
-                    datasource=self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{node_path}.{DslField.DATASOURCE.value}"),
-                    result_mode=self._expect_string(mapping.get(DslField.RESULT_MODE.value), f"{node_path}.{DslField.RESULT_MODE.value}"),
-                    sql_template=self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{node_path}.{DslField.SQL_TEMPLATE.value}"),
-                    sql_params=self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{node_path}.{DslField.SQL_PARAMS.value}"),
-                    outputs=self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{node_path}.{DslField.OUTPUTS.value}"),
                     consumes=consumes,
+                    **sql_node_fields,
                 )
             )
         return nodes
@@ -190,7 +175,7 @@ class JsonDslParser:
         mapping = self._expect_dict(value, path)
         return FailPolicy(
             decision=self._expect_string(mapping.get(DslField.DECISION.value), f"{path}.{DslField.DECISION.value}"),
-            mode=self._expect_string(mapping.get(DslField.MODE.value), f"{path}.{DslField.MODE.value}"),
+            mode=self._expect_fail_mode(mapping.get(DslField.MODE.value), f"{path}.{DslField.MODE.value}"),
             message_cn=self._expect_string(mapping.get(DslField.MESSAGE_CN.value), f"{path}.{DslField.MESSAGE_CN.value}"),
             message_en=self._expect_string(mapping.get(DslField.MESSAGE_EN.value), f"{path}.{DslField.MESSAGE_EN.value}"),
             divider=self._optional_string(mapping.get(DslField.DIVIDER.value), f"{path}.{DslField.DIVIDER.value}"),
@@ -202,17 +187,43 @@ class JsonDslParser:
         items = self._expect_list(value, path)
         return [self._expect_string(item, f"{path}[{index}]") for index, item in enumerate(items)]
 
-    def _expect_dict(self, value: Any, path: str) -> Mapping[str, Any]:
+    def _parse_sql_node_fields(self, mapping: Mapping[str, Any], path: str) -> dict[str, Any]:
+        return {
+            "type": self._expect_node_type(mapping.get(DslField.TYPE.value), f"{path}.{DslField.TYPE.value}"),
+            "datasource": self._expect_string(mapping.get(DslField.DATASOURCE.value), f"{path}.{DslField.DATASOURCE.value}"),
+            "result_mode": self._expect_result_mode(mapping.get(DslField.RESULT_MODE.value), f"{path}.{DslField.RESULT_MODE.value}"),
+            "sql_template": self._expect_string(mapping.get(DslField.SQL_TEMPLATE.value), f"{path}.{DslField.SQL_TEMPLATE.value}"),
+            "sql_params": self._expect_dict(mapping.get(DslField.SQL_PARAMS.value, {}), f"{path}.{DslField.SQL_PARAMS.value}"),
+            "outputs": self._parse_string_list(mapping.get(DslField.OUTPUTS.value, []), f"{path}.{DslField.OUTPUTS.value}"),
+            "description": self._optional_string(mapping.get(DslField.DESCRIPTION.value), f"{path}.{DslField.DESCRIPTION.value}"),
+        }
+
+    @staticmethod
+    def _expect_node_type(value: Any, path: str) -> NodeType:
+        return cast(NodeType, JsonDslParser._expect_string(value, path))
+
+    @staticmethod
+    def _expect_result_mode(value: Any, path: str) -> ResultMode:
+        return cast(ResultMode, JsonDslParser._expect_string(value, path))
+
+    @staticmethod
+    def _expect_fail_mode(value: Any, path: str) -> FailMode:
+        return cast(FailMode, JsonDslParser._expect_string(value, path))
+
+    @staticmethod
+    def _expect_dict(value: Any, path: str) -> Mapping[str, Any]:
         if not isinstance(value, dict):
             raise DSLParseError(f"{path} must be an object.")
         return value
 
-    def _expect_list(self, value: Any, path: str) -> Sequence[Any]:
+    @staticmethod
+    def _expect_list(value: Any, path: str) -> Sequence[Any]:
         if not isinstance(value, list):
             raise DSLParseError(f"{path} must be a list.")
         return value
 
-    def _expect_string(self, value: Any, path: str) -> str:
+    @staticmethod
+    def _expect_string(value: Any, path: str) -> str:
         if not isinstance(value, str) or not value.strip():
             raise DSLParseError(f"{path} must be a non-empty string.")
         return value

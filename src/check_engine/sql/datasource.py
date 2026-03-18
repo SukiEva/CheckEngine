@@ -15,6 +15,7 @@ class SessionLike(Protocol):
 
     def execute(self, statement: Any, params: Mapping[str, Any]) -> Any:
         """执行 SQL。"""
+        ...
 
 
 @runtime_checkable
@@ -23,6 +24,7 @@ class DatasourceLike(Protocol):
 
     def get_session(self) -> AbstractContextManager[SessionLike] | Iterator[SessionLike]:
         """返回 Session 上下文管理器或可包装的生成器。"""
+        ...
 
 
 @runtime_checkable
@@ -31,6 +33,7 @@ class DatasourceRegistry(Protocol):
 
     def get(self, name: str) -> DatasourceLike:
         """根据名称返回数据源对象。"""
+        ...
 
 
 class StaticDatasourceRegistry:

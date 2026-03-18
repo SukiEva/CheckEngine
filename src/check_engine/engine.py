@@ -5,17 +5,19 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, TypeVar
 
-from .dsl.models import DslDocument, PrecheckNode, SqlNode, VariableDefinition
+from .dsl import DslDocument, EXISTS_DECISION, PrecheckNode, SqlNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
 from .exceptions import DSLExecutionError, DSLValidationError, ValidationErrorCode
 from .parser import JsonDslParser
 from .renderer import MessageRenderer
 from .result import ResultBuilder
-from .runtime.state import ExecutionResult, ExecutionState, NodeExecutionResult
-from .sql import SqlExecutor
+from .runtime import ExecutionResult, ExecutionState, NodeExecutionResult
+from .sql import DatasourceRegistry, SqlExecutor
 from .validator import DslValidator
+
+RuntimeValueT = TypeVar("RuntimeValueT")
 
 
 @dataclass(frozen=True)
@@ -78,7 +80,7 @@ class DslEngine:
         self,
         dsl_text: str,
         input_data: Mapping[str, Any],
-        datasource_registry: Any,
+        datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult:
         return self.execute_compiled(self.compile(dsl_text), input_data, datasource_registry)
 
@@ -86,7 +88,7 @@ class DslEngine:
         self,
         document: DslDocument,
         input_data: Mapping[str, Any],
-        datasource_registry: Any,
+        datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult:
         return self.execute_compiled(self._compile_document(document), input_data, datasource_registry)
 
@@ -94,7 +96,7 @@ class DslEngine:
         self,
         compiled_dsl: CompiledDsl,
         input_data: Mapping[str, Any],
-        datasource_registry: Any,
+        datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult:
         document = compiled_dsl.document
         state = ExecutionState.new(input_data=input_data)
@@ -125,38 +127,48 @@ class DslEngine:
         self,
         document: DslDocument,
         state: ExecutionState,
-        datasource_registry: Any,
-    ) -> ExecutionResult | None:
+        datasource_registry: DatasourceRegistry,
+    ) -> Optional[ExecutionResult]:
         if document.context is None:
             return None
-        try:
-            result = self._execute_sql_node(
+        context_node = document.context
+        result, runtime_failure = self._run_runtime_action(
+            state=state,
+            failed_node="context",
+            action=lambda: self._execute_sql_node(
                 phase="context",
-                node=document.context,
+                node=context_node,
                 state=state,
                 datasource_registry=datasource_registry,
                 node_name="context",
-            )
-            state.set_context_result(result)
-            return None
-        except DSLExecutionError as exc:
-            return self.result_builder.build_runtime_failure(exc, state, failed_node="context")
+            ),
+        )
+        if runtime_failure is not None:
+            return runtime_failure
+        assert result is not None
+        state.set_context_result(result)
+        return None
 
     def _run_variables(
         self,
         document: DslDocument,
         compiled_dsl: CompiledDsl,
         state: ExecutionState,
-    ) -> ExecutionResult | None:
+    ) -> Optional[ExecutionResult]:
         for variable_name, definition in document.variables.items():
-            try:
-                state.variables_data[variable_name] = self._evaluate_variable(
-                    definition,
-                    compiled_dsl.variable_conditions.get(variable_name, ()),
-                    state,
-                )
-            except DSLExecutionError as exc:
-                return self.result_builder.build_runtime_failure(exc, state, failed_node=f"variables.{variable_name}")
+            compiled_conditions = compiled_dsl.variable_conditions.get(variable_name, ())
+
+            def evaluate_variable() -> Any:
+                return self._evaluate_variable(definition, compiled_conditions, state)
+
+            value, runtime_failure = self._run_runtime_action(
+                state=state,
+                failed_node=f"variables.{variable_name}",
+                action=evaluate_variable,
+            )
+            if runtime_failure is not None:
+                return runtime_failure
+            state.variables_data[variable_name] = value
         return None
 
     def _run_prechecks(
@@ -164,68 +176,100 @@ class DslEngine:
         document: DslDocument,
         compiled_dsl: CompiledDsl,
         state: ExecutionState,
-        datasource_registry: Any,
-    ) -> ExecutionResult | None:
+        datasource_registry: DatasourceRegistry,
+    ) -> Optional[ExecutionResult]:
         for precheck in document.prechecks:
-            try:
-                result = self._execute_sql_node(
+            precheck_node = precheck
+
+            def execute_precheck() -> NodeExecutionResult:
+                return self._execute_sql_node(
                     phase="precheck",
-                    node=precheck,
+                    node=precheck_node,
                     state=state,
                     datasource_registry=datasource_registry,
-                    node_name=precheck.name,
+                    node_name=precheck_node.name,
                 )
-                if self._should_fail_precheck(
-                    precheck,
-                    result.raw_rows,
-                    state,
-                    compiled_dsl.precheck_decisions.get(precheck.name),
-                ):
-                    message_cn, message_en = self.message_renderer.render(precheck.on_fail, state, result.raw_rows)
-                    return self.result_builder.build_failure(
-                        phase="precheck",
-                        failed_node=precheck.name,
-                        message_cn=message_cn,
-                        message_en=message_en,
-                        state=state,
-                    )
-            except DSLExecutionError as exc:
-                return self.result_builder.build_runtime_failure(exc, state, failed_node=precheck.name)
+
+            result, runtime_failure = self._run_runtime_action(
+                state=state,
+                failed_node=precheck.name,
+                action=execute_precheck,
+            )
+            if runtime_failure is not None:
+                return runtime_failure
+            assert result is not None
+            if self._should_fail_precheck(
+                precheck,
+                result.raw_rows,
+                state,
+                compiled_dsl.precheck_decisions.get(precheck.name),
+            ):
+                assert precheck.on_fail is not None
+                message_cn, message_en = self.message_renderer.render(precheck.on_fail, state, result.raw_rows)
+                return self.result_builder.build_failure(
+                    phase="precheck",
+                    failed_node=precheck.name,
+                    message_cn=message_cn,
+                    message_en=message_en,
+                    state=state,
+                )
         return None
 
     def _run_steps(
         self,
         document: DslDocument,
         state: ExecutionState,
-        datasource_registry: Any,
-    ) -> ExecutionResult | None:
+        datasource_registry: DatasourceRegistry,
+    ) -> Optional[ExecutionResult]:
         for step in document.steps:
-            try:
-                result = self._execute_sql_node(
+            step_node = step
+
+            def execute_step() -> NodeExecutionResult:
+                return self._execute_sql_node(
                     phase="step",
-                    node=step,
+                    node=step_node,
                     state=state,
                     datasource_registry=datasource_registry,
-                    node_name=step.name,
+                    node_name=step_node.name,
                 )
-                state.set_step_result(step.name, result)
-            except DSLExecutionError as exc:
-                return self.result_builder.build_runtime_failure(exc, state, failed_node=step.name)
+
+            result, runtime_failure = self._run_runtime_action(
+                state=state,
+                failed_node=step.name,
+                action=execute_step,
+            )
+            if runtime_failure is not None:
+                return runtime_failure
+            assert result is not None
+            state.set_step_result(step.name, result)
         return None
 
-    def _run_final_decision(self, compiled_dsl: CompiledDsl, state: ExecutionState) -> ExecutionResult | None:
-        try:
-            if self._should_fail_by_expression(compiled_dsl.on_fail_decision, state):
-                message_cn, message_en = self.message_renderer.render(compiled_dsl.document.on_fail, state)
-                return self.result_builder.build_failure(
-                    phase="final",
-                    failed_node="on_fail",
-                    message_cn=message_cn,
-                    message_en=message_en,
-                    state=state,
-                )
-        except DSLExecutionError as exc:
-            return self.result_builder.build_runtime_failure(exc, state, failed_node="on_fail")
+    def _run_final_decision(self, compiled_dsl: CompiledDsl, state: ExecutionState) -> Optional[ExecutionResult]:
+        should_fail, runtime_failure = self._run_runtime_action(
+            state=state,
+            failed_node="on_fail",
+            action=lambda: self._should_fail_by_expression(compiled_dsl.on_fail_decision, state),
+        )
+        if runtime_failure is not None:
+            return runtime_failure
+        assert should_fail is not None
+        if should_fail:
+            rendered_message, runtime_failure = self._run_runtime_action(
+                state=state,
+                failed_node="on_fail",
+                action=lambda: self.message_renderer.render(compiled_dsl.document.on_fail, state),
+            )
+            if runtime_failure is not None:
+                return runtime_failure
+            assert rendered_message is not None
+            message_cn, message_en = rendered_message
+            return self.result_builder.build_failure(
+                phase="final",
+                failed_node="on_fail",
+                message_cn=message_cn,
+                message_en=message_en,
+                state=state,
+            )
         return None
 
     def _execute_sql_node(
@@ -234,7 +278,7 @@ class DslEngine:
         phase: str,
         node: SqlNode,
         state: ExecutionState,
-        datasource_registry: Any,
+        datasource_registry: DatasourceRegistry,
         node_name: str,
     ) -> NodeExecutionResult:
         result = self.sql_executor.execute_node(
@@ -263,6 +307,14 @@ class DslEngine:
 
     def _compile_document(self, document: DslDocument) -> CompiledDsl:
         self.validator.validate(document)
+        precheck_decisions: dict[str, Optional[CompiledExpression]] = {}
+        for precheck in document.prechecks:
+            assert precheck.on_fail is not None
+            precheck_decisions[precheck.name] = (
+                None
+                if precheck.on_fail.decision == EXISTS_DECISION
+                else self._compile_expression(precheck.on_fail.decision, f"prechecks.{precheck.name}.on_fail.decision")
+            )
         return CompiledDsl(
             document=document,
             variable_conditions={
@@ -272,14 +324,7 @@ class DslEngine:
                 )
                 for variable_name, definition in document.variables.items()
             },
-            precheck_decisions={
-                precheck.name: (
-                    None
-                    if precheck.on_fail.decision == "exists"
-                    else self._compile_expression(precheck.on_fail.decision, f"prechecks.{precheck.name}.on_fail.decision")
-                )
-                for precheck in document.prechecks
-            },
+            precheck_decisions=precheck_decisions,
             on_fail_decision=self._compile_expression(document.on_fail.decision, "on_fail.decision"),
         )
 
@@ -310,7 +355,8 @@ class DslEngine:
         state: ExecutionState,
         compiled_expression: Optional[CompiledExpression],
     ) -> bool:
-        if precheck.on_fail.decision == "exists":
+        assert precheck.on_fail is not None
+        if precheck.on_fail.decision == EXISTS_DECISION:
             return len(rows) > 0
         if compiled_expression is None:
             raise ValueError("compiled_expression must not be None when precheck decision is not bare exists.")
@@ -318,3 +364,15 @@ class DslEngine:
 
     def _should_fail_by_expression(self, expression: CompiledExpression, state: ExecutionState) -> bool:
         return bool(self.expression_evaluator.evaluate_compiled(expression, state))
+
+    def _run_runtime_action(
+        self,
+        *,
+        state: ExecutionState,
+        failed_node: str,
+        action: Callable[[], RuntimeValueT],
+    ) -> tuple[Optional[RuntimeValueT], Optional[ExecutionResult]]:
+        try:
+            return action(), None
+        except DSLExecutionError as exc:
+            return None, self.result_builder.build_runtime_failure(exc, state, failed_node=failed_node)

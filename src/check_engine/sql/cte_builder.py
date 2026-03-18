@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
+from typing import Protocol
 
-from ..dsl.models import ConsumeSpec
+from ..dsl import ConsumeSpec
 from ..exceptions import DSLExecutionError
-from ..runtime.state import ExecutionState
+
+
+class CteStateLike(Protocol):
+    """CTE 构造依赖的最小状态协议。"""
+
+    def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
+        """返回可用于构造 CTE 的结果行与字段。"""
+        ...
 
 
 class CteBuilder:
     """将前序结果集转换为当前 SQL 可消费的 CTE。"""
 
-    def build(self, consumes: list[ConsumeSpec], state: ExecutionState) -> tuple[str, dict[str, Any]]:
+    def build(self, consumes: Sequence[ConsumeSpec], state: CteStateLike) -> tuple[str, dict[str, Any]]:
         if not consumes:
             return "", {}
 
@@ -30,7 +39,7 @@ class CteBuilder:
     def _build_single_cte(
         self,
         alias: str,
-        rows: list[dict[str, Any]],
+        rows: Sequence[Mapping[str, Any]],
         fields: list[str],
     ) -> tuple[str, dict[str, Any]]:
         if not fields:
@@ -55,7 +64,8 @@ class CteBuilder:
         sql = "{0}({1}) AS (VALUES {2})".format(alias, column_sql, ", ".join(value_rows))
         return sql, params
 
-    def _preserve_parameter_value(self, value: Any) -> Any:
+    @staticmethod
+    def _preserve_parameter_value(value: Any) -> Any:
         """保留参数原始对象，避免提前字符串化导致精度或格式变化。"""
 
         return value

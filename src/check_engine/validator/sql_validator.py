@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from ..dsl.models import DslDocument, SqlNode
+from ..dsl import DslDocument, SqlNode
 from ..exceptions import DSLValidationError, ValidationErrorCode
 
 
@@ -44,7 +44,8 @@ class SqlSafetyValidator:
                 code=ValidationErrorCode.NON_READONLY_SQL,
             )
 
-    def _normalize_sql(self, sql: str) -> str:
+    @staticmethod
+    def _normalize_sql(sql: str) -> str:
         chars = list(sql)
         index = 0
         length = len(chars)
