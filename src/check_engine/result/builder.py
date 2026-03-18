@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from ..exceptions import DSLExecutionError
 from ..runtime.state import ExecutionResult, ExecutionState
 
@@ -33,8 +35,8 @@ class ResultBuilder:
         message_en: str,
         state: ExecutionState,
         *,
-        error_code: str | None = None,
-        error_detail: str | None = None,
+        error_code: Optional[str] = None,
+        error_detail: Optional[str] = None,
     ) -> ExecutionResult:
         return ExecutionResult(
             passed=False,
@@ -55,7 +57,7 @@ class ResultBuilder:
         error: DSLExecutionError,
         state: ExecutionState,
         *,
-        failed_node: str | None = None,
+        failed_node: Optional[str] = None,
     ) -> ExecutionResult:
         return ExecutionResult(
             passed=False,

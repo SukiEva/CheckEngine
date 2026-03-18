@@ -127,7 +127,7 @@ class DslEngine:
         document: DslDocument,
         state: ExecutionState,
         datasource_registry: DatasourceRegistry,
-    ) -> ExecutionResult | None:
+    ) -> Optional[ExecutionResult]:
         if document.context is None:
             return None
         try:
@@ -148,7 +148,7 @@ class DslEngine:
         document: DslDocument,
         compiled_dsl: CompiledDsl,
         state: ExecutionState,
-    ) -> ExecutionResult | None:
+    ) -> Optional[ExecutionResult]:
         for variable_name, definition in document.variables.items():
             try:
                 state.variables_data[variable_name] = self._evaluate_variable(
@@ -166,7 +166,7 @@ class DslEngine:
         compiled_dsl: CompiledDsl,
         state: ExecutionState,
         datasource_registry: DatasourceRegistry,
-    ) -> ExecutionResult | None:
+    ) -> Optional[ExecutionResult]:
         for precheck in document.prechecks:
             try:
                 result = self._execute_sql_node(
@@ -199,7 +199,7 @@ class DslEngine:
         document: DslDocument,
         state: ExecutionState,
         datasource_registry: DatasourceRegistry,
-    ) -> ExecutionResult | None:
+    ) -> Optional[ExecutionResult]:
         for step in document.steps:
             try:
                 result = self._execute_sql_node(
@@ -214,7 +214,7 @@ class DslEngine:
                 return self.result_builder.build_runtime_failure(exc, state, failed_node=step.name)
         return None
 
-    def _run_final_decision(self, compiled_dsl: CompiledDsl, state: ExecutionState) -> ExecutionResult | None:
+    def _run_final_decision(self, compiled_dsl: CompiledDsl, state: ExecutionState) -> Optional[ExecutionResult]:
         try:
             if self._should_fail_by_expression(compiled_dsl.on_fail_decision, state):
                 message_cn, message_en = self.message_renderer.render(compiled_dsl.document.on_fail, state)
