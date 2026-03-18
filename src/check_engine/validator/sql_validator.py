@@ -44,7 +44,8 @@ class SqlSafetyValidator:
                 code=ValidationErrorCode.NON_READONLY_SQL,
             )
 
-    def _normalize_sql(self, sql: str) -> str:
+    @staticmethod
+    def _normalize_sql(sql: str) -> str:
         chars = list(sql)
         index = 0
         length = len(chars)

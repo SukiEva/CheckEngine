@@ -188,14 +188,16 @@ class ExecutionState:
 
         return self._rows_and_fields(self.step_results[step_name])
 
-    def _rows_and_fields(self, result: NodeExecutionResult) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
+    @staticmethod
+    def _rows_and_fields(result: NodeExecutionResult) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
         rows = result.as_rows()
         fields = list(result.exported_fields)
         if not fields and rows:
             fields = list(rows[0].keys())
         return rows, fields
 
-    def _resolve_from_mapping(self, mapping: Mapping[str, Any], parts: list[str], reference: str) -> Any:
+    @staticmethod
+    def _resolve_from_mapping(mapping: Mapping[str, Any], parts: list[str], reference: str) -> Any:
         current: Any = mapping
         for part in parts:
             if not isinstance(current, Mapping):
@@ -245,5 +247,6 @@ class ExecutionState:
             )
         return current
 
-    def _is_projectable_sequence(self, value: Any) -> bool:
+    @staticmethod
+    def _is_projectable_sequence(value: Any) -> bool:
         return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))

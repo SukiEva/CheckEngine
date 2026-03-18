@@ -9,7 +9,8 @@ from ..runtime.state import ExecutionResult, ExecutionState
 class ResultBuilder:
     """统一构建最终返回结构。"""
 
-    def build_pass(self, state: ExecutionState) -> ExecutionResult:
+    @staticmethod
+    def build_pass(state: ExecutionState) -> ExecutionResult:
         return ExecutionResult(
             passed=True,
             phase="pass",
@@ -24,8 +25,8 @@ class ResultBuilder:
             executed_nodes=tuple(state.executed_nodes),
         )
 
+    @staticmethod
     def build_failure(
-        self,
         phase: str,
         failed_node: str,
         message_cn: str,
@@ -49,8 +50,8 @@ class ResultBuilder:
             executed_nodes=tuple(state.executed_nodes),
         )
 
+    @staticmethod
     def build_runtime_failure(
-        self,
         error: DSLExecutionError,
         state: ExecutionState,
         *,

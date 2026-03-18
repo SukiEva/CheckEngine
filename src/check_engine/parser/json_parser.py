@@ -202,17 +202,20 @@ class JsonDslParser:
         items = self._expect_list(value, path)
         return [self._expect_string(item, f"{path}[{index}]") for index, item in enumerate(items)]
 
-    def _expect_dict(self, value: Any, path: str) -> Mapping[str, Any]:
+    @staticmethod
+    def _expect_dict(value: Any, path: str) -> Mapping[str, Any]:
         if not isinstance(value, dict):
             raise DSLParseError(f"{path} must be an object.")
         return value
 
-    def _expect_list(self, value: Any, path: str) -> Sequence[Any]:
+    @staticmethod
+    def _expect_list(value: Any, path: str) -> Sequence[Any]:
         if not isinstance(value, list):
             raise DSLParseError(f"{path} must be a list.")
         return value
 
-    def _expect_string(self, value: Any, path: str) -> str:
+    @staticmethod
+    def _expect_string(value: Any, path: str) -> str:
         if not isinstance(value, str) or not value.strip():
             raise DSLParseError(f"{path} must be a non-empty string.")
         return value

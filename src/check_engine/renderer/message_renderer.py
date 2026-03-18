@@ -191,18 +191,21 @@ class MessageRenderer:
     def _is_global_reference_token(self, token: str) -> bool:
         return token.startswith("$") or self.IMPLICIT_PATH_PATTERN.match(token) is not None
 
-    def _resolve_global_token(self, token: str, state: ExecutionState) -> Any:
+    @staticmethod
+    def _resolve_global_token(token: str, state: ExecutionState) -> Any:
         if token.startswith("$"):
             return state.resolve_reference(token)
         return state.resolve_path(token)
 
-    def _split_format_token(self, token: str) -> tuple[str, Optional[str]]:
+    @staticmethod
+    def _split_format_token(token: str) -> tuple[str, Optional[str]]:
         if ":" not in token:
             return token, None
         name, format_spec = token.split(":", 1)
         return name.strip(), format_spec
 
-    def _resolve_full_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
+    @staticmethod
+    def _resolve_full_repeat_divider(policy: FailPolicy, locale: str) -> str:
         if locale == "cn":
             if policy.divider_cn is not None:
                 return policy.divider_cn
@@ -215,7 +218,8 @@ class MessageRenderer:
             return policy.divider
         return " "
 
-    def _resolve_sub_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
+    @staticmethod
+    def _resolve_sub_repeat_divider(policy: FailPolicy, locale: str) -> str:
         if policy.divider is not None:
             return policy.divider
         if locale == "cn":
@@ -232,7 +236,8 @@ class MessageRenderer:
             )
         return policy.divider_en
 
-    def _stringify(self, value: Any) -> str:
+    @staticmethod
+    def _stringify(value: Any) -> str:
         if value is None:
             return ""
         return str(value)

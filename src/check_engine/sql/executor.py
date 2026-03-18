@@ -60,7 +60,8 @@ class SqlExecutor:
             exported_fields=exported_fields,
         )
 
-    def _resolve_sql_params(self, sql_params: Mapping[str, Any], state: ExecutionStateLike) -> dict[str, Any]:
+    @staticmethod
+    def _resolve_sql_params(sql_params: Mapping[str, Any], state: ExecutionStateLike) -> dict[str, Any]:
         resolved: dict[str, Any] = {}
         for key, value in sql_params.items():
             resolved[key] = state.resolve_reference(value) if isinstance(value, str) and value.startswith("$") else value
@@ -81,7 +82,8 @@ class SqlExecutor:
             return f"{leading_prefix}WITH {cte_definitions}, {remainder}"
         return cte_sql + " " + sql_template
 
-    def _split_leading_comments(self, sql: str) -> tuple[str, str]:
+    @staticmethod
+    def _split_leading_comments(sql: str) -> tuple[str, str]:
         index = 0
         length = len(sql)
         while index < length:
@@ -125,7 +127,8 @@ class SqlExecutor:
             iterable_rows = mappings if hasattr(mappings, "__iter__") else mappings.all()
             return [dict(row) for row in iterable_rows]
 
-    def _fetch_record_rows(self, mappings: Any) -> list[Any]:
+    @staticmethod
+    def _fetch_record_rows(mappings: Any) -> list[Any]:
         if hasattr(mappings, "fetchmany"):
             return list(mappings.fetchmany(2))
 
@@ -137,7 +140,8 @@ class SqlExecutor:
                 break
         return rows
 
-    def _open_session(self, datasource: DatasourceLike) -> Any:
+    @staticmethod
+    def _open_session(datasource: DatasourceLike) -> Any:
         session_or_cm = datasource.get_session()
         if hasattr(session_or_cm, "__enter__") and hasattr(session_or_cm, "__exit__"):
             return session_or_cm
@@ -168,7 +172,8 @@ class SqlExecutor:
             projected_rows.append({field: row[field] for field in fields})
         return projected_rows, fields
 
-    def _ensure_output_columns_exist(self, row: Mapping[str, Any], fields: list[str]) -> None:
+    @staticmethod
+    def _ensure_output_columns_exist(row: Mapping[str, Any], fields: list[str]) -> None:
         if not fields:
             return
         missing_fields = [field for field in fields if field not in row]
@@ -178,7 +183,8 @@ class SqlExecutor:
                 code=ExecutionErrorCode.OUTPUT_COLUMN_MISMATCH,
             )
 
-    def _result_mismatch_code(self, node_name: str) -> ExecutionErrorCode:
+    @staticmethod
+    def _result_mismatch_code(node_name: str) -> ExecutionErrorCode:
         if node_name == "context":
             return ExecutionErrorCode.CONTEXT_RESULT_MISMATCH
         return ExecutionErrorCode.STEP_RESULT_MISMATCH

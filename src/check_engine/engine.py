@@ -15,6 +15,7 @@ from .renderer import MessageRenderer
 from .result import ResultBuilder
 from .runtime.state import ExecutionResult, ExecutionState, NodeExecutionResult
 from .sql import SqlExecutor
+from .sql.datasource import DatasourceRegistry
 from .validator import DslValidator
 
 
@@ -78,7 +79,7 @@ class DslEngine:
         self,
         dsl_text: str,
         input_data: Mapping[str, Any],
-        datasource_registry: Any,
+        datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult:
         return self.execute_compiled(self.compile(dsl_text), input_data, datasource_registry)
 
@@ -86,7 +87,7 @@ class DslEngine:
         self,
         document: DslDocument,
         input_data: Mapping[str, Any],
-        datasource_registry: Any,
+        datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult:
         return self.execute_compiled(self._compile_document(document), input_data, datasource_registry)
 
@@ -94,7 +95,7 @@ class DslEngine:
         self,
         compiled_dsl: CompiledDsl,
         input_data: Mapping[str, Any],
-        datasource_registry: Any,
+        datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult:
         document = compiled_dsl.document
         state = ExecutionState.new(input_data=input_data)
@@ -125,7 +126,7 @@ class DslEngine:
         self,
         document: DslDocument,
         state: ExecutionState,
-        datasource_registry: Any,
+        datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult | None:
         if document.context is None:
             return None
@@ -164,7 +165,7 @@ class DslEngine:
         document: DslDocument,
         compiled_dsl: CompiledDsl,
         state: ExecutionState,
-        datasource_registry: Any,
+        datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult | None:
         for precheck in document.prechecks:
             try:
@@ -197,7 +198,7 @@ class DslEngine:
         self,
         document: DslDocument,
         state: ExecutionState,
-        datasource_registry: Any,
+        datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult | None:
         for step in document.steps:
             try:
@@ -234,7 +235,7 @@ class DslEngine:
         phase: str,
         node: SqlNode,
         state: ExecutionState,
-        datasource_registry: Any,
+        datasource_registry: DatasourceRegistry,
         node_name: str,
     ) -> NodeExecutionResult:
         result = self.sql_executor.execute_node(

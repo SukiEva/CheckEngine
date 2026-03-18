@@ -55,7 +55,8 @@ class CteBuilder:
         sql = "{0}({1}) AS (VALUES {2})".format(alias, column_sql, ", ".join(value_rows))
         return sql, params
 
-    def _preserve_parameter_value(self, value: Any) -> Any:
+    @staticmethod
+    def _preserve_parameter_value(value: Any) -> Any:
         """保留参数原始对象，避免提前字符串化导致精度或格式变化。"""
 
         return value

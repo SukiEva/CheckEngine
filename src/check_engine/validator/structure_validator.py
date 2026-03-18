@@ -168,5 +168,6 @@ class StructureValidator:
             if node.name in precheck_names:
                 self._raise(ValidationErrorCode.DUPLICATE_NODE_NAME, f"steps[{index}].name conflicts with precheck name: {node.name}")
 
-    def _raise(self, code: ValidationErrorCode, message: str) -> NoReturn:
+    @staticmethod
+    def _raise(code: ValidationErrorCode, message: str) -> NoReturn:
         raise DSLValidationError(message, code=code)

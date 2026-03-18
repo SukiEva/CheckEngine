@@ -232,7 +232,8 @@ class ReferenceValidator:
     def _extract_references(self, text: str) -> list[str]:
         return self.PATH_PATTERN.findall(text)
 
-    def _split_reference(self, reference: str) -> list[str]:
+    @staticmethod
+    def _split_reference(reference: str) -> list[str]:
         return reference[1:].split(".") if reference.startswith("$") else []
 
     def _find_step(self, step_map: dict[str, StepNode], step_name: str) -> StepNode:
@@ -241,5 +242,6 @@ class ReferenceValidator:
         self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"Step not found: {step_name}")
         raise AssertionError("unreachable")
 
-    def _raise(self, code: ValidationErrorCode, message: str) -> NoReturn:
+    @staticmethod
+    def _raise(code: ValidationErrorCode, message: str) -> NoReturn:
         raise DSLValidationError(message, code=code)
