@@ -306,7 +306,7 @@
     <main class="panel canvas-wrap">
       <div class="canvas-toolbar">
         <button class="btn-primary" id="btnReset">清空画布</button>
-        <button class="btn-muted" id="btnArrange">自动纵向排布</button>
+        <button class="btn-muted" id="btnArrange">自动横向排布</button>
         <button class="btn-muted" id="btnImport">导入 JSON</button>
         <button class="btn-muted" id="btnPreview">预览 JSON</button>
         <button class="btn-muted" id="btnExport">下载 JSON</button>
@@ -363,6 +363,14 @@
       dragOffsetY: 0,
     };
 
+    const LAYOUT = {
+      startX: 80,
+      startY: 120,
+      colGap: 320,
+      rowGap: 170,
+      maxRowsPerColumn: 5,
+    };
+
     function makeNode(def, x, y) {
       return {
         id: makeNodeId(),
@@ -375,6 +383,8 @@
         datasource: 'saas_db',
         resultMode: def.type === 'context' ? 'record' : 'records',
         decision: def.type === 'on_fail' ? 'exists($steps.some_step.some_output)' : 'exists',
+        variableValue: '',
+        variableDefault: '',
         failMode: 'single',
         messageCn: '',
         messageEn: '',
@@ -509,6 +519,16 @@
           <label>Decision（用于 precheck/on_fail/variable）</label>
           <input id="f_decision" value="${escapeAttr(node.decision || '')}" />
         </div>
+        ${node.type === 'variable' ? `
+        <div class="field">
+          <label>命中条件后的赋值（value）</label>
+          <input id="f_variable_value" value="${escapeAttr(node.variableValue || '')}" placeholder="例如 1000 或 \"PASS\"" />
+        </div>
+        <div class="field">
+          <label>默认值（default）</label>
+          <input id="f_variable_default" value="${escapeAttr(node.variableDefault || '')}" placeholder="例如 500" />
+        </div>
+        ` : ''}
         ${node.type === 'precheck' || node.type === 'on_fail' ? `
         <div class="field">
           <label>Fail Mode</label>
@@ -554,6 +574,10 @@
       document.getElementById('btnSaveNode').addEventListener('click', () => {
         node.title = document.getElementById('f_title').value.trim();
         node.decision = document.getElementById('f_decision').value.trim();
+        if (node.type === 'variable') {
+          node.variableValue = document.getElementById('f_variable_value').value.trim();
+          node.variableDefault = document.getElementById('f_variable_default').value.trim();
+        }
         if (node.type === 'context' || node.type === 'precheck' || node.type === 'step') {
           node.sql = document.getElementById('f_sql').value;
           node.sqlParamsText = document.getElementById('f_sql_params').value.trim() || '{}';
@@ -904,9 +928,11 @@
         }
 
         if (node.type === 'variable') {
+          const variableValue = parseInputValue(node.variableValue);
+          const variableDefault = parseInputValue(node.variableDefault);
           variables[key] = {
-            when: node.decision ? [{ condition: node.decision, value: `TODO_${key}` }] : [],
-            default: `TODO_${key}`,
+            when: node.decision ? [{ condition: node.decision, value: variableValue }] : [],
+            default: variableDefault,
           };
         }
 
@@ -1004,27 +1030,20 @@
       const normalizedPayload = normalizeDslPayload(payload);
       validateDslPayload(normalizedPayload);
       const nextNodes = [];
-      let cursorX = 80;
-      let cursorY = 80;
-      const moveCursor = () => {
-        cursorY += 140;
-        if (cursorY > 980) {
-          cursorX += 300;
-          cursorY = 80;
-        }
-      };
       const pushNode = (nodeType, title, extra) => {
         nextNodes.push({
           id: makeNodeId(),
           type: nodeType,
           title: title || `${nodeType}_${nextNodes.length + 1}`,
-          x: cursorX,
-          y: cursorY,
+          x: 0,
+          y: 0,
           sql: extra.sql || 'SELECT 1 AS ok;',
           sqlParamsText: extra.sqlParamsText || '{}',
           datasource: extra.datasource || 'saas_db',
           resultMode: extra.resultMode || (nodeType === 'context' ? 'record' : 'records'),
           decision: extra.decision || 'exists',
+          variableValue: extra.variableValue || '',
+          variableDefault: extra.variableDefault || '',
           failMode: extra.failMode || 'single',
           messageCn: extra.messageCn || '',
           messageEn: extra.messageEn || '',
@@ -1036,7 +1055,6 @@
             ? extra.stepOrder
             : (nodeType === 'step' ? nextNodes.filter((node) => node.type === 'step').length + 1 : null),
         });
-        moveCursor();
       };
 
       const contextValue = normalizedPayload.context || null;
@@ -1054,8 +1072,12 @@
       Object.entries(variableMap).forEach(([key, value]) => {
         const whenItems = Array.isArray(value.when) ? value.when : [];
         const decisionText = whenItems.length ? String(whenItems[0].condition || '') : '';
+        const variableValue = whenItems.length ? normalizeValueToInput(whenItems[0].value) : '';
+        const variableDefault = normalizeValueToInput(value.default);
         pushNode('variable', key, {
           decision: decisionText,
+          variableValue,
+          variableDefault,
         });
       });
 
@@ -1096,7 +1118,7 @@
         });
       }
 
-      return nextNodes;
+      return applyHorizontalLayout(nextNodes);
     }
 
     function saveLocal() {
@@ -1106,6 +1128,9 @@
     function normalizeStateNodes() {
       let stepCursor = 1;
       state.nodes = state.nodes.map((node) => {
+        const safeStepOrder = node.type === 'step'
+          ? (Number.isFinite(node.stepOrder) ? node.stepOrder : stepCursor)
+          : null;
         const normalized = {
           ...node,
           sqlParamsText: typeof node.sqlParamsText === 'string' ? node.sqlParamsText : '{}',
@@ -1115,9 +1140,11 @@
           messageCn: typeof node.messageCn === 'string' ? node.messageCn : '',
           messageEn: typeof node.messageEn === 'string' ? node.messageEn : '',
           divider: typeof node.divider === 'string' ? node.divider : '',
-          stepOrder: node.type === 'step' ? (Number.isFinite(node.stepOrder) ? node.stepOrder : stepCursor) : null,
+          variableValue: typeof node.variableValue === 'string' ? node.variableValue : '',
+          variableDefault: typeof node.variableDefault === 'string' ? node.variableDefault : '',
+          stepOrder: safeStepOrder,
         };
-        if (node.type === 'step' && !Number.isFinite(node.stepOrder)) {
+        if (node.type === 'step') {
           stepCursor += 1;
         }
         return normalized;
@@ -1269,6 +1296,64 @@
       });
     }
 
+    function normalizeValueToInput(value) {
+      if (value === null || typeof value === 'undefined') {
+        return '';
+      }
+      if (typeof value === 'string') {
+        return value;
+      }
+      return JSON.stringify(value);
+    }
+
+    function parseInputValue(rawText) {
+      if (!rawText || !rawText.trim()) {
+        return '';
+      }
+      const trimmed = rawText.trim();
+      try {
+        return JSON.parse(trimmed);
+      } catch (_error) {
+        return trimmed;
+      }
+    }
+
+    function applyHorizontalLayout(nodes) {
+      const placedNodes = [...nodes];
+      const buckets = {
+        context: [],
+        variable: [],
+        precheck: [],
+        step: [],
+        on_fail: [],
+      };
+      placedNodes.forEach((node) => {
+        if (Object.prototype.hasOwnProperty.call(buckets, node.type)) {
+          buckets[node.type].push(node);
+        }
+      });
+
+      buckets.step.sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
+
+      const orderedColumns = [
+        buckets.context,
+        buckets.variable,
+        buckets.precheck,
+        buckets.step,
+        buckets.on_fail,
+      ];
+
+      orderedColumns.forEach((columnNodes, columnIndex) => {
+        columnNodes.forEach((node, rowIndex) => {
+          const wrappedColIndex = columnIndex + Math.floor(rowIndex / LAYOUT.maxRowsPerColumn);
+          const wrappedRowIndex = rowIndex % LAYOUT.maxRowsPerColumn;
+          node.x = LAYOUT.startX + wrappedColIndex * LAYOUT.colGap;
+          node.y = LAYOUT.startY + wrappedRowIndex * LAYOUT.rowGap;
+        });
+      });
+      return placedNodes;
+    }
+
     function validateDslPayload(payload) {
       const allowedTopFields = ['context', 'variables', 'prechecks', 'steps', 'on_fail'];
       const unknownTopFields = Object.keys(payload).filter((key) => !allowedTopFields.includes(key));
@@ -1361,20 +1446,10 @@
     });
 
     document.getElementById('btnArrange').addEventListener('click', () => {
-      let x = 60;
-      let y = 80;
-      state.nodes.forEach((node, index) => {
-        node.x = x;
-        node.y = y;
-        y += 140;
-        if ((index + 1) % 7 === 0) {
-          x += 280;
-          y = 80;
-        }
-      });
+      state.nodes = applyHorizontalLayout(state.nodes);
       renderCanvas();
       saveLocal();
-      statusText.textContent = '已自动排布。';
+      statusText.textContent = '已按执行阶段横向自动排布。';
     });
 
     document.getElementById('btnImport').addEventListener('click', () => {
