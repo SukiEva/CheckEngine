@@ -3,56 +3,19 @@
 from __future__ import annotations
 
 import json
-from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
 
-from ..dsl import ContextNode, DslDocument, FailPolicy, PrecheckNode, StepNode, VariableDefinition
+from ..dsl import ContextNode, DslDocument, FailPolicy, PrecheckNode, StepNode, TopLevelField, VariableDefinition
 from ..exceptions import DSLParseError
 from .node_parsers import JsonNodeParser, ParserHelpers
-
-
-class DslField(str, Enum):
-    """DSL 字段常量。"""
-
-    CONTEXT = "context"
-    VARIABLES = "variables"
-    PRECHECKS = "prechecks"
-    STEPS = "steps"
-    ON_FAIL = "on_fail"
-
-    TYPE = "type"
-    DATASOURCE = "datasource"
-    RESULT_MODE = "result_mode"
-    SQL_TEMPLATE = "sql_template"
-    SQL_PARAMS = "sql_params"
-    OUTPUTS = "outputs"
-    DESCRIPTION = "description"
-
-    WHEN = "when"
-    CONDITION = "condition"
-    VALUE = "value"
-    DEFAULT = "default"
-    NAME = "name"
-
-    CONSUMES = "consumes"
-    FROM = "from"
-    ALIAS = "alias"
-
-    DECISION = "decision"
-    MODE = "mode"
-    MESSAGE_CN = "message_cn"
-    MESSAGE_EN = "message_en"
-    DIVIDER = "divider"
-    DIVIDER_CN = "divider_cn"
-    DIVIDER_EN = "divider_en"
 
 
 class JsonDslParser:
     """将 JSON DSL 文本解析为内部数据模型。"""
 
     REQUIRED_TOP_LEVEL_KEYS = (
-        DslField.STEPS.value,
-        DslField.ON_FAIL.value,
+        TopLevelField.STEPS,
+        TopLevelField.ON_FAIL,
     )
 
     def __init__(self) -> None:
@@ -83,40 +46,40 @@ class JsonDslParser:
             raise DSLParseError(f"DSL is missing top-level blocks: {', '.join(missing)}")
 
         return DslDocument(
-            context=self._parse_context(data[DslField.CONTEXT.value]) if DslField.CONTEXT.value in data else None,
-            variables=self._parse_variables(data.get(DslField.VARIABLES.value, {})),
-            prechecks=self._parse_prechecks(data.get(DslField.PRECHECKS.value, [])),
-            steps=self._parse_steps(data[DslField.STEPS.value]),
-            on_fail=self._parse_fail_policy(data[DslField.ON_FAIL.value], DslField.ON_FAIL.value),
+            context=self._parse_context(data[TopLevelField.CONTEXT]) if TopLevelField.CONTEXT in data else None,
+            variables=self._parse_variables(data.get(TopLevelField.VARIABLES, {})),
+            prechecks=self._parse_prechecks(data.get(TopLevelField.PRECHECKS, [])),
+            steps=self._parse_steps(data[TopLevelField.STEPS]),
+            on_fail=self._parse_fail_policy(data[TopLevelField.ON_FAIL], TopLevelField.ON_FAIL),
             raw=data,
         )
 
     def _parse_context(self, value: Any) -> ContextNode:
-        path = DslField.CONTEXT.value
+        path = TopLevelField.CONTEXT
         mapping = self._expect_dict(value, path)
         return ContextNode(**self._parse_sql_node_fields(mapping, path))
 
     def _parse_variables(self, value: Any) -> Mapping[str, VariableDefinition]:
-        path = DslField.VARIABLES.value
-        return self.node_parser.parse_variables(value, path, DslField)
+        path = TopLevelField.VARIABLES
+        return self.node_parser.parse_variables(value, path)
 
     def _parse_prechecks(self, value: Any) -> Sequence[PrecheckNode]:
-        path = DslField.PRECHECKS.value
-        return self.node_parser.parse_prechecks(value, path, DslField)
+        path = TopLevelField.PRECHECKS
+        return self.node_parser.parse_prechecks(value, path)
 
     def _parse_steps(self, value: Any) -> Sequence[StepNode]:
-        path = DslField.STEPS.value
-        return self.node_parser.parse_steps(value, path, DslField)
+        path = TopLevelField.STEPS
+        return self.node_parser.parse_steps(value, path)
 
     def _parse_fail_policy(self, value: Any, path: str) -> FailPolicy:
-        return self.node_parser.parse_fail_policy(value, path, DslField)
+        return self.node_parser.parse_fail_policy(value, path)
 
     def _parse_string_list(self, value: Any, path: str) -> Sequence[str]:
         items = self._expect_list(value, path)
         return [self._expect_string(item, f"{path}[{index}]") for index, item in enumerate(items)]
 
     def _parse_sql_node_fields(self, mapping: Mapping[str, Any], path: str) -> dict[str, Any]:
-        return self.node_parser.parse_sql_node_fields(mapping, path, DslField)
+        return self.node_parser.parse_sql_node_fields(mapping, path)
 
     @staticmethod
     def _expect_dict(value: Any, path: str) -> Mapping[str, Any]:

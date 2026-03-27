@@ -8,6 +8,9 @@ from typing import Mapping, NoReturn, Sequence
 from ..dsl import (
     ContextNode,
     DslDocument,
+    ReservedNodeName,
+    TopLevelField,
+    VariableField,
     EXISTS_DECISION,
     FAIL_MODE_FULL_REPEAT,
     FAIL_MODE_SINGLE,
@@ -27,11 +30,11 @@ from ..exceptions import DSLValidationError
 class StructureValidator:
     """校验 DSL 的结构与基础约束。"""
 
-    VALID_TOP_LEVEL_FIELDS = {"context", "variables", "prechecks", "steps", "on_fail"}
+    VALID_TOP_LEVEL_FIELDS = {field for field in TopLevelField}
     VALID_SQL_NODE_TYPES = {NODE_TYPE_SQL}
     VALID_RESULT_MODES = {RESULT_MODE_RECORD, RESULT_MODE_RECORDS}
     VALID_FAIL_MODES = {FAIL_MODE_SUB_REPEAT, FAIL_MODE_FULL_REPEAT, FAIL_MODE_SINGLE}
-    RESERVED_NODE_NAMES = {"input", "context", "variables", "steps", "on_fail"}
+    RESERVED_NODE_NAMES = {field for field in ReservedNodeName}
     ALIAS_PATTERN = re.compile(r"^[A-Za-z_]\w*$")
     EXISTS_CALL_PATTERN = re.compile(r"^exists\(\s*\$[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*\)$")
 
@@ -39,11 +42,11 @@ class StructureValidator:
         self._validate_top_level_fields(document.raw)
         if document.context is not None:
             self._validate_context(document.context)
-        self._validate_variables(document.variables, document.raw.get("variables", {}))
+        self._validate_variables(document.variables, document.raw.get(TopLevelField.VARIABLES, {}))
         self._validate_prechecks(document.prechecks)
         self._validate_steps(document.steps)
         self._validate_global_node_names(document.prechecks, document.steps)
-        self._validate_fail_policy(document.on_fail, "on_fail")
+        self._validate_fail_policy(document.on_fail, TopLevelField.ON_FAIL)
 
     def _validate_top_level_fields(self, raw: Mapping[str, object]) -> None:
         unknown_fields = sorted(set(raw.keys()) - self.VALID_TOP_LEVEL_FIELDS)
@@ -58,7 +61,7 @@ class StructureValidator:
     def _validate_variables(self, variables: Mapping[str, VariableDefinition], raw_variables: Mapping[str, object]) -> None:
         for name, definition in variables.items():
             raw_definition = raw_variables.get(name)
-            if not isinstance(raw_definition, Mapping) or "default" not in raw_definition:
+            if not isinstance(raw_definition, Mapping) or VariableField.DEFAULT not in raw_definition:
                 self._raise(f"variables.{name}.default is required.")
             for index, item in enumerate(definition.when):
                 if not item.condition.strip():
@@ -123,7 +126,7 @@ class StructureValidator:
         decision = policy.decision.strip()
         if not decision:
             self._raise(f"{path}.decision must not be empty.")
-        if decision == EXISTS_DECISION and path == "on_fail":
+        if decision == EXISTS_DECISION and path == TopLevelField.ON_FAIL:
             self._raise("on_fail.decision does not support bare 'exists'; use exists($path) instead.")
         if decision != EXISTS_DECISION and decision.startswith(EXISTS_DECISION) and not self.EXISTS_CALL_PATTERN.fullmatch(decision):
             self._raise(f"{path}.decision exists syntax is invalid: {policy.decision}")
