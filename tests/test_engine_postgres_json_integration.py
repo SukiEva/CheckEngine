@@ -7,7 +7,7 @@ import os
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
+from typing import Any, Generator
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -52,7 +52,7 @@ class DslEnginePostgresJsonIntegrationTestCase(unittest.TestCase):
                 self.session_creator = sessionmaker(bind=self.engine)
 
             @contextmanager
-            def get_session(self) -> Generator[object, None, None]:
+            def get_session(self) -> Generator[Any, None, None]:
                 session = self.session_creator()
                 try:
                     yield session
