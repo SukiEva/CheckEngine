@@ -269,6 +269,24 @@
       font-size: 0.76rem;
       padding: 2px 8px;
     }
+    .node-head-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .node-delete-btn {
+      border: 1px solid #fecaca;
+      background: #fff1f2;
+      color: #b91c1c;
+      border-radius: 8px;
+      font-size: 0.72rem;
+      padding: 2px 6px;
+      cursor: pointer;
+      line-height: 1.2;
+    }
+    .node-delete-btn:hover {
+      background: #ffe4e6;
+    }
 
     .muted { color: var(--muted); }
 
@@ -453,6 +471,16 @@
 
     const FIXED_TYPES = new Set(['context', 'on_fail']);
 
+    function getDefaultDecisionByNodeType(nodeType) {
+      if (nodeType === 'on_fail') {
+        return 'exists($steps.some_step.some_output)';
+      }
+      if (nodeType === 'precheck') {
+        return 'exists';
+      }
+      return '';
+    }
+
     function makeNode(def, x, y) {
       return {
         id: makeNodeId(),
@@ -465,7 +493,7 @@
         sqlParams: [{ key: '', value: '' }],
         datasource: 'saas_db',
         resultMode: def.type === 'context' ? 'record' : 'records',
-        decision: def.type === 'on_fail' ? 'exists($steps.some_step.some_output)' : 'exists',
+        decision: getDefaultDecisionByNodeType(def.type),
         variableValue: '',
         variableDefault: '',
         failMode: 'single',
@@ -474,7 +502,6 @@
         divider: '',
         outputs: 'ok',
         consumes: '',
-        note: '',
         stepOrder: def.type === 'step' ? getNextStepOrder() : null,
         stepChildren: def.type === 'step' ? ['sql_node_1'] : [],
       };
@@ -543,7 +570,10 @@
           el.innerHTML = `
             <div class="node-head">
               <span>${node.type}</span>
-              <span>${nodeRank}</span>
+              <span class="node-head-actions">
+                <span>${nodeRank}</span>
+                <button class="node-delete-btn" type="button" data-node-delete="${node.id}">删除</button>
+              </span>
             </div>
             <div class="node-body">
               <strong>${escapeHtml(node.title || '(未命名节点)')}</strong>
@@ -553,6 +583,13 @@
             </div>
           `;
           el.addEventListener('click', () => selectNode(node.id));
+          const deleteButton = el.querySelector('[data-node-delete]');
+          if (deleteButton) {
+            deleteButton.addEventListener('click', (event) => {
+              event.stopPropagation();
+              deleteNodeById(node.id);
+            });
+          }
           laneBody.appendChild(el);
         });
       });
@@ -681,10 +718,6 @@
           <div class="field-note">输入时会联想已有 step 节点 name。</div>
           <div class="autocomplete-panel" id="ac_consumes"></div>
         </div>
-        <div class="field">
-          <label>备注</label>
-          <textarea id="f_note">${escapeHtml(node.note)}</textarea>
-        </div>
         ${node.type === 'step' ? `
         <div class="field">
           <label>Step 块内节点</label>
@@ -692,20 +725,9 @@
           <button class="btn-muted" id="btnAddStepChild" type="button">+ 添加块内节点</button>
         </div>
         ` : ''}
-        <div style="display:flex; gap:8px; flex-wrap: wrap;">
-          <button class="btn-primary" id="btnSaveNode">保存节点</button>
-          <button class="btn-danger" id="btnDeleteNode">删除节点</button>
-        </div>
       `;
 
-      if (node.type === 'context' || node.type === 'precheck' || node.type === 'step') {
-        renderSqlParamRows(node);
-      }
-      if (node.type === 'step') {
-        renderStepChildrenEditor(node);
-      }
-
-      document.getElementById('btnSaveNode').addEventListener('click', () => {
+      const persistEditorNode = () => {
         node.title = document.getElementById('f_title').value.trim();
         node.decision = document.getElementById('f_decision').value.trim();
         if (node.type === 'variable') {
@@ -727,23 +749,40 @@
         }
         node.outputs = document.getElementById('f_outputs').value.trim();
         node.consumes = document.getElementById('f_consumes').value.trim();
-        node.note = document.getElementById('f_note').value;
         if (node.type === 'step') {
           node.stepChildren = readStepChildrenRows();
         }
         renderCanvas();
         saveLocal();
-        statusText.innerHTML = `<strong>已保存：</strong>${escapeHtml(node.title || node.id)}`;
-      });
+        statusText.classList.remove('status-warn');
+        statusText.innerHTML = `<strong>已自动保存：</strong>${escapeHtml(node.title || node.id)}`;
+      };
 
-      document.getElementById('btnDeleteNode').addEventListener('click', () => {
-        state.nodes = state.nodes.filter((item) => item.id !== node.id);
-        applyStepVerticalLayout();
-        state.selectedId = null;
-        renderCanvas();
-        renderEditor();
-        saveLocal();
-        statusText.innerHTML = '已删除节点。';
+      if (node.type === 'context' || node.type === 'precheck' || node.type === 'step') {
+        renderSqlParamRows(node, persistEditorNode);
+      }
+      if (node.type === 'step') {
+        renderStepChildrenEditor(node, persistEditorNode);
+      }
+
+      [
+        'f_title',
+        'f_decision',
+        'f_variable_value',
+        'f_variable_default',
+        'f_sql',
+        'f_datasource',
+        'f_result_mode',
+        'f_fail_mode',
+        'f_message_cn',
+        'f_message_en',
+        'f_divider',
+        'f_outputs',
+        'f_consumes',
+      ].forEach((elementId) => {
+        const input = document.getElementById(elementId);
+        if (!input) return;
+        input.addEventListener('change', persistEditorNode);
       });
 
       if (node.type === 'step') {
@@ -756,6 +795,19 @@
       }
 
       bindAutocompletes(node);
+    }
+
+    function deleteNodeById(nodeId) {
+      state.nodes = state.nodes.filter((item) => item.id !== nodeId);
+      applyStepVerticalLayout();
+      if (state.selectedId === nodeId) {
+        state.selectedId = null;
+      }
+      renderCanvas();
+      renderEditor();
+      saveLocal();
+      statusText.classList.remove('status-warn');
+      statusText.innerHTML = '已删除节点。';
     }
 
     function getNextStepOrder() {
@@ -781,7 +833,7 @@
       `;
     }
 
-    function renderSqlParamRows(node) {
+    function renderSqlParamRows(node, onChanged) {
       const rowsContainer = document.getElementById('f_sql_params_rows');
       const addButton = document.getElementById('btnAddSqlParam');
       if (!rowsContainer || !addButton) return;
@@ -800,6 +852,12 @@
             rows.splice(removeIndex, 1);
             if (!rows.length) rows.push({ key: '', value: '' });
             drawRows();
+            if (typeof onChanged === 'function') onChanged();
+          });
+        });
+        rowsContainer.querySelectorAll('[data-sql-key], [data-sql-value]').forEach((input) => {
+          input.addEventListener('change', () => {
+            if (typeof onChanged === 'function') onChanged();
           });
         });
       };
@@ -807,6 +865,7 @@
       addButton.addEventListener('click', () => {
         rows.push({ key: '', value: '' });
         drawRows();
+        if (typeof onChanged === 'function') onChanged();
       });
     }
 
@@ -839,7 +898,7 @@
       return entries.length ? entries : [{ key: '', value: '' }];
     }
 
-    function renderStepChildrenEditor(node) {
+    function renderStepChildrenEditor(node, onChanged) {
       const wrapper = document.getElementById('f_step_children');
       const addButton = document.getElementById('btnAddStepChild');
       if (!wrapper || !addButton) return;
@@ -857,6 +916,12 @@
             rows.splice(removeIndex, 1);
             if (!rows.length) rows.push('');
             drawRows();
+            if (typeof onChanged === 'function') onChanged();
+          });
+        });
+        wrapper.querySelectorAll('[data-step-child]').forEach((input) => {
+          input.addEventListener('change', () => {
+            if (typeof onChanged === 'function') onChanged();
           });
         });
       };
@@ -864,6 +929,7 @@
       addButton.addEventListener('click', () => {
         rows.push('');
         drawRows();
+        if (typeof onChanged === 'function') onChanged();
       });
     }
 
@@ -1411,7 +1477,7 @@
           sqlParams: Array.isArray(extra.sqlParams) ? extra.sqlParams : objectToSqlParamsRows(parseJsonObjectOrEmpty(extra.sqlParamsText || '{}')),
           datasource: extra.datasource || 'saas_db',
           resultMode: extra.resultMode || (nodeType === 'context' ? 'record' : 'records'),
-          decision: extra.decision || 'exists',
+          decision: typeof extra.decision === 'string' ? extra.decision : getDefaultDecisionByNodeType(nodeType),
           variableValue: extra.variableValue || '',
           variableDefault: extra.variableDefault || '',
           failMode: extra.failMode || 'single',
@@ -1420,7 +1486,6 @@
           divider: extra.divider || '',
           outputs: extra.outputs || '',
           consumes: extra.consumes || '',
-          note: extra.note || '',
           stepChildren: Array.isArray(extra.stepChildren) ? extra.stepChildren : (nodeType === 'step' ? ['sql_node_1'] : []),
           stepOrder: Object.prototype.hasOwnProperty.call(extra, 'stepOrder')
             ? extra.stepOrder
