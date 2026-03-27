@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Playground 数据源配置</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f5f7fb;
+      color: #111827;
+    }
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px 16px;
+      display: grid;
+      gap: 14px;
+    }
+    .panel {
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      background: #ffffff;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }
+    .panel-head {
+      padding: 14px 16px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #fafafa;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .panel-body {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    button {
+      border: 1px solid transparent;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-muted { background: #f3f4f6; color: #374151; }
+    .btn-danger { background: #fee2e2; color: #dc2626; }
+    .hint { font-size: 0.82rem; color: #6b7280; }
+    #datasourceList {
+      display: grid;
+      gap: 10px;
+    }
+    .datasource-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    .datasource-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+    input {
+      width: 100%;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 7px 9px;
+      font: inherit;
+    }
+    #status {
+      font-size: 0.82rem;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2 style="margin:0; font-size:1rem;">Playground 全局数据源配置</h2>
+          <div class="hint">该页面配置会写入 SQLite，并被 Playground 运行 DSL 时全局共享。</div>
+        </div>
+        <a href="/" style="font-size:0.85rem; color:#2563eb; text-decoration:none;">返回设计器</a>
+      </div>
+      <div class="panel-body">
+        <div class="toolbar">
+          <button type="button" class="btn-muted" id="btnReload">从 SQLite 载入</button>
+          <button type="button" class="btn-primary" id="btnAdd">新增数据源</button>
+          <button type="button" class="btn-primary" id="btnSave">保存配置</button>
+          <span class="hint">仅支持 PostgreSQL（postgresql:// 或 postgresql+psycopg2://）。</span>
+        </div>
+        <div id="datasourceList"></div>
+        <div id="status">尚未加载。</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const datasourceList = document.getElementById('datasourceList');
+    const statusText = document.getElementById('status');
+
+    function createDatasourceCard(data) {
+      const card = document.createElement('div');
+      card.className = 'datasource-card';
+      card.innerHTML = `
+        <div class="datasource-grid">
+          <input data-role="name" placeholder="datasource 名称，例如 saas_db" />
+          <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" />
+          <button class="btn-danger" type="button" data-role="remove">删除</button>
+        </div>
+      `;
+      card.querySelector('[data-role="name"]').value = data && data.name ? data.name : '';
+      card.querySelector('[data-role="db_url"]').value = data && data.db_url ? data.db_url : '';
+      card.querySelector('[data-role="remove"]').addEventListener('click', () => card.remove());
+      return card;
+    }
+
+    function readDatasourceConfig() {
+      return Array.from(datasourceList.children).map((card) => ({
+        name: card.querySelector('[data-role="name"]').value.trim(),
+        db_url: card.querySelector('[data-role="db_url"]').value.trim(),
+      })).filter((item) => item.name || item.db_url);
+    }
+
+    function renderDatasourceCards(datasourceItems) {
+      datasourceList.innerHTML = '';
+      datasourceItems.forEach((item) => datasourceList.appendChild(createDatasourceCard(item)));
+    }
+
+    async function loadDatasourceConfigFromServer() {
+      statusText.textContent = '正在从 SQLite 载入数据源配置...';
+      try {
+        const response = await fetch('/api/datasource-configs');
+        const payload = await response.json();
+        if (!response.ok) {
+          statusText.textContent = `载入失败: ${payload.detail || payload.error || '未知错误'}`;
+          return;
+        }
+        const datasources = Array.isArray(payload.datasources) ? payload.datasources : [];
+        renderDatasourceCards(datasources);
+        statusText.textContent = datasources.length
+          ? `已载入 ${datasources.length} 个数据源。`
+          : 'SQLite 中暂无数据源配置，请新增后保存。';
+      } catch (error) {
+        statusText.textContent = `载入失败: ${error.message || '网络错误'}`;
+      }
+    }
+
+    async function saveDatasourceConfigToServer() {
+      const datasourcePayload = readDatasourceConfig();
+      if (!datasourcePayload.length) {
+        statusText.textContent = '请至少配置一个数据源后再保存。';
+        return;
+      }
+      statusText.textContent = '正在保存到 SQLite...';
+      try {
+        const response = await fetch('/api/datasource-configs', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ datasources: datasourcePayload }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          statusText.textContent = `保存失败: ${payload.detail || payload.error || '未知错误'}`;
+          return;
+        }
+        renderDatasourceCards(Array.isArray(payload.datasources) ? payload.datasources : datasourcePayload);
+        statusText.textContent = `已保存 ${payload.saved || datasourcePayload.length} 个数据源到 SQLite。`;
+      } catch (error) {
+        statusText.textContent = `保存失败: ${error.message || '网络错误'}`;
+      }
+    }
+
+    document.getElementById('btnReload').addEventListener('click', () => {
+      loadDatasourceConfigFromServer();
+    });
+
+    document.getElementById('btnSave').addEventListener('click', () => {
+      saveDatasourceConfigToServer();
+    });
+
+    document.getElementById('btnAdd').addEventListener('click', () => {
+      datasourceList.appendChild(createDatasourceCard({ name: '', db_url: '' }));
+    });
+
+    loadDatasourceConfigFromServer();
+  </script>
+</body>
+</html>
