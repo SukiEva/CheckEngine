@@ -17,9 +17,11 @@ class ExecutionStateLike(Protocol):
     """执行器依赖的最小运行时状态协议。"""
 
     def resolve_reference(self, reference: str) -> Any:
+        """解析运行时引用。"""
         ...
 
     def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
+        """获取 consumes 依赖的行数据。"""
         ...
 
 

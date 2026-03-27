@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol, TypeVar
 
@@ -31,6 +31,7 @@ class SqlExecutorLike(Protocol):
         datasource_registry: DatasourceRegistry,
         node_name: str,
     ) -> NodeExecutionResult:
+        """执行单个 SQL 节点并返回导出结果。"""
         ...
 
 
@@ -43,6 +44,7 @@ class MessageRendererLike(Protocol):
         state: ExecutionState,
         rows: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> tuple[str, str]:
+        """渲染失败消息。"""
         ...
 
 

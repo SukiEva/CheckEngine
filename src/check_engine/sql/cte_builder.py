@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
-from typing import Protocol
+from typing import Any, Protocol
 
 from ..dsl import ConsumeSpec
 from ..exceptions import DSLExecutionError
-
 
 class ConsumableRowsState(Protocol):
     """CTE 构造依赖的最小状态协议。"""
 
     def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
+        """读取可供 consumes 使用的行集和输出字段。"""
         ...
 
 

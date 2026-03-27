@@ -14,6 +14,7 @@ class SessionLike(Protocol):
     """最小 SQLAlchemy Session 协议。"""
 
     def execute(self, statement: Any, params: Mapping[str, Any]) -> Any:
+        """执行 SQL。"""
         ...
 
 
@@ -22,6 +23,7 @@ class DatasourceLike(Protocol):
     """可供执行器使用的数据源协议。"""
 
     def get_session(self) -> Union[AbstractContextManager[SessionLike], Iterator[SessionLike]]:
+        """返回会话上下文或会话迭代器。"""
         ...
 
 
@@ -30,6 +32,7 @@ class DatasourceRegistry(Protocol):
     """数据源注册表协议。"""
 
     def get(self, name: str) -> DatasourceLike:
+        """根据名称返回数据源。"""
         ...
 
 

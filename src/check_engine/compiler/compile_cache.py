@@ -2,34 +2,40 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections import OrderedDict, namedtuple
 import hashlib
-from typing import Generic, Optional, Protocol, TypeVar
+from typing import Generic, Optional, TypeVar
 
 CompiledValueT = TypeVar("CompiledValueT")
 CompileCacheInfo = namedtuple("CompileCacheInfo", ["hits", "misses", "maxsize", "currsize"])
 
 
-class CompileCacheLike(Protocol, Generic[CompiledValueT]):
+class CompileCacheLike(ABC, Generic[CompiledValueT]):
     """编译缓存策略协议。"""
 
+    @abstractmethod
     def get(self, dsl_text: str) -> Optional[CompiledValueT]:
-        ...
+        """读取缓存。"""
 
+    @abstractmethod
     def put(self, dsl_text: str, value: CompiledValueT) -> None:
-        ...
+        """写入缓存。"""
 
+    @abstractmethod
     def clear(self) -> None:
-        ...
+        """清空缓存。"""
 
+    @abstractmethod
     def info(self) -> Optional[CompileCacheInfo]:
-        ...
+        """返回缓存统计信息。"""
 
+    @abstractmethod
     def debug_keys(self) -> tuple[str, ...]:
-        ...
+        """返回调试用途的缓存 key 列表。"""
 
 
-class NoopCompileCache(Generic[CompiledValueT]):
+class NoopCompileCache(CompileCacheLike[CompiledValueT]):
     """关闭缓存时使用的空实现。"""
 
     def get(self, dsl_text: str) -> Optional[CompiledValueT]:
@@ -48,7 +54,7 @@ class NoopCompileCache(Generic[CompiledValueT]):
         return tuple()
 
 
-class HashedLruCompileCache(Generic[CompiledValueT]):
+class HashedLruCompileCache(CompileCacheLike[CompiledValueT]):
     """基于哈希 key 的 LRU 编译缓存。"""
 
     def __init__(self, maxsize: int) -> None:

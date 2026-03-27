@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine.dsl.models import SqlNode
 from check_engine.exceptions import DSLExecutionError
+from check_engine.sql.datasource import DatasourceLike, DatasourceRegistry, SessionLike
 from check_engine.sql.executor import SqlExecutor
 
 
@@ -38,17 +39,18 @@ class _FakeExecuteResult:
         return self.mappings_result
 
 
-class _FakeSession:
+class _FakeSession(SessionLike):
     def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows
         self.last_result: Optional[_FakeExecuteResult] = None
 
-    def execute(self, _sql: Any, _params: Any) -> _FakeExecuteResult:
+    def execute(self, statement: Any, params: Any) -> _FakeExecuteResult:
+        del statement, params
         self.last_result = _FakeExecuteResult(self._rows)
         return self.last_result
 
 
-class _FakeDatasource:
+class _FakeDatasource(DatasourceLike):
     def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows
         self.last_session: Optional[_FakeSession] = None
@@ -66,7 +68,7 @@ class _MissingSessionDatasource:
     pass
 
 
-class _StaticRegistry:
+class _StaticRegistry(DatasourceRegistry):
     def __init__(self, mapping: dict[str, Any]) -> None:
         self._mapping = mapping
 

@@ -2,22 +2,24 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any
 
 from ..exceptions import DSLExecutionError
 
 
-class ScopeResolver(Protocol):
+class ScopeResolver(ABC):
     """作用域解析策略接口。"""
 
+    @abstractmethod
     def resolve(self, parts: Sequence[str], reference: str) -> Any:
         """根据路径片段解析引用值。"""
 
 
 @dataclass
-class MappingScopeResolver:
+class MappingScopeResolver(ScopeResolver):
     """基于 Mapping 的简单作用域解析器。"""
 
     source: Mapping[str, Any]
@@ -36,7 +38,7 @@ class MappingScopeResolver:
 
 
 @dataclass
-class StepScopeResolver:
+class StepScopeResolver(ScopeResolver):
     """$steps 作用域解析器，支持序列投影。"""
 
     step_data: MutableMapping[str, Any]

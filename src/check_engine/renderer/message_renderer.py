@@ -9,10 +9,10 @@ from typing import Any, Mapping, Optional
 from ..dsl import FAIL_MODE_FULL_REPEAT, FAIL_MODE_SINGLE, FAIL_MODE_SUB_REPEAT, FailPolicy
 from ..exceptions import DSLExecutionError
 from ..runtime import ExecutionState
-from .mode_renderers import FullRepeatModeRenderer, ModeRenderer, SingleModeRenderer, SubRepeatModeRenderer
+from .mode_renderers import FullRepeatModeRenderer, MessageRenderHelpers, ModeRenderer, SingleModeRenderer, SubRepeatModeRenderer
 
 
-class MessageRenderer:
+class MessageRenderer(MessageRenderHelpers):
     """按 DSL mode 渲染失败消息。"""
 
     PLACEHOLDER_PATTERN = re.compile(r"\{([^{}]+)\}")
