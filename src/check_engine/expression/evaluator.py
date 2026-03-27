@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from types import CodeType
 from typing import Any
 
-from ..exceptions import DSLExecutionError, ExecutionErrorCode
+from ..exceptions import DSLExecutionError
 from ..runtime import ExecutionState
 
 
@@ -116,7 +116,6 @@ class ExpressionEvaluator:
         except Exception as exc:  # noqa: BLE001
             raise DSLExecutionError(
                 f"Expression evaluation failed: {expression.source}",
-                code=ExecutionErrorCode.EXPRESSION_EVALUATION_FAILED,
             ) from exc
 
     @staticmethod

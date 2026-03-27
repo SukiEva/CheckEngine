@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
@@ -9,7 +10,7 @@ from typing import Any, Callable, Optional, Protocol, TypeVar
 
 from .dsl import DslDocument, EXISTS_DECISION, FailPolicy, PrecheckNode, SqlNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
-from .exceptions import DSLExecutionError, DSLValidationError, ValidationErrorCode
+from .exceptions import DSLExecutionError, DSLValidationError
 from .parser import JsonDslParser
 from .renderer import MessageRenderer
 from .result import ResultBuilder
@@ -71,6 +72,7 @@ class DslEngine:
         message_renderer: Optional[MessageRendererLike] = None,
         result_builder: Optional[ResultBuilder] = None,
         compile_cache_size: int = 128,
+        logger: Optional[logging.Logger] = None,
     ) -> None:
         if compile_cache_size < 0:
             raise ValueError("compile_cache_size must be greater than or equal to 0.")
@@ -82,6 +84,7 @@ class DslEngine:
         self.message_renderer = message_renderer or MessageRenderer()
         self.result_builder = result_builder or ResultBuilder()
         self.compile_cache_size = compile_cache_size
+        self.logger = logger or logging.getLogger(__name__)
         self._compile_callable = self._build_compile_callable(compile_cache_size)
 
     def compile(self, dsl_text: str) -> CompiledDsl:
@@ -332,7 +335,6 @@ class DslEngine:
             if precheck.on_fail is None:
                 raise DSLValidationError(
                     f"prechecks.{precheck.name}.on_fail must be provided.",
-                    code=ValidationErrorCode.MISSING_REQUIRED_FIELD,
                 )
             precheck_decisions[precheck.name] = (
                 None
@@ -356,9 +358,9 @@ class DslEngine:
         try:
             return self.expression_evaluator.compile(expression)
         except DSLExecutionError as exc:
+            self.logger.exception("Failed to compile expression at %s: %s", path, expression)
             raise DSLValidationError(
                 f"{path} is invalid: {exc}",
-                code=ValidationErrorCode.INVALID_EXPRESSION,
             ) from exc
 
     def _evaluate_variable(
@@ -400,4 +402,5 @@ class DslEngine:
         try:
             return action(), None
         except DSLExecutionError as exc:
+            self.logger.exception("Runtime execution failed at node %s", failed_node)
             return None, self.result_builder.build_runtime_failure(exc, state, failed_node=failed_node)

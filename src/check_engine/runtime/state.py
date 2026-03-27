@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Optional
 
-from ..exceptions import DSLExecutionError, ExecutionErrorCode
+from ..exceptions import DSLExecutionError
 
 
 def _to_plain_data(value: Any) -> Any:
@@ -62,7 +62,6 @@ class ExecutionResult:
     passed: bool
     phase: str
     failed_node: Optional[str]
-    error_code: Optional[str]
     message_cn: Optional[str]
     message_en: Optional[str]
     context: Mapping[str, Any]
@@ -75,7 +74,6 @@ class ExecutionResult:
             "passed": self.passed,
             "phase": self.phase,
             "failed_node": self.failed_node,
-            "error_code": self.error_code,
             "message_cn": self.message_cn,
             "message_en": self.message_en,
             "context": _to_plain_data(self.context),
@@ -141,7 +139,7 @@ class ExecutionState:
             step_name = self._require_step_name(parts, reference)
             step_value = self._get_step_data(step_name, reference)
             return self._resolve_from_mapping_or_object(step_value, parts[2:], reference)
-        raise DSLExecutionError(f"Unknown scope: {reference}", code=ExecutionErrorCode.EXECUTION_ERROR)
+        raise DSLExecutionError(f"Unknown scope: {reference}")
 
     def resolve_path(self, path: str) -> Any:
         return self.resolve_reference(path if path.startswith("$") else "$" + path)
@@ -152,27 +150,23 @@ class ExecutionState:
             if self.context_result is None:
                 raise DSLExecutionError(
                     "Context result is missing; cannot build consumes.",
-                    code=ExecutionErrorCode.EXECUTION_ERROR,
                 )
             return self._rows_and_fields(self.context_result)
 
         if parts[0] != "steps":
             raise DSLExecutionError(
                 f"Unsupported consumes.from reference: {from_path}",
-                code=ExecutionErrorCode.EXECUTION_ERROR,
             )
 
         if len(parts) != 2:
             raise DSLExecutionError(
                 f"consumes.from only supports referencing whole step outputs: {from_path}",
-                code=ExecutionErrorCode.EXECUTION_ERROR,
             )
 
         step_name = self._require_step_name(parts, from_path)
         if step_name not in self.step_results:
             raise DSLExecutionError(
                 f"consumes.from references a non-existent step output: {from_path}",
-                code=ExecutionErrorCode.EXECUTION_ERROR,
             )
 
         return self._rows_and_fields(self.step_results[step_name])
@@ -192,10 +186,9 @@ class ExecutionState:
             if not isinstance(current, Mapping):
                 raise DSLExecutionError(
                     f"Cannot resolve reference path further: {reference}",
-                    code=ExecutionErrorCode.EXECUTION_ERROR,
                 )
             if part not in current:
-                raise DSLExecutionError(f"Referenced field does not exist: {reference}", code=ExecutionErrorCode.EXECUTION_ERROR)
+                raise DSLExecutionError(f"Referenced field does not exist: {reference}")
             current = current[part]
         return current
 
@@ -208,7 +201,6 @@ class ExecutionState:
                 if part not in current:
                     raise DSLExecutionError(
                         f"Referenced field does not exist: {reference}",
-                        code=ExecutionErrorCode.EXECUTION_ERROR,
                     )
                 current = current[part]
                 continue
@@ -219,12 +211,10 @@ class ExecutionState:
                     if not isinstance(item, Mapping):
                         raise DSLExecutionError(
                             f"Cannot resolve reference path further: {reference}",
-                            code=ExecutionErrorCode.EXECUTION_ERROR,
                         )
                     if part not in item:
                         raise DSLExecutionError(
                             f"Referenced field does not exist: {reference}",
-                            code=ExecutionErrorCode.EXECUTION_ERROR,
                         )
                     projected.append(item[part])
                 current = projected
@@ -232,7 +222,6 @@ class ExecutionState:
 
             raise DSLExecutionError(
                 f"Cannot resolve reference path further: {reference}",
-                code=ExecutionErrorCode.EXECUTION_ERROR,
             )
         return current
 
@@ -243,7 +232,7 @@ class ExecutionState:
     @staticmethod
     def _parse_reference_parts(reference: str) -> list[str]:
         if not reference.startswith("$"):
-            raise DSLExecutionError(f"Invalid reference path: {reference}", code=ExecutionErrorCode.EXECUTION_ERROR)
+            raise DSLExecutionError(f"Invalid reference path: {reference}")
         return reference[1:].split(".")
 
     @staticmethod
@@ -251,11 +240,10 @@ class ExecutionState:
         if len(parts) < 2 or not parts[1]:
             raise DSLExecutionError(
                 f"Steps reference must include step name: {reference}",
-                code=ExecutionErrorCode.EXECUTION_ERROR,
             )
         return parts[1]
 
     def _get_step_data(self, step_name: str, reference: str) -> Any:
         if step_name not in self.step_data:
-            raise DSLExecutionError(f"Step execution result not found: {reference}", code=ExecutionErrorCode.EXECUTION_ERROR)
+            raise DSLExecutionError(f"Step execution result not found: {reference}")
         return self.step_data[step_name]

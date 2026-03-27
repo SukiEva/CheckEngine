@@ -3,23 +3,25 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Optional, cast
 import unittest
+from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine.engine import DslEngine
 from check_engine.sql import DatasourceRegistry
-from check_engine.exceptions import DSLExecutionError, ExecutionErrorCode
+from check_engine.exceptions import DSLExecutionError, DSLValidationError
 from check_engine.runtime.state import ExecutionResult, NodeExecutionResult
 
 
 class _FailingSqlExecutor:
     def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
-        raise DSLExecutionError("SQL node execution failed: step_a", code=ExecutionErrorCode.SQL_EXECUTION_FAILED)
+        raise DSLExecutionError("SQL node execution failed: step_a")
 
 
 class _PassingSqlExecutor:
@@ -33,7 +35,7 @@ class _PassingSqlExecutor:
 
 class _FailingMessageRenderer:
     def render(self, policy: Any, state: Any, rows: Optional[Any] = None) -> tuple[str, str]:
-        raise DSLExecutionError("Message render failed", code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED)
+        raise DSLExecutionError("Message render failed")
 
 
 class _UnusedRegistry:
@@ -65,8 +67,9 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             }
         )
 
-    def test_execute_returns_runtime_failure_result_with_error_code(self) -> None:
-        engine = DslEngine(sql_executor=_FailingSqlExecutor())
+    def test_execute_returns_runtime_failure_result_with_message(self) -> None:
+        logger = cast(logging.Logger, Mock(spec=logging.Logger))
+        engine = DslEngine(sql_executor=_FailingSqlExecutor(), logger=logger)
         registry = cast(DatasourceRegistry, _UnusedRegistry())
 
         result = engine.execute(self.dsl_text, {}, datasource_registry=registry)
@@ -74,9 +77,9 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "runtime")
         self.assertEqual(result.failed_node, "step_a")
-        self.assertEqual(result.error_code, ExecutionErrorCode.SQL_EXECUTION_FAILED.value)
         self.assertEqual(result.message_cn, "SQL node execution failed: step_a")
         self.assertEqual(result.message_en, "SQL node execution failed: step_a")
+        logger.exception.assert_called_once_with("Runtime execution failed at node %s", "step_a")
 
     def test_execute_returns_runtime_failure_result_with_on_fail_node(self) -> None:
         engine = DslEngine(
@@ -111,7 +114,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "runtime")
         self.assertEqual(result.failed_node, "on_fail")
-        self.assertEqual(result.error_code, ExecutionErrorCode.TEMPLATE_RENDER_FAILED.value)
+        self.assertEqual(result.message_cn, "Message render failed")
+        self.assertEqual(result.message_en, "Message render failed")
 
     def test_set_context_result_accepts_mapping_view(self) -> None:
         from check_engine.runtime.state import ExecutionState
@@ -135,7 +139,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
         self.assertTrue(result.passed)
         self.assertEqual(result.phase, "pass")
-        self.assertIsNone(result.error_code)
 
     def test_execute_compiled_reuses_shared_compiled_dsl_without_state_leak(self) -> None:
         class _InputDrivenSqlExecutor:
@@ -160,12 +163,45 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(second.steps["step_a"]["v"], 20)
         self.assertIs(compiled, engine.compile(self.dsl_text))
 
+    def test_compile_logs_exception_stack_when_expression_invalid(self) -> None:
+        logger = cast(logging.Logger, Mock(spec=logging.Logger))
+        engine = DslEngine(logger=logger)
+        invalid_dsl_text = json.dumps(
+            {
+                "steps": [
+                    {
+                        "name": "step_a",
+                        "type": "sql",
+                        "datasource": "db",
+                        "result_mode": "record",
+                        "sql_template": "select 1 as v",
+                        "sql_params": {},
+                        "outputs": ["v"],
+                    }
+                ],
+                "on_fail": {
+                    "decision": "$steps.step_a.v >",
+                    "mode": "single",
+                    "message_cn": "ok",
+                    "message_en": "ok",
+                },
+            }
+        )
+
+        with self.assertRaisesRegex(DSLValidationError, "on_fail.decision"):
+            engine.compile(invalid_dsl_text)
+
+        logger.exception.assert_called_once_with(
+            "Failed to compile expression at %s: %s",
+            "on_fail.decision",
+            "$steps.step_a.v >",
+        )
+
     def test_execution_result_to_dict_normalizes_mapping_views(self) -> None:
         result = ExecutionResult(
             passed=False,
             phase="final",
             failed_node="on_fail",
-            error_code=None,
             message_cn="x",
             message_en="y",
             context=MappingProxyType({"flow": "f1"}),
@@ -181,7 +217,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 "passed": False,
                 "phase": "final",
                 "failed_node": "on_fail",
-                "error_code": None,
                 "message_cn": "x",
                 "message_en": "y",
                 "context": {"flow": "f1"},
@@ -196,7 +231,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             passed=True,
             phase="pass",
             failed_node=None,
-            error_code=None,
             message_cn=None,
             message_en=None,
             context=MappingProxyType({"flow": "f1"}),
@@ -212,7 +246,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 "passed": True,
                 "phase": "pass",
                 "failed_node": None,
-                "error_code": None,
                 "message_cn": None,
                 "message_en": None,
                 "context": {"flow": "f1"},

@@ -9,7 +9,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine.dsl.models import FailPolicy
-from check_engine.exceptions import DSLExecutionError, ExecutionErrorCode
+from check_engine.exceptions import DSLExecutionError
 from check_engine.renderer import MessageRenderer
 from check_engine.runtime.state import ExecutionState
 
@@ -106,9 +106,9 @@ class MessageRendererTestCase(unittest.TestCase):
 
         with self.assertRaisesRegex(DSLExecutionError, "same length") as ctx:
             self.renderer.render(policy, self.state)
-        self.assertEqual(ctx.exception.code, ExecutionErrorCode.ARRAY_LENGTH_MISMATCH)
+        self.assertIn("same length", str(ctx.exception))
 
-    def test_render_single_with_multiple_rows_returns_error_code(self) -> None:
+    def test_render_single_with_multiple_rows_returns_error(self) -> None:
         policy = FailPolicy(
             decision="exists",
             mode="single",
@@ -119,7 +119,7 @@ class MessageRendererTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLExecutionError) as ctx:
             self.renderer.render(policy, self.state, rows)
-        self.assertEqual(ctx.exception.code, ExecutionErrorCode.SINGLE_MODE_MULTI_ROWS)
+        self.assertIn("single mode", str(ctx.exception))
 
     def test_render_sub_repeat_with_locale_specific_divider(self) -> None:
         policy = FailPolicy(

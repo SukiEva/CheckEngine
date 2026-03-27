@@ -16,7 +16,7 @@ from ..dsl import (
     StepNode,
     VariableDefinition,
 )
-from ..exceptions import DSLValidationError, ValidationErrorCode
+from ..exceptions import DSLValidationError
 
 
 class ReferenceValidator:
@@ -39,10 +39,7 @@ class ReferenceValidator:
 
         for index, precheck in enumerate(document.prechecks):
             if precheck.on_fail is None:
-                self._raise(
-                    ValidationErrorCode.MISSING_REQUIRED_FIELD,
-                    f"prechecks[{index}].on_fail must be provided.",
-                )
+                self._raise(f"prechecks[{index}].on_fail must be provided.")
             self._validate_sql_params(precheck.sql_params, document, available_steps=set(), available_variables=all_variables, step_map=step_map)
             self._validate_fail_policy(precheck.on_fail, document, available_steps=set(), available_variables=all_variables, path=f"prechecks[{index}].on_fail", step_map=step_map)
 
@@ -120,31 +117,19 @@ class ReferenceValidator:
         for consume in step.consumes:
             if consume.from_path == "$context":
                 if document.context is None:
-                    self._raise(
-                        ValidationErrorCode.INVALID_CONSUMES_REF,
-                        "consumes.from references $context but context block is not defined.",
-                    )
+                    self._raise("consumes.from references $context but context block is not defined.")
                 if not document.context.outputs:
-                    self._raise(
-                        ValidationErrorCode.MISSING_OUTPUTS,
-                        "consumes.from references $context but context.outputs are not declared.",
-                    )
+                    self._raise("consumes.from references $context but context.outputs are not declared.")
                 continue
 
             parts = self._split_reference(consume.from_path)
             if len(parts) != 2 or parts[0] != "steps":
-                self._raise(ValidationErrorCode.INVALID_CONSUMES_REF, f"Invalid consumes.from reference: {consume.from_path}")
+                self._raise(f"Invalid consumes.from reference: {consume.from_path}")
             if parts[1] not in available_steps:
-                self._raise(
-                    ValidationErrorCode.INVALID_CONSUMES_REF,
-                    f"consumes.from references a step that has not executed yet: {consume.from_path}",
-                )
+                self._raise(f"consumes.from references a step that has not executed yet: {consume.from_path}")
             source_step = self._find_step(step_map, parts[1])
             if not source_step.outputs:
-                self._raise(
-                    ValidationErrorCode.MISSING_OUTPUTS,
-                    f"consumes.from references step outputs that are not declared: {consume.from_path}",
-                )
+                self._raise(f"consumes.from references step outputs that are not declared: {consume.from_path}")
 
     def _validate_fail_policy(
         self,
@@ -193,55 +178,52 @@ class ReferenceValidator:
     ) -> None:
         parts = self._split_reference(reference)
         if not parts:
-            self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"{path} contains invalid reference: {reference}")
+            self._raise(f"{path} contains invalid reference: {reference}")
 
         root = parts[0]
         if root == "input":
             if len(parts) < 2:
-                self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"{path} input reference must include a field: {reference}")
+                self._raise(f"{path} input reference must include a field: {reference}")
             return
 
         if root == "context":
             if document.context is None:
-                self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"{path} references $context but context block is not defined: {reference}")
+                self._raise(f"{path} references $context but context block is not defined: {reference}")
             if len(parts) != 2:
-                self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"{path} context reference has invalid depth: {reference}")
+                self._raise(f"{path} context reference has invalid depth: {reference}")
             if parts[1] not in document.context.outputs:
-                self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"{path} references a non-exported context field: {reference}")
+                self._raise(f"{path} references a non-exported context field: {reference}")
             return
 
         if root == "variables":
             if len(parts) != 2:
-                self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"{path} variables reference has invalid depth: {reference}")
+                self._raise(f"{path} variables reference has invalid depth: {reference}")
             if parts[1] not in available_variables:
-                self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"{path} references a variable not available at this point: {reference}")
+                self._raise(f"{path} references a variable not available at this point: {reference}")
             return
 
         if root == "steps":
             if len(parts) != 3:
-                self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"{path} steps reference has invalid depth: {reference}")
+                self._raise(f"{path} steps reference has invalid depth: {reference}")
             step_name = parts[1]
             field_name = parts[2]
             if step_name not in available_steps:
-                self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"{path} references a step not available at this point: {reference}")
+                self._raise(f"{path} references a step not available at this point: {reference}")
             step = self._find_step(step_map, step_name)
             if not step.outputs:
-                self._raise(ValidationErrorCode.MISSING_OUTPUTS, f"{path} references step outputs that are not declared: {reference}")
+                self._raise(f"{path} references step outputs that are not declared: {reference}")
             if field_name not in step.outputs:
-                self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"{path} references a non-exported step field: {reference}")
+                self._raise(f"{path} references a non-exported step field: {reference}")
             return
 
-        self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"{path} contains unknown scope: {reference}")
+        self._raise(f"{path} contains unknown scope: {reference}")
 
     def _validate_single_mode_message_reference(self, reference: str, step_map: dict[str, StepNode], path: str) -> None:
         parts = self._split_reference(reference)
         if len(parts) == 3 and parts[0] == "steps":
             step = self._find_step(step_map, parts[1])
             if step.result_mode == RESULT_MODE_RECORDS:
-                self._raise(
-                    ValidationErrorCode.INVALID_MESSAGE_TEMPLATE,
-                    f"{path} cannot reference array outputs in single mode: {reference}",
-                )
+                self._raise(f"{path} cannot reference array outputs in single mode: {reference}")
 
     def _extract_references(self, text: str) -> list[str]:
         return self.PATH_PATTERN.findall(text)
@@ -253,9 +235,9 @@ class ReferenceValidator:
     def _find_step(self, step_map: dict[str, StepNode], step_name: str) -> StepNode:
         if step_name in step_map:
             return step_map[step_name]
-        self._raise(ValidationErrorCode.UNRESOLVED_PATH, f"Step not found: {step_name}")
+        self._raise(f"Step not found: {step_name}")
         raise AssertionError("unreachable")
 
     @staticmethod
-    def _raise(code: ValidationErrorCode, message: str) -> NoReturn:
-        raise DSLValidationError(message, code=code)
+    def _raise(message: str) -> NoReturn:
+        raise DSLValidationError(message)

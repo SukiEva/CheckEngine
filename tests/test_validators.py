@@ -10,7 +10,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from check_engine.exceptions import DSLParseError, DSLValidationError, ValidationErrorCode
+from check_engine.exceptions import DSLParseError, DSLValidationError
 from check_engine.parser import JsonDslParser
 from check_engine.validator import DslValidator, ReferenceValidator, StructureValidator
 
@@ -232,7 +232,7 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError) as ctx:
             self.structure_validator.validate(document)
-        self.assertEqual(ctx.exception.code, ValidationErrorCode.UNKNOWN_TOP_LEVEL_FIELD)
+        self.assertIn("Unknown top-level fields", str(ctx.exception))
 
     def test_on_fail_full_repeat_is_valid(self) -> None:
         data = json.loads(json.dumps(self.example_data))
@@ -271,7 +271,7 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError) as ctx:
             self.structure_validator.validate(document)
-        self.assertEqual(ctx.exception.code, ValidationErrorCode.RESERVED_NODE_NAME)
+        self.assertIn("reserved node name", str(ctx.exception))
 
     def test_variable_default_is_required(self) -> None:
         data = json.loads(json.dumps(self.example_data))
@@ -315,7 +315,7 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError) as ctx:
             self.reference_validator.validate(document)
-        self.assertEqual(ctx.exception.code, ValidationErrorCode.UNRESOLVED_PATH)
+        self.assertIn("references a variable not available", str(ctx.exception))
 
     def test_consumed_step_without_outputs_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
@@ -324,7 +324,7 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError) as ctx:
             self.reference_validator.validate(document)
-        self.assertEqual(ctx.exception.code, ValidationErrorCode.MISSING_OUTPUTS)
+        self.assertIn("outputs that are not declared", str(ctx.exception))
 
     def test_duplicate_consume_alias_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
@@ -338,7 +338,7 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError) as ctx:
             self.structure_validator.validate(document)
-        self.assertEqual(ctx.exception.code, ValidationErrorCode.INVALID_CONSUMES_ALIAS)
+        self.assertIn("alias is duplicated", str(ctx.exception))
 
     def test_on_fail_single_mode_disallows_records_output_reference(self) -> None:
         data = {
@@ -364,16 +364,19 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError) as ctx:
             self.reference_validator.validate(document)
-        self.assertEqual(ctx.exception.code, ValidationErrorCode.INVALID_MESSAGE_TEMPLATE)
+        self.assertIn("cannot reference array outputs in single mode", str(ctx.exception))
 
-    def test_non_readonly_sql_raises_with_error_code(self) -> None:
+    def test_non_readonly_sql_raises_with_error(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["steps"][0]["sql_template"] = "update t set c = 1"
         document = self.parser.parse(json.dumps(data))
 
         with self.assertRaises(DSLValidationError) as ctx:
             self.validator.validate(document)
-        self.assertEqual(ctx.exception.code, ValidationErrorCode.NON_READONLY_SQL)
+        self.assertTrue(
+            "only SELECT/WITH queries are allowed." in str(ctx.exception)
+            or "contains non-read-only SQL keyword." in str(ctx.exception)
+        )
 
 
     def test_context_sql_params_invalid_reference_raises(self) -> None:
@@ -408,7 +411,7 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError) as ctx:
             self.reference_validator.validate(document)
-        self.assertEqual(ctx.exception.code, ValidationErrorCode.UNRESOLVED_PATH)
+        self.assertIn("references a step not available", str(ctx.exception))
 
     def test_context_sql_params_only_allow_input_scope(self) -> None:
         data = {
@@ -473,7 +476,7 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError) as ctx:
             DslEngine().compile(json.dumps(data))
-        self.assertEqual(ctx.exception.code, ValidationErrorCode.INVALID_EXPRESSION)
+        self.assertIn("is invalid", str(ctx.exception))
 
 
 if __name__ == "__main__":
