@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import AbstractContextManager
 from typing import Any, Protocol, Union, runtime_checkable
 
-from ..exceptions import DSLExecutionError, ExecutionErrorCode
+from ..exceptions import DSLExecutionError
 
 
 @runtime_checkable
@@ -41,5 +41,5 @@ class StaticDatasourceRegistry:
 
     def get(self, name: str) -> DatasourceLike:
         if name not in self._mapping:
-            raise DSLExecutionError(f"Datasource not found: {name}", code=ExecutionErrorCode.DATASOURCE_NOT_FOUND)
+            raise DSLExecutionError(f"Datasource not found: {name}")
         return self._mapping[name]

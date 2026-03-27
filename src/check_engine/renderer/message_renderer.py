@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Any, Mapping, Optional
 
 from ..dsl import FAIL_MODE_FULL_REPEAT, FAIL_MODE_SINGLE, FAIL_MODE_SUB_REPEAT, FailPolicy
-from ..exceptions import DSLExecutionError, ExecutionErrorCode
+from ..exceptions import DSLExecutionError
 from ..runtime import ExecutionState
 
 
@@ -42,7 +42,6 @@ class MessageRenderer:
             if len(rows) > 1:
                 raise DSLExecutionError(
                     "single mode requires at most one result row.",
-                    code=ExecutionErrorCode.SINGLE_MODE_MULTI_ROWS,
                 )
             row = rows[0] if rows else None
             return self._render_once(template, state, row)
@@ -58,7 +57,6 @@ class MessageRenderer:
 
         raise DSLExecutionError(
             f"Unknown message rendering mode: {policy.mode}",
-            code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
         )
 
     def _render_sub_repeat(
@@ -99,7 +97,6 @@ class MessageRenderer:
         if len(token_lengths) != 1:
             raise DSLExecutionError(
                 "sub_repeat list placeholders must have the same length.",
-                code=ExecutionErrorCode.ARRAY_LENGTH_MISMATCH,
             )
 
         token_size = token_lengths.pop()
@@ -149,7 +146,6 @@ class MessageRenderer:
         if format_spec is None:
             raise DSLExecutionError(
                 f"Formatted placeholder must include format spec: {match.group(0)}",
-                code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
             )
         try:
             value = self._resolve_token_value(token, state, row, overrides)
@@ -159,7 +155,6 @@ class MessageRenderer:
         except Exception as exc:  # noqa: BLE001
             raise DSLExecutionError(
                 f"Failed to format placeholder: {match.group(0)}",
-                code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
             ) from exc
 
     def _resolve_token_value(
@@ -176,12 +171,10 @@ class MessageRenderer:
         if row is None:
             raise DSLExecutionError(
                 f"Cannot resolve row-level placeholder in template: {token}",
-                code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
             )
         if token not in row:
             raise DSLExecutionError(
                 f"Template placeholder field does not exist: {token}",
-                code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
             )
         return row[token]
 
@@ -226,13 +219,11 @@ class MessageRenderer:
             if policy.divider_cn is None:
                 raise DSLExecutionError(
                     "sub_repeat divider_cn is required when divider is not set.",
-                    code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
                 )
             return policy.divider_cn
         if policy.divider_en is None:
             raise DSLExecutionError(
                 "sub_repeat divider_en is required when divider is not set.",
-                code=ExecutionErrorCode.TEMPLATE_RENDER_FAILED,
             )
         return policy.divider_en
 

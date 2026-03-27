@@ -12,7 +12,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine.dsl.models import SqlNode
-from check_engine.exceptions import DSLExecutionError, ExecutionErrorCode
+from check_engine.exceptions import DSLExecutionError
 from check_engine.sql.executor import SqlExecutor
 
 
@@ -134,7 +134,7 @@ class SqlExecutorRuntimeErrorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLExecutionError) as ctx:
             self.executor._project_outputs(node, "context", [])
-        self.assertEqual(ctx.exception.code, ExecutionErrorCode.CONTEXT_RESULT_MISMATCH)
+        self.assertIn("exactly one row", str(ctx.exception))
 
     def test_project_outputs_record_mode_requires_exactly_one_row_for_step(self) -> None:
         node = SqlNode(
@@ -147,7 +147,7 @@ class SqlExecutorRuntimeErrorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLExecutionError) as ctx:
             self.executor._project_outputs(node, "step_a", [{"amount": 1}, {"amount": 2}])
-        self.assertEqual(ctx.exception.code, ExecutionErrorCode.STEP_RESULT_MISMATCH)
+        self.assertIn("exactly one row", str(ctx.exception))
 
     def test_project_outputs_requires_declared_columns_to_exist(self) -> None:
         node = SqlNode(
@@ -160,14 +160,14 @@ class SqlExecutorRuntimeErrorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLExecutionError) as ctx:
             self.executor._project_outputs(node, "step_a", [{"amount": 1}])
-        self.assertEqual(ctx.exception.code, ExecutionErrorCode.OUTPUT_COLUMN_MISMATCH)
+        self.assertIn("Declared outputs do not match returned columns", str(ctx.exception))
 
-    def test_run_sql_without_datasource_session_raises_error_code(self) -> None:
+    def test_run_sql_without_datasource_session_raises_error(self) -> None:
         with self.assertRaises(DSLExecutionError) as ctx:
             self.executor._run_sql(cast(Any, _MissingSessionDatasource()), "SELECT 1", {})
-        self.assertEqual(ctx.exception.code, ExecutionErrorCode.DATASOURCE_NOT_FOUND)
+        self.assertIn("get_session", str(ctx.exception))
 
-    def test_execute_node_wraps_unknown_sql_errors_with_error_code(self) -> None:
+    def test_execute_node_wraps_unknown_sql_errors_with_error(self) -> None:
         executor = _FailingSqlExecutor()
         node = SqlNode(
             type="sql",
@@ -180,7 +180,7 @@ class SqlExecutorRuntimeErrorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLExecutionError) as ctx:
             executor.execute_node(node, state=cast(Any, object()), datasource_registry=registry, node_name="step_a")
-        self.assertEqual(ctx.exception.code, ExecutionErrorCode.SQL_EXECUTION_FAILED)
+        self.assertIn("SQL node execution failed", str(ctx.exception))
 
 
 if __name__ == "__main__":

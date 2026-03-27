@@ -7,7 +7,7 @@ from contextlib import AbstractContextManager, contextmanager
 from typing import Any, Optional, Protocol, cast
 
 from ..dsl import RESULT_MODE_RECORD, RESULT_MODE_RECORDS, SqlNode, StepNode
-from ..exceptions import DSLExecutionError, ExecutionErrorCode
+from ..exceptions import DSLExecutionError
 from ..runtime import NodeExecutionResult
 from .cte_builder import CteBuilder
 from .datasource import DatasourceLike, DatasourceRegistry
@@ -51,7 +51,6 @@ class SqlExecutor:
                 raise
             raise DSLExecutionError(
                 f"SQL node execution failed: {node_name}",
-                code=ExecutionErrorCode.SQL_EXECUTION_FAILED,
             ) from exc
 
         return NodeExecutionResult(
@@ -113,7 +112,6 @@ class SqlExecutor:
         if not hasattr(datasource, "get_session"):
             raise DSLExecutionError(
                 "Datasource must provide get_session and execute SQL through a SQLAlchemy Session.",
-                code=ExecutionErrorCode.DATASOURCE_NOT_FOUND,
             )
 
         from sqlalchemy import text as sqlalchemy_text
@@ -156,10 +154,7 @@ class SqlExecutor:
 
     def _project_outputs(self, node: SqlNode, node_name: str, rows: list[dict[str, Any]]) -> tuple[Any, list[str]]:
         if node.result_mode == RESULT_MODE_RECORD and len(rows) != 1:
-            raise DSLExecutionError(
-                "record mode must return exactly one row.",
-                code=self._result_mismatch_code(node_name),
-            )
+            raise DSLExecutionError("record mode must return exactly one row.")
 
         fields = list(node.outputs)
         if not fields and rows:
@@ -183,16 +178,9 @@ class SqlExecutor:
         if missing_fields:
             raise DSLExecutionError(
                 "Declared outputs do not match returned columns: {0}".format(", ".join(missing_fields)),
-                code=ExecutionErrorCode.OUTPUT_COLUMN_MISMATCH,
             )
 
     @staticmethod
     def _project_row(row: Mapping[str, Any], fields: list[str]) -> dict[str, Any]:
         SqlExecutor._ensure_output_columns_exist(row, fields)
         return {field: row[field] for field in fields}
-
-    @staticmethod
-    def _result_mismatch_code(node_name: str) -> ExecutionErrorCode:
-        if node_name == "context":
-            return ExecutionErrorCode.CONTEXT_RESULT_MISMATCH
-        return ExecutionErrorCode.STEP_RESULT_MISMATCH

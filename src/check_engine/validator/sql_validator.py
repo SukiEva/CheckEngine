@@ -10,7 +10,7 @@ from sqlparse import tokens as sql_tokens
 from sqlparse.sql import Statement, Token
 
 from ..dsl import DslDocument, SqlNode
-from ..exceptions import DSLValidationError, ValidationErrorCode
+from ..exceptions import DSLValidationError
 
 
 class SqlSafetyValidator:
@@ -48,7 +48,6 @@ class SqlSafetyValidator:
         if len(statements) != 1:
             raise DSLValidationError(
                 "{0}.sql_template multiple statements are not supported.".format(path),
-                code=ValidationErrorCode.NON_READONLY_SQL,
             )
 
         statement = statements[0]
@@ -56,13 +55,11 @@ class SqlSafetyValidator:
         if leading_keyword not in self.ALLOWED_LEADING_KEYWORDS:
             raise DSLValidationError(
                 "{0}.sql_template only SELECT/WITH queries are allowed.".format(path),
-                code=ValidationErrorCode.NON_READONLY_SQL,
             )
 
         if self._find_forbidden_keyword(statement) is not None:
             raise DSLValidationError(
                 "{0}.sql_template contains non-read-only SQL keyword.".format(path),
-                code=ValidationErrorCode.NON_READONLY_SQL,
             )
 
     @staticmethod
