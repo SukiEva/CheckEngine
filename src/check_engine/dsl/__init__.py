@@ -1,5 +1,16 @@
 """DSL 数据模型。"""
 
+from .fields import (
+    ConsumeField,
+    FailPolicyField,
+    NamedNodeField,
+    ReservedNodeName,
+    RuntimeScope,
+    SqlNodeField,
+    StepField,
+    TopLevelField,
+    VariableField,
+)
 from .models import (
     ConsumeSpec,
     ContextNode,
@@ -22,6 +33,15 @@ from .models import (
     VariableDefinition,
 )
 __all__ = [
+    "ConsumeField",
+    "FailPolicyField",
+    "NamedNodeField",
+    "ReservedNodeName",
+    "RuntimeScope",
+    "SqlNodeField",
+    "StepField",
+    "TopLevelField",
+    "VariableField",
     "ConsumeSpec",
     "ContextNode",
     "DslDocument",
