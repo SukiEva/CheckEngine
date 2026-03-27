@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import Any, Optional
 
 from ..exceptions import DSLExecutionError
+from .reference_resolver import RuntimeReferenceResolver
 
 
 def _to_plain_data(value: Any) -> Any:
@@ -89,11 +90,20 @@ class ExecutionState:
 
     input_data: Mapping[str, Any]
     context_result: Optional[NodeExecutionResult] = None
-    context_data: Mapping[str, Any] = field(default_factory=dict)
+    context_data: MutableMapping[str, Any] = field(default_factory=dict)
     variables_data: MutableMapping[str, Any] = field(default_factory=dict)
     step_results: MutableMapping[str, NodeExecutionResult] = field(default_factory=dict)
     step_data: MutableMapping[str, Any] = field(default_factory=dict)
     executed_nodes: list[ExecutedNodeTrace] = field(default_factory=list)
+    reference_resolver: RuntimeReferenceResolver = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.reference_resolver = RuntimeReferenceResolver(
+            input_data=self.input_data,
+            context_data=self.context_data,
+            variables_data=self.variables_data,
+            step_data=self.step_data,
+        )
 
     @classmethod
     def new(cls, input_data: Mapping[str, Any]) -> "ExecutionState":
@@ -101,7 +111,9 @@ class ExecutionState:
 
     def set_context_result(self, result: NodeExecutionResult) -> None:
         self.context_result = result
-        self.context_data = dict(result.exported_data) if isinstance(result.exported_data, Mapping) else {}
+        self.context_data.clear()
+        if isinstance(result.exported_data, Mapping):
+            self.context_data.update(dict(result.exported_data))
 
     def set_step_result(self, step_name: str, result: NodeExecutionResult) -> None:
         self.step_results[step_name] = result
@@ -127,25 +139,19 @@ class ExecutionState:
         )
 
     def resolve_reference(self, reference: str) -> Any:
-        parts = self._parse_reference_parts(reference)
-        root = parts[0]
-        if root == "input":
-            return self._resolve_from_mapping(self.input_data, parts[1:], reference)
-        if root == "context":
-            return self._resolve_from_mapping(self.context_data, parts[1:], reference)
-        if root == "variables":
-            return self._resolve_from_mapping(self.variables_data, parts[1:], reference)
-        if root == "steps":
-            step_name = self._require_step_name(parts, reference)
-            step_value = self._get_step_data(step_name, reference)
-            return self._resolve_from_mapping_or_object(step_value, parts[2:], reference)
-        raise DSLExecutionError(f"Unknown scope: {reference}")
+        self.reference_resolver.update_sources(
+            input_data=self.input_data,
+            context_data=self.context_data,
+            variables_data=self.variables_data,
+            step_data=self.step_data,
+        )
+        return self.reference_resolver.resolve_reference(reference)
 
     def resolve_path(self, path: str) -> Any:
         return self.resolve_reference(path if path.startswith("$") else "$" + path)
 
     def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
-        parts = self._parse_reference_parts(from_path)
+        parts = RuntimeReferenceResolver._parse_reference_parts(from_path)
         if parts == ["context"]:
             if self.context_result is None:
                 raise DSLExecutionError(
@@ -180,62 +186,6 @@ class ExecutionState:
         return rows, fields
 
     @staticmethod
-    def _resolve_from_mapping(mapping: Mapping[str, Any], parts: list[str], reference: str) -> Any:
-        current: Any = mapping
-        for part in parts:
-            if not isinstance(current, Mapping):
-                raise DSLExecutionError(
-                    f"Cannot resolve reference path further: {reference}",
-                )
-            if part not in current:
-                raise DSLExecutionError(f"Referenced field does not exist: {reference}")
-            current = current[part]
-        return current
-
-    def _resolve_from_mapping_or_object(self, value: Any, parts: list[str], reference: str) -> Any:
-        current = value
-        if not parts:
-            return current
-        for part in parts:
-            if isinstance(current, Mapping):
-                if part not in current:
-                    raise DSLExecutionError(
-                        f"Referenced field does not exist: {reference}",
-                    )
-                current = current[part]
-                continue
-
-            if self._is_projectable_sequence(current):
-                projected = []
-                for item in current:
-                    if not isinstance(item, Mapping):
-                        raise DSLExecutionError(
-                            f"Cannot resolve reference path further: {reference}",
-                        )
-                    if part not in item:
-                        raise DSLExecutionError(
-                            f"Referenced field does not exist: {reference}",
-                        )
-                    projected.append(item[part])
-                current = projected
-                continue
-
-            raise DSLExecutionError(
-                f"Cannot resolve reference path further: {reference}",
-            )
-        return current
-
-    @staticmethod
-    def _is_projectable_sequence(value: Any) -> bool:
-        return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
-
-    @staticmethod
-    def _parse_reference_parts(reference: str) -> list[str]:
-        if not reference.startswith("$"):
-            raise DSLExecutionError(f"Invalid reference path: {reference}")
-        return reference[1:].split(".")
-
-    @staticmethod
     def _require_step_name(parts: list[str], reference: str) -> str:
         if len(parts) < 2 or not parts[1]:
             raise DSLExecutionError(
@@ -243,7 +193,3 @@ class ExecutionState:
             )
         return parts[1]
 
-    def _get_step_data(self, step_name: str, reference: str) -> Any:
-        if step_name not in self.step_data:
-            raise DSLExecutionError(f"Step execution result not found: {reference}")
-        return self.step_data[step_name]
