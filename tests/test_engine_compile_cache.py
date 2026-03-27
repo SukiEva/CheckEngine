@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -13,8 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from check_engine import DslEngine, DSLValidationError
 from check_engine.dsl import DslDocument
 from check_engine.parser import JsonDslParser
-from check_engine.sql import DatasourceRegistry
+from check_engine.runtime import NodeExecutionResult
 from check_engine.validator import DslValidator
+from check_engine.engine import SqlExecutorLike
 
 
 class _CountingParser(JsonDslParser):
@@ -37,6 +38,18 @@ class _CountingValidator(DslValidator):
         super().validate(document)
 
 
+class _PassingSqlExecutor(SqlExecutorLike):
+    def execute_node(
+        self,
+        node: Any,
+        state: Any,
+        datasource_registry: Any,
+        node_name: str,
+    ) -> NodeExecutionResult:
+        del node, state, datasource_registry, node_name
+        return NodeExecutionResult(raw_rows=[{"amount": 1}], exported_data={"amount": 1}, exported_fields=["amount"])
+
+
 class _UnusedRegistry:
     def get(self, name: str) -> Any:
         raise AssertionError(f"unexpected datasource lookup: {name}")
@@ -47,218 +60,103 @@ class EngineCompileCacheTestCase(unittest.TestCase):
         self.example_path = Path(__file__).resolve().parents[1] / "references" / "example.json"
         self.dsl_text = self.example_path.read_text(encoding="utf-8")
 
-    def test_compile_reuses_cached_parse_and_validate_result(self) -> None:
+    def test_validate_only_runs_parse_and_rule_validation(self) -> None:
         parser = _CountingParser()
         validator = _CountingValidator()
         engine = DslEngine(parser=parser, validator=validator, compile_cache_size=2)
 
-        first = engine.compile(self.dsl_text)
-        second = engine.compile(self.dsl_text)
+        first = engine.validate(self.dsl_text)
+        second = engine.validate(self.dsl_text)
 
-        self.assertEqual(parser.parse_count, 1)
-        self.assertEqual(validator.validate_count, 1)
-        self.assertIs(first, second)
-        self.assertIs(first.document, second.document)
-        cache_info = engine.compile_cache_info()
-        if cache_info is None:
-            self.fail("compile cache info should not be None when cache is enabled")
-        self.assertEqual(cache_info.hits, 1)
-
-    def test_compile_cache_key_does_not_store_raw_dsl_text(self) -> None:
-        engine = DslEngine(compile_cache_size=2)
-
-        engine.compile(self.dsl_text)
-        cache_backend = getattr(engine, "_compile_cache_backend")
-        cache_keys = cache_backend.debug_keys()
-        if len(cache_keys) != 1:
-            self.fail("compile cache should contain exactly one key")
-        cache_key = cache_keys[0]
-
-        self.assertIsInstance(cache_key, str)
-        self.assertNotEqual(cache_key, self.dsl_text)
-        self.assertLess(len(cache_key), len(self.dsl_text))
-
-    def test_compile_returns_expected_document_collections(self) -> None:
-        engine = DslEngine(compile_cache_size=2)
-
-        compiled = engine.compile(self.dsl_text)
-
-        self.assertIsInstance(compiled.document.raw, dict)
-        self.assertIsInstance(compiled.document.steps, tuple)
-        self.assertIsInstance(compiled.document.variables, dict)
-        self.assertIsInstance(compiled.document.steps[0].outputs, tuple)
-        self.assertIsInstance(compiled.document.steps[0].sql_params, dict)
-
-    def test_compile_keeps_variable_default_nested_value_mutable(self) -> None:
-        engine = DslEngine(compile_cache_size=2)
-        dsl_text = json.dumps(
-            {
-                "variables": {
-                    "thresholds": {
-                        "when": [],
-                        "default": {"levels": [100, 200], "flags": {"strict": True}},
-                    }
-                },
-                "steps": [
-                    {
-                        "name": "step_a",
-                        "type": "sql",
-                        "datasource": "db",
-                        "result_mode": "record",
-                        "sql_template": "select 1 as amount",
-                        "sql_params": {},
-                        "outputs": ["amount"],
-                    }
-                ],
-                "on_fail": {
-                    "decision": "false",
-                    "mode": "single",
-                    "message_cn": "ok",
-                    "message_en": "ok",
-                },
-            }
-        )
-
-        compiled = engine.compile(dsl_text)
-        default_value = compiled.document.variables["thresholds"].default
-
-        self.assertIsInstance(default_value, dict)
-        self.assertIsInstance(default_value["levels"], list)
-        self.assertIsInstance(default_value["flags"], dict)
-        default_value["flags"]["strict"] = False
-        self.assertFalse(default_value["flags"]["strict"])
-
-    def test_compile_keeps_variable_condition_nested_value_mutable(self) -> None:
-        engine = DslEngine(compile_cache_size=2)
-        dsl_text = json.dumps(
-            {
-                "variables": {
-                    "thresholds": {
-                        "when": [
-                            {
-                                "condition": "$input.kind == 'special'",
-                                "value": {"levels": [100, 200], "meta": {"currency": "CNY"}},
-                            }
-                        ],
-                        "default": 0,
-                    }
-                },
-                "steps": [
-                    {
-                        "name": "step_a",
-                        "type": "sql",
-                        "datasource": "db",
-                        "result_mode": "record",
-                        "sql_template": "select 1 as amount",
-                        "sql_params": {},
-                        "outputs": ["amount"],
-                    }
-                ],
-                "on_fail": {
-                    "decision": "false",
-                    "mode": "single",
-                    "message_cn": "ok",
-                    "message_en": "ok",
-                },
-            }
-        )
-
-        compiled = engine.compile(dsl_text)
-        value = compiled.document.variables["thresholds"].when[0].value
-
-        self.assertIsInstance(compiled.document.variables["thresholds"].when, tuple)
-        self.assertIsInstance(value, dict)
-        self.assertIsInstance(value["levels"], list)
-        self.assertIsInstance(value["meta"], dict)
-        value["meta"]["currency"] = "USD"
-        self.assertEqual(value["meta"]["currency"], "USD")
-
-    def test_compile_freezes_step_consumes_sequence(self) -> None:
-        engine = DslEngine(compile_cache_size=2)
-        dsl_text = json.dumps(
-            {
-                "context": {
-                    "type": "sql",
-                    "datasource": "db",
-                    "result_mode": "records",
-                    "sql_template": "select 1 as amount",
-                    "sql_params": {},
-                    "outputs": ["amount"],
-                },
-                "steps": [
-                    {
-                        "name": "step_a",
-                        "type": "sql",
-                        "datasource": "db",
-                        "result_mode": "records",
-                        "sql_template": "select amount from ctx",
-                        "sql_params": {},
-                        "outputs": ["amount"],
-                        "consumes": [{"from": "$context", "alias": "ctx"}],
-                    }
-                ],
-                "on_fail": {
-                    "decision": "false",
-                    "mode": "single",
-                    "message_cn": "ok",
-                    "message_en": "ok",
-                },
-            }
-        )
-
-        compiled = engine.compile(dsl_text)
-        consumes = compiled.document.steps[0].consumes
-
-        self.assertIsInstance(consumes, tuple)
-        self.assertEqual(consumes[0].from_path, "$context")
-        with self.assertRaises(AttributeError):
-            cast(Any, consumes).append(object())
-
-    def test_compile_cache_can_be_disabled(self) -> None:
-        parser = _CountingParser()
-        validator = _CountingValidator()
-        engine = DslEngine(parser=parser, validator=validator, compile_cache_size=0)
-
-        engine.compile(self.dsl_text)
-        engine.compile(self.dsl_text)
-
+        self.assertIsNone(first)
+        self.assertIsNone(second)
         self.assertEqual(parser.parse_count, 2)
         self.assertEqual(validator.validate_count, 2)
-        self.assertIsNone(engine.compile_cache_info())
 
-    def test_compile_cache_respects_lru_eviction(self) -> None:
+    def test_execute_reuses_cached_compilation_without_rule_validation(self) -> None:
         parser = _CountingParser()
         validator = _CountingValidator()
-        engine = DslEngine(parser=parser, validator=validator, compile_cache_size=1)
+        dsl_text = json.dumps(
+            {
+                "steps": [
+                    {
+                        "name": "step_a",
+                        "type": "sql",
+                        "datasource": "db",
+                        "result_mode": "record",
+                        "sql_template": "select 1 as amount",
+                        "sql_params": {},
+                        "outputs": ["amount"],
+                    }
+                ],
+                "on_fail": {
+                    "decision": "False",
+                    "mode": "single",
+                    "message_cn": "ok",
+                    "message_en": "ok",
+                },
+            }
+        )
+        engine = DslEngine(
+            parser=parser,
+            validator=validator,
+            compile_cache_size=2,
+            sql_executor=_PassingSqlExecutor(),
+        )
+        registry = _UnusedRegistry()
+
+        first = engine.execute(dsl_text, {}, datasource_registry=registry)
+        second = engine.execute(dsl_text, {}, datasource_registry=registry)
+
+        self.assertTrue(first.passed)
+        self.assertTrue(second.passed)
+        self.assertEqual(parser.parse_count, 1)
+        self.assertEqual(validator.validate_count, 0)
+
+    def test_execute_compile_cache_can_be_disabled(self) -> None:
+        parser = _CountingParser()
+        validator = _CountingValidator()
+        engine = DslEngine(
+            parser=parser,
+            validator=validator,
+            compile_cache_size=0,
+            sql_executor=_PassingSqlExecutor(),
+        )
+        registry = _UnusedRegistry()
+
+        engine.execute(self.dsl_text, {}, datasource_registry=registry)
+        engine.execute(self.dsl_text, {}, datasource_registry=registry)
+
+        self.assertEqual(parser.parse_count, 2)
+        self.assertEqual(validator.validate_count, 0)
+
+    def test_execute_compile_cache_respects_lru_eviction(self) -> None:
+        parser = _CountingParser()
+        validator = _CountingValidator()
+        engine = DslEngine(
+            parser=parser,
+            validator=validator,
+            compile_cache_size=1,
+            sql_executor=_PassingSqlExecutor(),
+        )
+        registry = _UnusedRegistry()
         other = json.loads(self.dsl_text)
         other["on_fail"]["decision"] = "$variables.threshold > 999999"
         other_text = json.dumps(other)
 
-        engine.compile(self.dsl_text)
-        engine.compile(other_text)
-        engine.compile(self.dsl_text)
+        engine.execute(self.dsl_text, {}, datasource_registry=registry)
+        engine.execute(other_text, {}, datasource_registry=registry)
+        engine.execute(self.dsl_text, {}, datasource_registry=registry)
 
         self.assertEqual(parser.parse_count, 3)
-        self.assertEqual(validator.validate_count, 3)
+        self.assertEqual(validator.validate_count, 0)
 
-    def test_execute_document_skips_validation_by_default(self) -> None:
+    def test_validate_raises_when_on_fail_has_invalid_reference(self) -> None:
         engine = DslEngine(compile_cache_size=1)
-        invalid_document = JsonDslParser().parse(
-            '{"steps": [], "on_fail": {"decision": "$steps.not_exists.value > 0", "mode": "single", "message_cn": "x", "message_en": "y"}}'
-        )
-        registry = cast(DatasourceRegistry, _UnusedRegistry())
-
-        result = engine.execute_document(invalid_document, {"source_object_id": "x"}, datasource_registry=registry)
-
-        self.assertFalse(result.passed)
-        self.assertEqual(result.phase, "runtime")
-        self.assertEqual(result.failed_node, "on_fail")
-
-    def test_validate_document_can_be_used_before_execution(self) -> None:
-        engine = DslEngine(compile_cache_size=1)
-        invalid_document = JsonDslParser().parse(
-            '{"steps": [], "on_fail": {"decision": "$steps.not_exists.value > 0", "mode": "single", "message_cn": "x", "message_en": "y"}}'
+        invalid_dsl_text = (
+            '{"steps": [], "on_fail": {"decision": "$steps.not_exists.value > 0", '
+            '"mode": "single", "message_cn": "x", "message_en": "y"}}'
         )
 
         with self.assertRaisesRegex(DSLValidationError, "on_fail.decision"):
-            engine.validate_document(invalid_document)
+            engine.validate(invalid_dsl_text)

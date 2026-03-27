@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -471,10 +472,19 @@ class ValidatorTestCase(unittest.TestCase):
             },
         }
 
+        from check_engine import StaticDatasourceRegistry
         from check_engine.engine import DslEngine
 
+        class _UnusedDatasource:
+            def get_session(self) -> Any:
+                raise AssertionError("unexpected get_session call")
+
         with self.assertRaises(DSLValidationError) as ctx:
-            DslEngine().compile(json.dumps(data))
+            DslEngine().execute(
+                json.dumps(data),
+                {},
+                datasource_registry=StaticDatasourceRegistry({"db": _UnusedDatasource()}),
+            )
         self.assertIn("is invalid", str(ctx.exception))
 
 
