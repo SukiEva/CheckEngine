@@ -75,12 +75,12 @@
       background: #eff6ff;
       border-radius: 10px;
       padding: 10px 12px;
-      cursor: grab;
+      cursor: pointer;
       user-select: none;
       transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
     }
 
-    .tool-item:active { cursor: grabbing; }
+    .tool-item:active { cursor: pointer; }
     .tool-item:hover {
       transform: translateY(-1px);
       box-shadow: 0 8px 18px rgba(37, 99, 235, 0.14);
@@ -134,48 +134,67 @@
 
     #canvas {
       position: relative;
-      overflow: hidden;
-      background-image:
-        linear-gradient(#f3f4f6 1px, transparent 1px),
-        linear-gradient(90deg, #f3f4f6 1px, transparent 1px);
-      background-size: 24px 24px;
+      overflow: auto;
       min-height: 0;
-      cursor: grab;
+      background: #f8fafc;
     }
-    #canvas.panning { cursor: grabbing; }
 
     #dropZone {
-      position: relative;
-      width: 2200px;
-      height: 1400px;
-      transform-origin: left top;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(220px, 1fr));
+      gap: 12px;
+      padding: 12px;
+      align-items: start;
     }
-    #linkLayer {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      overflow: visible;
+
+    .flow-lane {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      min-height: 420px;
+      display: grid;
+      grid-template-rows: auto 1fr;
     }
-    .flow-link {
-      fill: none;
-      stroke: #93c5fd;
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
+    .flow-lane-head {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fbff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .flow-lane-head strong {
+      font-size: 0.85rem;
+      color: #1e3a8a;
+    }
+    .flow-lane-body {
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+    .lane-empty {
+      color: var(--muted);
+      font-size: 0.8rem;
+      border: 1px dashed #d1d5db;
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+      background: #fafafa;
     }
 
     .flow-node {
-      position: absolute;
-      width: 220px;
+      position: relative;
+      width: 100%;
       border: 1px solid var(--line);
       border-radius: 12px;
       background: #fff;
       box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
-      cursor: grab;
+      cursor: pointer;
       transition: box-shadow .15s ease, border-color .15s ease;
     }
 
-    .flow-node:active { cursor: grabbing; }
     .flow-node:hover { box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14); }
 
     .flow-node.selected {
@@ -200,23 +219,6 @@
       display: grid;
       gap: 6px;
       font-size: 0.84rem;
-    }
-    .step-parent {
-      position: absolute;
-      border: 1px dashed #93c5fd;
-      border-radius: 14px;
-      background: rgba(219, 234, 254, 0.25);
-      pointer-events: none;
-    }
-    .step-parent-title {
-      position: absolute;
-      top: -11px;
-      left: 12px;
-      background: #f8fbff;
-      color: #1d4ed8;
-      font-size: 0.75rem;
-      padding: 0 6px;
-      font-weight: 700;
     }
     .step-block {
       border: 1px dashed #93c5fd;
@@ -341,7 +343,7 @@
     <aside class="panel">
       <div class="panel-head">
         <h2 class="panel-title">节点工具箱</h2>
-        <div class="panel-sub">把节点拖到中间画布，再点击节点进行编辑。</div>
+        <div class="panel-sub">点击节点类型即可添加到固定执行栏，再点击节点进行编辑。</div>
       </div>
       <div class="panel-body" id="toolbox"></div>
     </aside>
@@ -349,10 +351,7 @@
     <main class="panel canvas-wrap">
       <div class="canvas-toolbar">
         <button class="btn-primary" id="btnReset">清空画布</button>
-        <button class="btn-muted" id="btnArrange">自动横向排布</button>
-        <button class="btn-muted" id="btnZoomOut">缩小</button>
-        <button class="btn-muted" id="btnZoomIn">放大</button>
-        <button class="btn-muted" id="btnZoomReset">100%</button>
+        <button class="btn-muted" id="btnArrange">重排顺序（按执行阶段）</button>
         <button class="btn-muted" id="btnImport">导入 JSON</button>
         <button class="btn-muted" id="btnPreview">预览 JSON</button>
         <button class="btn-muted" id="btnExport">下载 JSON</button>
@@ -361,7 +360,7 @@
       <section id="canvas">
         <div id="dropZone"></div>
       </section>
-      <div class="status" id="statusText">提示：拖拽左侧节点到画布后点击编辑。</div>
+      <div class="status" id="statusText">提示：按执行阶段分栏展示，支持在 Precheck / Step 栏添加多个节点。</div>
     </main>
 
     <aside class="panel">
@@ -405,35 +404,9 @@
     const state = {
       nodes: [],
       selectedId: null,
-      dragNodeId: null,
-      dragOffsetX: 0,
-      dragOffsetY: 0,
-      isPanning: false,
-      panX: 0,
-      panY: 0,
-      panStartClientX: 0,
-      panStartClientY: 0,
-      panStartX: 0,
-      panStartY: 0,
-      zoom: 1,
     };
 
-    const LAYOUT = {
-      startX: 80,
-      startY: 120,
-      colGap: 320,
-      rowGap: 170,
-      maxRowsPerColumn: 5,
-    };
-    const STEP_PARENT = {
-      offsetX: LAYOUT.startX + LAYOUT.colGap * 3,
-      offsetY: LAYOUT.startY + 10,
-      innerOffsetX: 24,
-      innerOffsetY: 56,
-      width: 276,
-      minHeight: 190,
-      paddingBottom: 26,
-    };
+    const FIXED_TYPES = new Set(['context', 'on_fail']);
 
     function makeNode(def, x, y) {
       return {
@@ -471,80 +444,94 @@
       NODE_DEFS.forEach((def) => {
         const card = document.createElement('div');
         card.className = 'tool-item';
-        card.draggable = true;
-        card.dataset.nodeType = def.type;
         card.innerHTML = `<strong>${def.label}</strong><span>${def.hint}</span>`;
-        card.addEventListener('dragstart', (event) => {
-          event.dataTransfer.setData('node-type', def.type);
-        });
+        card.addEventListener('click', () => addNodeByType(def.type));
         toolbox.appendChild(card);
       });
     }
 
     function renderCanvas() {
       dropZone.innerHTML = '';
-      dropZone.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
-      const linkLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      linkLayer.setAttribute('id', 'linkLayer');
-      linkLayer.setAttribute('viewBox', '0 0 2200 1400');
-      linkLayer.innerHTML = `
-        <defs>
-          <marker id="flowArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-            <path d="M0,0 L8,4 L0,8 z" fill="#93c5fd"></path>
-          </marker>
-        </defs>
-      `;
-      dropZone.appendChild(linkLayer);
-      renderStepParent();
-      state.nodes.forEach((node) => {
-        const el = document.createElement('article');
-        el.className = `flow-node${state.selectedId === node.id ? ' selected' : ''}`;
-        el.style.left = `${node.x}px`;
-        el.style.top = `${node.y}px`;
-        el.dataset.nodeId = node.id;
-        el.innerHTML = `
-          <div class="node-head">
-            <span>${node.type}</span>
-            <span>${node.type === 'step' && node.stepOrder ? `S${node.stepOrder}` : `#${node.id.slice(-4)}`}</span>
+      const lanes = [
+        { type: 'context', label: '1) Context（固定 1 个）' },
+        { type: 'variable', label: '2) Variables' },
+        { type: 'precheck', label: '3) Prechecks（可多个）' },
+        { type: 'step', label: '4) Steps（可多个）' },
+        { type: 'on_fail', label: '5) On Fail（固定 1 个）' },
+      ];
+
+      lanes.forEach((lane) => {
+        const laneEl = document.createElement('section');
+        laneEl.className = 'flow-lane';
+        laneEl.innerHTML = `
+          <div class="flow-lane-head">
+            <strong>${lane.label}</strong>
+            <button class="btn-muted" data-add-type="${lane.type}" type="button">+ 添加</button>
           </div>
-          <div class="node-body">
-            <strong>${escapeHtml(node.title || '(未命名节点)')}</strong>
-            <div class="muted">ds: ${escapeHtml(node.datasource || '-')} / mode: ${escapeHtml(node.resultMode || '-')}</div>
-            <div class="muted">outputs: ${escapeHtml(node.outputs || '无')}</div>
-            ${node.type === 'step' ? renderStepChildrenPreview(node) : ''}
-          </div>
+          <div class="flow-lane-body" data-lane-body="${lane.type}"></div>
         `;
-
-        el.addEventListener('mousedown', (event) => {
-          if (event.button !== 0) return;
-          selectNode(node.id);
-          if (node.type === 'step') return;
-          state.dragNodeId = node.id;
-          state.dragOffsetX = event.offsetX;
-          state.dragOffsetY = event.offsetY;
-        });
-
-        el.addEventListener('click', () => selectNode(node.id));
-        dropZone.appendChild(el);
+        const addBtn = laneEl.querySelector('[data-add-type]');
+        addBtn.addEventListener('click', () => addNodeByType(lane.type));
+        dropZone.appendChild(laneEl);
       });
-      renderLinks(linkLayer);
+
+      const laneNodeMap = {
+        context: state.nodes.filter((item) => item.type === 'context'),
+        variable: state.nodes.filter((item) => item.type === 'variable'),
+        precheck: state.nodes.filter((item) => item.type === 'precheck'),
+        step: getSortedSteps(),
+        on_fail: state.nodes.filter((item) => item.type === 'on_fail'),
+      };
+
+      Object.entries(laneNodeMap).forEach(([laneType, laneNodes]) => {
+        const laneBody = dropZone.querySelector(`[data-lane-body="${laneType}"]`);
+        if (!laneBody) return;
+        if (!laneNodes.length) {
+          laneBody.innerHTML = '<div class="lane-empty">暂无节点，点击“+ 添加”创建。</div>';
+          return;
+        }
+        laneNodes.forEach((node, index) => {
+          const nodeRank = node.type === 'step' ? `S${node.stepOrder || index + 1}` : `#${index + 1}`;
+          const el = document.createElement('article');
+          el.className = `flow-node${state.selectedId === node.id ? ' selected' : ''}`;
+          el.dataset.nodeId = node.id;
+          el.innerHTML = `
+            <div class="node-head">
+              <span>${node.type}</span>
+              <span>${nodeRank}</span>
+            </div>
+            <div class="node-body">
+              <strong>${escapeHtml(node.title || '(未命名节点)')}</strong>
+              <div class="muted">ds: ${escapeHtml(node.datasource || '-')} / mode: ${escapeHtml(node.resultMode || '-')}</div>
+              <div class="muted">outputs: ${escapeHtml(node.outputs || '无')}</div>
+              ${node.type === 'step' ? renderStepChildrenPreview(node) : ''}
+            </div>
+          `;
+          el.addEventListener('click', () => selectNode(node.id));
+          laneBody.appendChild(el);
+        });
+      });
     }
 
-    function renderStepParent() {
-      const steps = getSortedSteps();
-      if (!steps.length) return;
-      const parent = document.createElement('div');
-      parent.className = 'step-parent';
-      parent.style.left = `${STEP_PARENT.offsetX}px`;
-      parent.style.top = `${STEP_PARENT.offsetY}px`;
-      const computedHeight = Math.max(
-        STEP_PARENT.minHeight,
-        STEP_PARENT.innerOffsetY + (steps.length - 1) * LAYOUT.rowGap + 130 + STEP_PARENT.paddingBottom
-      );
-      parent.style.width = `${STEP_PARENT.width}px`;
-      parent.style.height = `${computedHeight}px`;
-      parent.innerHTML = '<div class="step-parent-title">Step 父块（纵向顺序）</div>';
-      dropZone.appendChild(parent);
+    function addNodeByType(nodeType) {
+      const def = NODE_DEFS.find((item) => item.type === nodeType);
+      if (!def) return;
+      if (FIXED_TYPES.has(nodeType) && state.nodes.some((item) => item.type === nodeType)) {
+        statusText.classList.add('status-warn');
+        statusText.innerHTML = `<strong>${escapeHtml(nodeType)}</strong> 顶层仅允许 1 个节点。`;
+        return;
+      }
+      const node = makeNode(def, 0, 0);
+      state.nodes.push(node);
+      if (node.type === 'step') {
+        applyStepVerticalLayout();
+      }
+      state.selectedId = node.id;
+      renderCanvas();
+      renderEditor();
+      saveLocal();
+      statusText.classList.remove('status-warn');
+      statusText.innerHTML = `<strong>已添加节点：</strong>${escapeHtml(def.label)}`;
     }
 
     function selectNode(nodeId) {
@@ -865,46 +852,11 @@
       statusText.innerHTML = `<strong>已调整 Step 顺序：</strong>${escapeHtml(currentStep.title || currentStep.id)}`;
     }
 
-    function getOrderedFlowNodes() {
-      const order = [];
-      const pushByType = (type) => {
-        state.nodes
-          .filter((item) => item.type === type)
-          .forEach((item) => order.push(item));
-      };
-      pushByType('context');
-      pushByType('variable');
-      pushByType('precheck');
-      getSortedSteps().forEach((stepNode) => order.push(stepNode));
-      pushByType('on_fail');
-      return order;
-    }
-
     function applyStepVerticalLayout() {
       const steps = getSortedSteps();
       steps.forEach((stepNode, index) => {
         stepNode.stepOrder = index + 1;
-        stepNode.x = STEP_PARENT.offsetX + STEP_PARENT.innerOffsetX;
-        stepNode.y = STEP_PARENT.offsetY + STEP_PARENT.innerOffsetY + index * LAYOUT.rowGap;
       });
-    }
-
-    function renderLinks(linkLayer) {
-      const orderedNodes = getOrderedFlowNodes();
-      for (let index = 0; index < orderedNodes.length - 1; index += 1) {
-        const fromNode = orderedNodes[index];
-        const toNode = orderedNodes[index + 1];
-        const startX = fromNode.x + 220;
-        const startY = fromNode.y + 54;
-        const endX = toNode.x;
-        const endY = toNode.y + 54;
-        const midX = startX + (endX - startX) * 0.5;
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('class', 'flow-link');
-        path.setAttribute('marker-end', 'url(#flowArrow)');
-        path.setAttribute('d', `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`);
-        linkLayer.appendChild(path);
-      }
     }
 
     function bindAutocompletes(node) {
@@ -1701,40 +1653,11 @@
 
     function applyHorizontalLayout(nodes) {
       const placedNodes = [...nodes];
-      const buckets = {
-        context: [],
-        variable: [],
-        precheck: [],
-        step: [],
-        on_fail: [],
-      };
-      placedNodes.forEach((node) => {
-        if (Object.prototype.hasOwnProperty.call(buckets, node.type)) {
-          buckets[node.type].push(node);
-        }
-      });
-
-      const orderedColumns = [
-        buckets.context,
-        buckets.variable,
-        buckets.precheck,
-        [],
-        buckets.on_fail,
-      ];
-
-      orderedColumns.forEach((columnNodes, columnIndex) => {
-        columnNodes.forEach((node, rowIndex) => {
-          const wrappedColIndex = columnIndex + Math.floor(rowIndex / LAYOUT.maxRowsPerColumn);
-          const wrappedRowIndex = rowIndex % LAYOUT.maxRowsPerColumn;
-          node.x = LAYOUT.startX + wrappedColIndex * LAYOUT.colGap;
-          node.y = LAYOUT.startY + wrappedRowIndex * LAYOUT.rowGap;
-        });
-      });
-      const stepNodes = buckets.step.sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
+      const stepNodes = placedNodes
+        .filter((item) => item.type === 'step')
+        .sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
       stepNodes.forEach((stepNode, index) => {
         stepNode.stepOrder = index + 1;
-        stepNode.x = STEP_PARENT.offsetX + STEP_PARENT.innerOffsetX;
-        stepNode.y = STEP_PARENT.offsetY + STEP_PARENT.innerOffsetY + index * LAYOUT.rowGap;
       });
       return placedNodes;
     }
@@ -1783,92 +1706,6 @@
       return escapeHtml(value).replaceAll('\n', '&#10;');
     }
 
-    function getCanvasPointByEvent(event) {
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: (event.clientX - rect.left - state.panX) / state.zoom,
-        y: (event.clientY - rect.top - state.panY) / state.zoom,
-      };
-    }
-
-    dropZone.addEventListener('dragover', (event) => {
-      event.preventDefault();
-    });
-
-    dropZone.addEventListener('drop', (event) => {
-      event.preventDefault();
-      const nodeType = event.dataTransfer.getData('node-type');
-      const def = NODE_DEFS.find((item) => item.type === nodeType);
-      if (!def) return;
-      const point = getCanvasPointByEvent(event);
-      const x = point.x;
-      const y = point.y;
-      const node = makeNode(def, Math.max(12, x - 100), Math.max(12, y - 20));
-      state.nodes.push(node);
-      if (node.type === 'step') {
-        applyStepVerticalLayout();
-      }
-      state.selectedId = node.id;
-      renderCanvas();
-      renderEditor();
-      saveLocal();
-      statusText.innerHTML = `<strong>已添加节点：</strong>${escapeHtml(def.label)}`;
-    });
-
-    window.addEventListener('mousemove', (event) => {
-      if (state.isPanning) {
-        state.panX = state.panStartX + (event.clientX - state.panStartClientX);
-        state.panY = state.panStartY + (event.clientY - state.panStartClientY);
-        renderCanvas();
-        return;
-      }
-      if (!state.dragNodeId) return;
-      const node = state.nodes.find((item) => item.id === state.dragNodeId);
-      if (!node) return;
-      const point = getCanvasPointByEvent(event);
-      node.x = Math.max(8, point.x - state.dragOffsetX);
-      node.y = Math.max(8, point.y - state.dragOffsetY);
-      renderCanvas();
-    });
-
-    window.addEventListener('mouseup', () => {
-      if (state.isPanning) {
-        state.isPanning = false;
-        canvas.classList.remove('panning');
-      }
-      if (state.dragNodeId) {
-        saveLocal();
-      }
-      state.dragNodeId = null;
-    });
-
-    canvas.addEventListener('mousedown', (event) => {
-      if (event.button !== 1) return;
-      event.preventDefault();
-      state.isPanning = true;
-      state.panStartClientX = event.clientX;
-      state.panStartClientY = event.clientY;
-      state.panStartX = state.panX;
-      state.panStartY = state.panY;
-      canvas.classList.add('panning');
-    });
-
-    canvas.addEventListener('wheel', (event) => {
-      event.preventDefault();
-      const zoomDelta = event.deltaY > 0 ? -0.08 : 0.08;
-      const rect = canvas.getBoundingClientRect();
-      const canvasX = event.clientX - rect.left;
-      const canvasY = event.clientY - rect.top;
-      const worldX = (canvasX - state.panX) / state.zoom;
-      const worldY = (canvasY - state.panY) / state.zoom;
-      const nextZoom = Math.min(1.8, Math.max(0.45, state.zoom + zoomDelta));
-      state.zoom = nextZoom;
-      state.panX = canvasX - worldX * nextZoom;
-      state.panY = canvasY - worldY * nextZoom;
-      renderCanvas();
-      statusText.textContent = `画布缩放：${Math.round(state.zoom * 100)}%`;
-    }, { passive: false });
-
     document.getElementById('btnReset').addEventListener('click', () => {
       state.nodes = [];
       state.selectedId = null;
@@ -1882,23 +1719,7 @@
       state.nodes = applyHorizontalLayout(state.nodes);
       renderCanvas();
       saveLocal();
-      statusText.textContent = '已按执行阶段横向自动排布。';
-    });
-
-    function updateZoom(nextZoom) {
-      state.zoom = Math.min(1.8, Math.max(0.45, nextZoom));
-      renderCanvas();
-      statusText.textContent = `画布缩放：${Math.round(state.zoom * 100)}%`;
-    }
-
-    document.getElementById('btnZoomIn').addEventListener('click', () => {
-      updateZoom(state.zoom + 0.1);
-    });
-    document.getElementById('btnZoomOut').addEventListener('click', () => {
-      updateZoom(state.zoom - 0.1);
-    });
-    document.getElementById('btnZoomReset').addEventListener('click', () => {
-      updateZoom(1);
+      statusText.textContent = '已按执行阶段重排节点顺序。';
     });
 
     document.getElementById('btnImport').addEventListener('click', () => {
