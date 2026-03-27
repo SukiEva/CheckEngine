@@ -15,16 +15,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine.engine import DslEngine
 from check_engine.sql import DatasourceRegistry
+from check_engine.engine import MessageRendererLike, SqlExecutorLike
 from check_engine.exceptions import DSLExecutionError, DSLValidationError
 from check_engine.runtime.state import ExecutionResult, NodeExecutionResult
 
 
-class _FailingSqlExecutor:
+class _FailingSqlExecutor(SqlExecutorLike):
     def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
         raise DSLExecutionError("SQL node execution failed: step_a")
 
 
-class _PassingSqlExecutor:
+class _PassingSqlExecutor(SqlExecutorLike):
     def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
         return NodeExecutionResult(
             raw_rows=[{"v": 1}],
@@ -33,12 +34,12 @@ class _PassingSqlExecutor:
         )
 
 
-class _FailingMessageRenderer:
+class _FailingMessageRenderer(MessageRendererLike):
     def render(self, policy: Any, state: Any, rows: Optional[Any] = None) -> tuple[str, str]:
         raise DSLExecutionError("Message render failed")
 
 
-class _UnusedRegistry:
+class _UnusedRegistry(DatasourceRegistry):
     def get(self, name: str) -> Any:
         raise AssertionError(f"unexpected datasource lookup: {name}")
 
@@ -68,8 +69,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         )
 
     def test_execute_returns_runtime_failure_result_with_message(self) -> None:
-        logger = cast(logging.Logger, Mock(spec=logging.Logger))
-        engine = DslEngine(sql_executor=_FailingSqlExecutor(), logger=logger)
+        logger_mock = Mock(spec=logging.Logger)
+        engine = DslEngine(sql_executor=_FailingSqlExecutor(), logger=cast(logging.Logger, logger_mock))
         registry = cast(DatasourceRegistry, _UnusedRegistry())
 
         result = engine.execute(self.dsl_text, {}, datasource_registry=registry)
@@ -79,7 +80,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(result.failed_node, "step_a")
         self.assertEqual(result.message_cn, "SQL node execution failed: step_a")
         self.assertEqual(result.message_en, "SQL node execution failed: step_a")
-        logger.exception.assert_called_once_with("Runtime execution failed at node %s", "step_a")
+        logger_mock.exception.assert_called_once_with("Runtime execution failed at node %s", "step_a")
 
     def test_execute_returns_runtime_failure_result_with_on_fail_node(self) -> None:
         engine = DslEngine(
@@ -162,7 +163,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "pass")
 
     def test_execute_compiled_reuses_shared_compiled_dsl_without_state_leak(self) -> None:
-        class _InputDrivenSqlExecutor:
+        class _InputDrivenSqlExecutor(SqlExecutorLike):
             def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
                 value = state.input_data["amount"]
                 return NodeExecutionResult(
@@ -185,8 +186,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertIs(compiled, engine.compile(self.dsl_text))
 
     def test_compile_logs_exception_stack_when_expression_invalid(self) -> None:
-        logger = cast(logging.Logger, Mock(spec=logging.Logger))
-        engine = DslEngine(logger=logger)
+        logger_mock = Mock(spec=logging.Logger)
+        engine = DslEngine(logger=cast(logging.Logger, logger_mock))
         invalid_dsl_text = json.dumps(
             {
                 "steps": [
@@ -212,7 +213,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         with self.assertRaisesRegex(DSLValidationError, "on_fail.decision"):
             engine.compile(invalid_dsl_text)
 
-        logger.exception.assert_called_once_with(
+        logger_mock.exception.assert_called_once_with(
             "Failed to compile expression at %s: %s",
             "on_fail.decision",
             "$steps.step_a.v >",

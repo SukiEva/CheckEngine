@@ -10,7 +10,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine.expression import ExpressionEvaluator
-from check_engine.runtime.state import ExecutionState
+from check_engine.runtime.state import ExecutionState, NodeExecutionResult
 
 
 class ExpressionEvaluatorTestCase(unittest.TestCase):
@@ -44,7 +44,13 @@ class ExpressionEvaluatorTestCase(unittest.TestCase):
         self.assertFalse(self.evaluator.evaluate(expression, self.state))
 
     def test_evaluate_exists_function_on_empty_mapping_proxy(self) -> None:
-        self.state.context_data = MappingProxyType({})
+        self.state.set_context_result(
+            NodeExecutionResult(
+                raw_rows=[],
+                exported_data=MappingProxyType({}),
+                exported_fields=[],
+            )
+        )
 
         expression = "exists($context)"
 

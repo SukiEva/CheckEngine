@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol
+from typing import Any, Optional
 
 from ..dsl import FailPolicy
 from ..exceptions import DSLExecutionError
 from ..runtime import ExecutionState
 
 
-class MessageRenderHelpers(Protocol):
+class MessageRenderHelpers(ABC):
     """消息渲染辅助能力接口。"""
 
+    @abstractmethod
     def render_once(
         self,
         template: str,
@@ -22,6 +24,7 @@ class MessageRenderHelpers(Protocol):
     ) -> str:
         """渲染单条模板。"""
 
+    @abstractmethod
     def render_sub_repeat_segments(
         self,
         segment: str,
@@ -30,16 +33,19 @@ class MessageRenderHelpers(Protocol):
     ) -> list[str]:
         """渲染 sub_repeat 重复片段。"""
 
+    @abstractmethod
     def resolve_full_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
         """解析 full_repeat 分隔符。"""
 
+    @abstractmethod
     def resolve_sub_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
         """解析 sub_repeat 分隔符。"""
 
 
-class ModeRenderer(Protocol):
+class ModeRenderer(ABC):
     """渲染模式策略接口。"""
 
+    @abstractmethod
     def render(
         self,
         *,
@@ -54,7 +60,7 @@ class ModeRenderer(Protocol):
 
 
 @dataclass(frozen=True)
-class SingleModeRenderer:
+class SingleModeRenderer(ModeRenderer):
     """single 模式渲染策略。"""
 
     def render(
@@ -77,7 +83,7 @@ class SingleModeRenderer:
 
 
 @dataclass(frozen=True)
-class FullRepeatModeRenderer:
+class FullRepeatModeRenderer(ModeRenderer):
     """full_repeat 模式渲染策略。"""
 
     def render(
@@ -98,7 +104,7 @@ class FullRepeatModeRenderer:
 
 
 @dataclass(frozen=True)
-class SubRepeatModeRenderer:
+class SubRepeatModeRenderer(ModeRenderer):
     """sub_repeat 模式渲染策略。"""
 
     def render(
