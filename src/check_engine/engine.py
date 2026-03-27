@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, Optional, Protocol, TypeVar
 
-from .compiler import CompileCacheInfo, CompileCacheLike, HashedLruCompileCache, NoopCompileCache
+from .compiler import CompileCacheLike, HashedLruCompileCache, NoopCompileCache
 from .dsl import DslDocument, EXISTS_DECISION, FailPolicy, PrecheckNode, SqlNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
 from .exceptions import DSLExecutionError
@@ -95,31 +95,12 @@ class DslEngine:
             HashedLruCompileCache(compile_cache_size) if compile_cache_size > 0 else NoopCompileCache()
         )
 
-    def compile(self, dsl_text: str) -> CompiledDsl:
-        """编译并校验 DSL，并返回可由缓存共享复用的只读结果。"""
+    def validate(self, dsl_text: str) -> None:
+        """显式校验 DSL（适合保存/更新规则时调用）。"""
         if not isinstance(dsl_text, str):
             raise TypeError("dsl_text must be a string.")
-        cached = self._compile_cache_backend.get(dsl_text)
-        if cached is not None:
-            return cached
-
-        compiled = self._compile_uncached(dsl_text)
-        self._compile_cache_backend.put(dsl_text, compiled)
-        return compiled
-
-    def validate(self, dsl_text: str) -> CompiledDsl:
-        """显式校验 DSL（适合保存/更新规则时调用）。"""
-        return self.compile(dsl_text)
-
-    def validate_document(self, document: DslDocument) -> CompiledDsl:
-        """显式校验已解析 DSL 文档（适合保存/更新规则时调用）。"""
-        return self._compile_document(document, run_validation=True)
-
-    def clear_compile_cache(self) -> None:
-        self._compile_cache_backend.clear()
-
-    def compile_cache_info(self) -> Optional[CompileCacheInfo]:
-        return self._compile_cache_backend.info()
+        document = self.parser.parse(dsl_text)
+        self.compile_validator.validate(document)
 
     def execute(
         self,
@@ -129,18 +110,20 @@ class DslEngine:
     ) -> ExecutionResult:
         if not isinstance(dsl_text, str):
             raise TypeError("dsl_text must be a string.")
-        document = self.parser.parse(dsl_text)
-        return self.execute_document(document, input_data, datasource_registry)
+        compiled_dsl = self._compile(dsl_text)
+        return self._execute_compiled(compiled_dsl, input_data, datasource_registry)
 
-    def execute_document(
-        self,
-        document: DslDocument,
-        input_data: Mapping[str, Any],
-        datasource_registry: DatasourceRegistry,
-    ) -> ExecutionResult:
-        return self.execute_compiled(self._compile_document(document, run_validation=False), input_data, datasource_registry)
+    def _compile(self, dsl_text: str) -> CompiledDsl:
+        """编译 DSL 并返回可由缓存共享复用的只读结果。"""
+        cached = self._compile_cache_backend.get(dsl_text)
+        if cached is not None:
+            return cached
 
-    def execute_compiled(
+        compiled = self._compile_uncached(dsl_text)
+        self._compile_cache_backend.put(dsl_text, compiled)
+        return compiled
+
+    def _execute_compiled(
         self,
         compiled_dsl: CompiledDsl,
         input_data: Mapping[str, Any],
@@ -340,12 +323,11 @@ class DslEngine:
 
     def _compile_uncached(self, dsl_text: str) -> CompiledDsl:
         document = self.parser.parse(dsl_text)
-        return self._compile_document(document, run_validation=True)
+        return self._compile_document(document)
 
-    def _compile_document(self, document: DslDocument, run_validation: bool) -> CompiledDsl:
-        variable_conditions, precheck_decisions, on_fail_decision = self.compile_validator.validate_and_compile(
+    def _compile_document(self, document: DslDocument) -> CompiledDsl:
+        variable_conditions, precheck_decisions, on_fail_decision = self.compile_validator.compile(
             document=document,
-            run_validation=run_validation,
         )
         return CompiledDsl(
             document=document,

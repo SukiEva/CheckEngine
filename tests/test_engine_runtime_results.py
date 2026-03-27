@@ -164,7 +164,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertTrue(result.passed)
         self.assertEqual(result.phase, "pass")
 
-    def test_execute_compiled_reuses_shared_compiled_dsl_without_state_leak(self) -> None:
+    def test_execute_multiple_times_without_state_leak(self) -> None:
         class _InputDrivenSqlExecutor(SqlExecutorLike):
             def execute_node(
                 self,
@@ -182,21 +182,20 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 )
 
         engine = DslEngine(sql_executor=_InputDrivenSqlExecutor(), compile_cache_size=2)
-        compiled = engine.compile(self.dsl_text)
         registry = cast(DatasourceRegistry, _UnusedRegistry())
 
-        first = engine.execute_compiled(compiled, {"amount": 5}, datasource_registry=registry)
-        second = engine.execute_compiled(compiled, {"amount": 20}, datasource_registry=registry)
+        first = engine.execute(self.dsl_text, {"amount": 5}, datasource_registry=registry)
+        second = engine.execute(self.dsl_text, {"amount": 20}, datasource_registry=registry)
 
         self.assertTrue(first.passed)
         self.assertFalse(second.passed)
         self.assertEqual(first.steps["step_a"]["v"], 5)
         self.assertEqual(second.steps["step_a"]["v"], 20)
-        self.assertIs(compiled, engine.compile(self.dsl_text))
 
-    def test_compile_logs_exception_stack_when_expression_invalid(self) -> None:
+    def test_execute_logs_exception_stack_when_expression_invalid(self) -> None:
         logger_mock = Mock(spec=logging.Logger)
         engine = DslEngine(logger=cast(logging.Logger, logger_mock))
+        registry = cast(DatasourceRegistry, _UnusedRegistry())
         invalid_dsl_text = json.dumps(
             {
                 "steps": [
@@ -220,7 +219,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(DSLValidationError, "on_fail.decision"):
-            engine.compile(invalid_dsl_text)
+            engine.execute(invalid_dsl_text, {}, datasource_registry=registry)
 
         logger_mock.exception.assert_called_once_with(
             "Failed to compile expression at %s: %s",

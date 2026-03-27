@@ -24,14 +24,13 @@ class DslCompileValidator:
         self.expression_evaluator = expression_evaluator or ExpressionEvaluator()
         self.logger = logger or logging.getLogger(__name__)
 
-    def validate_and_compile(
+    def validate(self, document: DslDocument) -> None:
+        self.dsl_validator.validate(document)
+
+    def compile(
         self,
         document: DslDocument,
-        run_validation: bool,
     ) -> tuple[dict[str, tuple[CompiledExpression, ...]], dict[str, Optional[CompiledExpression]], CompiledExpression]:
-        if run_validation:
-            self.dsl_validator.validate(document)
-
         variable_conditions = {
             variable_name: tuple(
                 self._compile_expression(item.condition, f"variables.{variable_name}.when[{index}].condition")
