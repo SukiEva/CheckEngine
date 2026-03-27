@@ -30,13 +30,15 @@
 
     .app {
       display: grid;
-      grid-template-columns: 280px 1fr 360px;
+      grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(320px, 380px);
       height: calc(100vh - 28px);
       gap: 14px;
       padding: 14px;
     }
 
     .panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -68,6 +70,8 @@
       padding: 14px;
       display: grid;
       gap: 10px;
+      min-height: 0;
+      overflow: auto;
     }
 
     .tool-item {
@@ -102,7 +106,7 @@
     .canvas-wrap {
       position: relative;
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto minmax(0, 1fr) auto;
       min-height: 0;
     }
 
@@ -141,10 +145,12 @@
 
     #dropZone {
       display: grid;
-      grid-template-columns: repeat(5, minmax(220px, 1fr));
+      grid-template-columns: repeat(5, minmax(240px, 280px));
       gap: 12px;
       padding: 12px;
       align-items: start;
+      min-width: 100%;
+      width: max-content;
     }
 
     .flow-lane {
@@ -336,6 +342,23 @@
 
     .status strong { color: var(--success); }
     .status-warn strong { color: #b45309; }
+
+    @media (max-width: 1500px) {
+      .app {
+        grid-template-columns: 260px minmax(0, 1fr) 340px;
+      }
+    }
+
+    @media (max-width: 1280px) {
+      .app {
+        grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+      }
+
+      .app > aside:last-child {
+        grid-column: 1 / -1;
+        min-height: 320px;
+      }
+    }
   </style>
 </head>
 <body>
