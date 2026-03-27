@@ -136,7 +136,7 @@ class RuntimeReferenceResolver:
         }
 
     def resolve_reference(self, reference: str) -> Any:
-        parts = self._parse_reference_parts(reference)
+        parts = self.parse_reference_parts(reference)
         scope = parts[0]
         resolver = self._resolvers.get(scope)
         if resolver is None:
@@ -144,7 +144,7 @@ class RuntimeReferenceResolver:
         return resolver.resolve(parts[1:], reference)
 
     @staticmethod
-    def _parse_reference_parts(reference: str) -> list[str]:
+    def parse_reference_parts(reference: str) -> list[str]:
         if not reference.startswith("$"):
             raise DSLExecutionError(f"Invalid reference path: {reference}")
         return reference[1:].split(".")

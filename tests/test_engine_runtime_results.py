@@ -22,11 +22,13 @@ from check_engine.runtime.state import ExecutionResult, NodeExecutionResult
 
 class _FailingSqlExecutor(SqlExecutorLike):
     def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
+        del node, state, datasource_registry, node_name
         raise DSLExecutionError("SQL node execution failed: step_a")
 
 
 class _PassingSqlExecutor(SqlExecutorLike):
     def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
+        del node, state, datasource_registry, node_name
         return NodeExecutionResult(
             raw_rows=[{"v": 1}],
             exported_data={"v": 1},
@@ -164,7 +166,14 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
     def test_execute_compiled_reuses_shared_compiled_dsl_without_state_leak(self) -> None:
         class _InputDrivenSqlExecutor(SqlExecutorLike):
-            def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
+            def execute_node(
+                self,
+                node: Any,
+                state: Any,
+                datasource_registry: Any,
+                node_name: str,
+            ) -> NodeExecutionResult:
+                del node, datasource_registry, node_name
                 value = state.input_data["amount"]
                 return NodeExecutionResult(
                     raw_rows=[{"v": value}],
