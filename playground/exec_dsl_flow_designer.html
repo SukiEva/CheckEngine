@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ExecDSL 流程图式设计器（实验版）</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --line: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --accent-soft: #dbeafe;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 280px 1fr 360px;
+      min-height: 100vh;
+      gap: 14px;
+      padding: 14px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #fafafa;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .panel-sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.5;
+    }
+
+    .panel-body {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .tool-item {
+      border: 1px dashed #bfdbfe;
+      background: #eff6ff;
+      border-radius: 10px;
+      padding: 10px 12px;
+      cursor: grab;
+      user-select: none;
+    }
+
+    .tool-item:active { cursor: grabbing; }
+
+    .tool-item strong {
+      display: block;
+      font-size: 0.92rem;
+      margin-bottom: 4px;
+    }
+
+    .tool-item span {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    .canvas-wrap {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .canvas-toolbar {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      background: #fafafa;
+    }
+
+    button {
+      border: 1px solid transparent;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-muted { background: #f3f4f6; color: #374151; }
+    .btn-danger { background: #fee2e2; color: var(--danger); }
+
+    #canvas {
+      position: relative;
+      overflow: auto;
+      background-image:
+        linear-gradient(#f3f4f6 1px, transparent 1px),
+        linear-gradient(90deg, #f3f4f6 1px, transparent 1px);
+      background-size: 24px 24px;
+      min-height: calc(100vh - 170px);
+    }
+
+    #dropZone {
+      position: relative;
+      width: 2200px;
+      height: 1400px;
+    }
+
+    .flow-node {
+      position: absolute;
+      width: 220px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+      cursor: grab;
+      transition: box-shadow .15s ease, border-color .15s ease;
+    }
+
+    .flow-node:active { cursor: grabbing; }
+
+    .flow-node.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .flow-node .node-head {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.82rem;
+      display: flex;
+      justify-content: space-between;
+      color: #1d4ed8;
+      background: #eff6ff;
+      border-radius: 12px 12px 0 0;
+      font-weight: 700;
+    }
+
+    .flow-node .node-body {
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+      font-size: 0.84rem;
+    }
+
+    .muted { color: var(--muted); }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .field label {
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .field input,
+    .field textarea,
+    .field select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 0.86rem;
+      resize: vertical;
+      min-height: 38px;
+    }
+
+    .field textarea { min-height: 90px; line-height: 1.5; }
+
+    pre {
+      margin: 0;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      max-height: 42vh;
+      overflow: auto;
+    }
+
+    .status {
+      font-size: 0.82rem;
+      color: var(--muted);
+      padding: 0 14px 12px;
+    }
+
+    .status strong { color: var(--success); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="panel">
+      <div class="panel-head">
+        <h2 class="panel-title">节点工具箱</h2>
+        <div class="panel-sub">把节点拖到中间画布，再点击节点进行编辑。</div>
+      </div>
+      <div class="panel-body" id="toolbox"></div>
+    </aside>
+
+    <main class="panel canvas-wrap">
+      <div class="canvas-toolbar">
+        <button class="btn-primary" id="btnReset">清空画布</button>
+        <button class="btn-muted" id="btnArrange">自动纵向排布</button>
+        <button class="btn-muted" id="btnExport">下载 JSON</button>
+      </div>
+      <section id="canvas">
+        <div id="dropZone"></div>
+      </section>
+      <div class="status" id="statusText">提示：拖拽左侧节点到画布后点击编辑。</div>
+    </main>
+
+    <aside class="panel">
+      <div class="panel-head">
+        <h2 class="panel-title">节点编辑 + DSL 预览</h2>
+        <div class="panel-sub">编辑仅针对当前选中的节点；右下角会实时更新 DSL 预览。</div>
+      </div>
+      <div class="panel-body" id="editorPanel">
+        <div class="muted">请先在画布中选择一个节点。</div>
+      </div>
+      <div class="panel-body">
+        <pre id="dslPreview"></pre>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const NODE_DEFS = [
+      { type: 'context', label: 'Context 节点', hint: '用于填充 $context', defaultTitle: '加载上下文', sqlRole: true },
+      { type: 'variable', label: 'Variable 节点', hint: '用于 variables.assign_by_condition', defaultTitle: '计算变量', decisionRole: true },
+      { type: 'precheck', label: 'Precheck 节点', hint: '前置校验，失败短路', defaultTitle: '前置检查', sqlRole: true },
+      { type: 'step', label: 'Step 节点', hint: '正式执行步骤，支持 consumes', defaultTitle: '执行步骤', sqlRole: true },
+      { type: 'on_fail', label: 'On Fail 节点', hint: '顶层失败判定与消息', defaultTitle: '最终失败判定', decisionRole: true },
+    ];
+
+    const toolbox = document.getElementById('toolbox');
+    const dropZone = document.getElementById('dropZone');
+    const editorPanel = document.getElementById('editorPanel');
+    const dslPreview = document.getElementById('dslPreview');
+    const statusText = document.getElementById('statusText');
+
+    const state = {
+      nodes: [],
+      selectedId: null,
+      dragNodeId: null,
+      dragOffsetX: 0,
+      dragOffsetY: 0,
+    };
+
+    function makeNode(def, x, y) {
+      return {
+        id: `node_${Date.now()}_${Math.random().toString(16).slice(2, 7)}`,
+        type: def.type,
+        title: def.defaultTitle,
+        x,
+        y,
+        sql: 'SELECT 1 AS ok;',
+        decision: 'exists',
+        outputs: 'ok',
+        consumes: '',
+        note: '',
+      };
+    }
+
+    function renderToolbox() {
+      toolbox.innerHTML = '';
+      NODE_DEFS.forEach((def) => {
+        const card = document.createElement('div');
+        card.className = 'tool-item';
+        card.draggable = true;
+        card.dataset.nodeType = def.type;
+        card.innerHTML = `<strong>${def.label}</strong><span>${def.hint}</span>`;
+        card.addEventListener('dragstart', (event) => {
+          event.dataTransfer.setData('node-type', def.type);
+        });
+        toolbox.appendChild(card);
+      });
+    }
+
+    function renderCanvas() {
+      dropZone.innerHTML = '';
+      state.nodes.forEach((node) => {
+        const el = document.createElement('article');
+        el.className = `flow-node${state.selectedId === node.id ? ' selected' : ''}`;
+        el.style.left = `${node.x}px`;
+        el.style.top = `${node.y}px`;
+        el.dataset.nodeId = node.id;
+        el.innerHTML = `
+          <div class="node-head">
+            <span>${node.type}</span>
+            <span>#${node.id.slice(-4)}</span>
+          </div>
+          <div class="node-body">
+            <strong>${escapeHtml(node.title || '(未命名节点)')}</strong>
+            <div class="muted">outputs: ${escapeHtml(node.outputs || '无')}</div>
+          </div>
+        `;
+
+        el.addEventListener('mousedown', (event) => {
+          if (event.button !== 0) return;
+          state.dragNodeId = node.id;
+          state.dragOffsetX = event.offsetX;
+          state.dragOffsetY = event.offsetY;
+          selectNode(node.id);
+        });
+
+        el.addEventListener('click', () => selectNode(node.id));
+        dropZone.appendChild(el);
+      });
+      renderDslPreview();
+    }
+
+    function selectNode(nodeId) {
+      state.selectedId = nodeId;
+      renderCanvas();
+      renderEditor();
+    }
+
+    function renderEditor() {
+      const node = state.nodes.find((item) => item.id === state.selectedId);
+      if (!node) {
+        editorPanel.innerHTML = '<div class="muted">请先在画布中选择一个节点。</div>';
+        return;
+      }
+
+      editorPanel.innerHTML = `
+        <div class="field">
+          <label>节点标题</label>
+          <input id="f_title" value="${escapeAttr(node.title)}" />
+        </div>
+        <div class="field">
+          <label>类型（只读）</label>
+          <input value="${node.type}" disabled />
+        </div>
+        <div class="field">
+          <label>SQL</label>
+          <textarea id="f_sql">${escapeHtml(node.sql)}</textarea>
+        </div>
+        <div class="field">
+          <label>Decision（用于 precheck/on_fail/variable）</label>
+          <select id="f_decision">
+            <option value="exists" ${node.decision === 'exists' ? 'selected' : ''}>exists</option>
+            <option value="eq" ${node.decision === 'eq' ? 'selected' : ''}>eq</option>
+            <option value="gt" ${node.decision === 'gt' ? 'selected' : ''}>gt</option>
+            <option value="custom" ${node.decision === 'custom' ? 'selected' : ''}>custom</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Outputs（逗号分隔）</label>
+          <input id="f_outputs" value="${escapeAttr(node.outputs)}" />
+        </div>
+        <div class="field">
+          <label>Consumes（逗号分隔 step id）</label>
+          <input id="f_consumes" value="${escapeAttr(node.consumes)}" />
+        </div>
+        <div class="field">
+          <label>备注</label>
+          <textarea id="f_note">${escapeHtml(node.note)}</textarea>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap: wrap;">
+          <button class="btn-primary" id="btnSaveNode">保存节点</button>
+          <button class="btn-danger" id="btnDeleteNode">删除节点</button>
+        </div>
+      `;
+
+      document.getElementById('btnSaveNode').addEventListener('click', () => {
+        node.title = document.getElementById('f_title').value.trim();
+        node.sql = document.getElementById('f_sql').value;
+        node.decision = document.getElementById('f_decision').value;
+        node.outputs = document.getElementById('f_outputs').value.trim();
+        node.consumes = document.getElementById('f_consumes').value.trim();
+        node.note = document.getElementById('f_note').value;
+        renderCanvas();
+        saveLocal();
+        statusText.innerHTML = `<strong>已保存：</strong>${escapeHtml(node.title || node.id)}`;
+      });
+
+      document.getElementById('btnDeleteNode').addEventListener('click', () => {
+        state.nodes = state.nodes.filter((item) => item.id !== node.id);
+        state.selectedId = null;
+        renderCanvas();
+        renderEditor();
+        saveLocal();
+        statusText.innerHTML = '已删除节点。';
+      });
+    }
+
+    function toDslObject() {
+      const context = {};
+      const variables = {};
+      const prechecks = [];
+      const steps = [];
+      let onFail = null;
+
+      state.nodes.forEach((node, index) => {
+        const key = node.title || `${node.type}_${index + 1}`;
+        const outputs = node.outputs
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
+
+        if (node.type === 'context') {
+          context[key] = {
+            type: 'sql',
+            sql: node.sql,
+            outputs,
+          };
+        }
+
+        if (node.type === 'variable') {
+          variables[key] = {
+            assign_by_condition: {
+              decision: node.decision,
+              value: `TODO_${key}`,
+            },
+          };
+        }
+
+        if (node.type === 'precheck') {
+          prechecks.push({
+            id: key,
+            type: 'sql',
+            sql: node.sql,
+            on_fail: {
+              decision: node.decision,
+              message: {
+                zh: `${key} 未通过`,
+                en: `${key} failed`,
+              },
+            },
+            outputs,
+          });
+        }
+
+        if (node.type === 'step') {
+          steps.push({
+            id: key,
+            type: 'sql',
+            sql: node.sql,
+            consumes: node.consumes
+              .split(',')
+              .map((item) => item.trim())
+              .filter(Boolean),
+            outputs,
+          });
+        }
+
+        if (node.type === 'on_fail') {
+          onFail = {
+            decision: node.decision,
+            message: {
+              zh: `${key} 命中失败条件`,
+              en: `${key} failure condition matched`,
+            },
+          };
+        }
+      });
+
+      return {
+        context,
+        variables,
+        prechecks,
+        steps,
+        on_fail: onFail || {
+          decision: 'exists',
+          message: { zh: '默认失败', en: 'default failure' },
+        },
+      };
+    }
+
+    function renderDslPreview() {
+      const payload = toDslObject();
+      dslPreview.textContent = JSON.stringify(payload, null, 2);
+    }
+
+    function saveLocal() {
+      localStorage.setItem('execdsl_flow_designer_state_v1', JSON.stringify(state.nodes));
+    }
+
+    function loadLocal() {
+      const raw = localStorage.getItem('execdsl_flow_designer_state_v1');
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          state.nodes = parsed;
+        }
+      } catch (_error) {
+        console.warn('加载本地缓存失败，已忽略。');
+      }
+    }
+
+    function escapeHtml(value) {
+      return (value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replaceAll('\n', '&#10;');
+    }
+
+    dropZone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+    });
+
+    dropZone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      const nodeType = event.dataTransfer.getData('node-type');
+      const def = NODE_DEFS.find((item) => item.type === nodeType);
+      if (!def) return;
+      const rect = dropZone.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const node = makeNode(def, Math.max(12, x - 100), Math.max(12, y - 20));
+      state.nodes.push(node);
+      state.selectedId = node.id;
+      renderCanvas();
+      renderEditor();
+      saveLocal();
+      statusText.innerHTML = `<strong>已添加节点：</strong>${escapeHtml(def.label)}`;
+    });
+
+    window.addEventListener('mousemove', (event) => {
+      if (!state.dragNodeId) return;
+      const node = state.nodes.find((item) => item.id === state.dragNodeId);
+      if (!node) return;
+      const rect = dropZone.getBoundingClientRect();
+      node.x = Math.max(8, event.clientX - rect.left - state.dragOffsetX);
+      node.y = Math.max(8, event.clientY - rect.top - state.dragOffsetY);
+      renderCanvas();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (state.dragNodeId) {
+        saveLocal();
+      }
+      state.dragNodeId = null;
+    });
+
+    document.getElementById('btnReset').addEventListener('click', () => {
+      state.nodes = [];
+      state.selectedId = null;
+      renderCanvas();
+      renderEditor();
+      saveLocal();
+      statusText.textContent = '画布已清空。';
+    });
+
+    document.getElementById('btnArrange').addEventListener('click', () => {
+      let x = 60;
+      let y = 80;
+      state.nodes.forEach((node, index) => {
+        node.x = x;
+        node.y = y;
+        y += 140;
+        if ((index + 1) % 7 === 0) {
+          x += 280;
+          y = 80;
+        }
+      });
+      renderCanvas();
+      saveLocal();
+      statusText.textContent = '已自动排布。';
+    });
+
+    document.getElementById('btnExport').addEventListener('click', () => {
+      const json = JSON.stringify(toDslObject(), null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'execdsl_flow_design.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      statusText.textContent = '已下载 DSL JSON。';
+    });
+
+    loadLocal();
+    renderToolbox();
+    renderCanvas();
+    renderEditor();
+  </script>
+</body>
+</html>
