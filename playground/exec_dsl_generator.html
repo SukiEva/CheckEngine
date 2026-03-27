@@ -407,6 +407,142 @@
       min-width: 100%;
     }
 
+    .flow-hint {
+      margin-top: -2px;
+      margin-bottom: 10px;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .flow-legend-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .flow-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .flow-legend-line {
+      width: 20px;
+      height: 0;
+      border-top: 2px solid #115e59;
+    }
+
+    .flow-legend-line.is-fail {
+      border-top-color: #b91c1c;
+      border-top-style: dashed;
+    }
+
+    .flow-legend-line.is-consume {
+      border-top-color: #9333ea;
+      border-top-style: dashed;
+    }
+
+    .planner-card {
+      margin-top: 10px;
+      border: 1px solid rgba(30, 36, 29, 0.1);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.68);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .planner-card h3 {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+
+    .planner-node-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .planner-node {
+      border: 1px solid rgba(30, 36, 29, 0.12);
+      border-radius: 12px;
+      background: #fffdf8;
+      padding: 9px 10px;
+      display: grid;
+      gap: 7px;
+    }
+
+    .planner-node.dragging {
+      opacity: 0.45;
+    }
+
+    .planner-node.drop-before {
+      box-shadow: inset 0 3px 0 rgba(15, 118, 110, 0.9);
+    }
+
+    .planner-node.drop-after {
+      box-shadow: inset 0 -3px 0 rgba(15, 118, 110, 0.9);
+    }
+
+    .planner-node-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .planner-node-name {
+      margin: 0;
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: var(--text);
+    }
+
+    .planner-node-desc {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.79rem;
+      line-height: 1.45;
+    }
+
+    .planner-node-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .planner-node-error {
+      border-radius: 999px;
+      background: rgba(185, 28, 28, 0.1);
+      color: #991b1b;
+      padding: 2px 8px;
+      font-size: 0.74rem;
+      font-weight: 600;
+    }
+
+    .planner-consume-editor {
+      display: grid;
+      gap: 6px;
+    }
+
+    .planner-consume-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) minmax(0, 1fr) auto auto;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .planner-consume-row input,
+    .planner-consume-row select {
+      min-height: 36px;
+      padding: 8px 10px;
+      border-radius: 10px;
+    }
+
     .tips-list {
       margin: 0;
       padding-left: 18px;
@@ -473,7 +609,8 @@
 
     @media (max-width: 720px) {
       .grid,
-      .inline-row {
+      .inline-row,
+      .planner-consume-row {
         grid-template-columns: 1fr;
       }
 
@@ -639,8 +776,22 @@
         <section class="panel">
           <h2>执行流程预览</h2>
           <div id="flow-summary" class="flow-summary">将根据当前 DSL 自动生成执行顺序图。</div>
+          <div class="flow-hint">可直接点击图中节点跳转编辑；下方「流程编排面板」支持拖拽排序与连线（consumes）调整。</div>
+          <div class="flow-legend-bar">
+            <label class="flow-legend-item">
+              <input id="consume-edge-toggle" type="checkbox" checked />
+              显示 consumes 连线
+            </label>
+            <span class="flow-legend-item"><span class="flow-legend-line"></span>执行顺序</span>
+            <span class="flow-legend-item"><span class="flow-legend-line is-consume"></span>consumes 数据依赖</span>
+            <span class="flow-legend-item"><span class="flow-legend-line is-fail"></span>失败分支</span>
+          </div>
           <div class="flow-canvas">
             <svg id="flow-svg" viewBox="0 0 360 260" role="img" aria-label="执行流程图预览"></svg>
+          </div>
+          <div class="planner-card">
+            <h3>流程编排面板</h3>
+            <div id="planner-node-list" class="planner-node-list"></div>
           </div>
           <h3>可优化点分析</h3>
           <ul id="optimization-list" class="tips-list"></ul>
@@ -797,6 +948,8 @@
     const statusEl = document.getElementById("status");
     const flowSummaryEl = document.getElementById("flow-summary");
     const flowSvgEl = document.getElementById("flow-svg");
+    const consumeEdgeToggleEl = document.getElementById("consume-edge-toggle");
+    const plannerNodeListEl = document.getElementById("planner-node-list");
     const optimizationListEl = document.getElementById("optimization-list");
     const importDialogEl = document.getElementById("import-dialog");
     const importJsonInputEl = document.getElementById("import-json-input");
@@ -818,6 +971,9 @@
     };
     let previewTimerId = 0;
     let highlightTimerId = 0;
+    let draggingPlannerNodeId = "";
+    let plannerDropNodeId = "";
+    let plannerDropPosition = "before";
 
     function createButton(label, className, dataset = {}) {
       const button = document.createElement("button");
@@ -1757,11 +1913,40 @@
         .replaceAll("'", "&#39;");
     }
 
+    function truncateText(value, maxLength) {
+      const raw = String(value || "");
+      if (raw.length <= maxLength) {
+        return raw;
+      }
+      return `${raw.slice(0, Math.max(0, maxLength - 1))}…`;
+    }
+
+    function buildIssueIndexMap(issues) {
+      const map = new Map();
+      issues.forEach((issue) => {
+        if (!issue.path) {
+          return;
+        }
+        const precheckMatch = issue.path.match(/^prechecks\[(\d+)\]/);
+        if (precheckMatch) {
+          const key = `precheck:${Number(precheckMatch[1])}`;
+          map.set(key, (map.get(key) || 0) + 1);
+          return;
+        }
+        const stepMatch = issue.path.match(/^steps\[(\d+)\]/);
+        if (stepMatch) {
+          const key = `step:${Number(stepMatch[1])}`;
+          map.set(key, (map.get(key) || 0) + 1);
+        }
+      });
+      return map;
+    }
+
     function buildFlowGraphData(dsl) {
       const nodes = [];
       const edges = [];
-      const addNode = (id, label, type) => {
-        nodes.push({ id, label, type });
+      const addNode = (id, label, type, meta = {}) => {
+        nodes.push({ id, label, type, ...meta });
       };
       const addEdge = (from, to, kind = "normal", label = "") => {
         edges.push({ from, to, kind, label });
@@ -1784,7 +1969,11 @@
 
       (dsl.prechecks || []).forEach((item, index) => {
         const nodeId = `precheck_${index}`;
-        addNode(nodeId, `Precheck: ${item.name || `#${index + 1}`}`, "precheck");
+        addNode(nodeId, `Precheck: ${item.name || `#${index + 1}`}`, "precheck", {
+          desc: item.description || "",
+          nodeType: "precheck",
+          nodeIndex: index
+        });
         addEdge(previousId, nodeId);
         addEdge(nodeId, "fail", "fail", "失败短路");
         previousId = nodeId;
@@ -1792,8 +1981,20 @@
 
       dsl.steps.forEach((item, index) => {
         const nodeId = `step_${index}`;
-        addNode(nodeId, `Step: ${item.name || `#${index + 1}`}`, "step");
+        addNode(nodeId, `Step: ${item.name || `#${index + 1}`}`, "step", {
+          desc: item.description || "",
+          nodeType: "step",
+          nodeIndex: index
+        });
         addEdge(previousId, nodeId);
+        (item.consumes || []).forEach((consume) => {
+          const fromStep = String(consume.from || "").match(/^\$steps\.([A-Za-z_]\w*)$/)?.[1];
+          if (!fromStep) return;
+          const fromStepIndex = dsl.steps.findIndex((step) => step.name === fromStep);
+          if (fromStepIndex >= 0) {
+            addEdge(`step_${fromStepIndex}`, nodeId, "consume", consume.alias || "consume");
+          }
+        });
         previousId = nodeId;
       });
 
@@ -1810,7 +2011,7 @@
     function renderFlowGraph(dsl) {
       const graph = buildFlowGraphData(dsl);
       const nodeWidth = 236;
-      const nodeHeight = 42;
+      const nodeHeight = 50;
       const startX = 56;
       const startY = 18;
       const gapY = 28;
@@ -1830,7 +2031,8 @@
       const height = Math.max(280, startY + positionedNodes.length * (nodeHeight + gapY));
       const width = 620;
 
-      const edgeSvg = graph.edges.map((edge) => {
+      const visibleEdges = graph.edges.filter((edge) => consumeEdgeToggleEl.checked || edge.kind !== "consume");
+      const edgeSvg = visibleEdges.map((edge) => {
         const fromNode = nodeMap.get(edge.from);
         const toNode = nodeMap.get(edge.to);
         if (!fromNode || !toNode) {
@@ -1841,8 +2043,10 @@
         const x2 = toNode.x + nodeWidth / 2;
         const y2 = toNode.y;
         const isSideway = Math.abs(x1 - x2) > 10;
-        const stroke = edge.kind === "fail" ? "#b91c1c" : "#115e59";
-        const dash = edge.kind === "fail" ? ' stroke-dasharray="6 4"' : "";
+        const isFail = edge.kind === "fail";
+        const isConsume = edge.kind === "consume";
+        const stroke = isFail ? "#b91c1c" : (isConsume ? "#9333ea" : "#115e59");
+        const dash = (isFail || isConsume) ? ' stroke-dasharray="6 4"' : "";
         const path = isSideway
           ? `M ${x1} ${y1} C ${x1} ${y1 + 30}, ${x2} ${y2 - 30}, ${x2} ${y2}`
           : `M ${x1} ${y1} L ${x2} ${y2}`;
@@ -1861,9 +2065,16 @@
           pass: { fill: "#047857", text: "#ecfdf5" },
           fail: { fill: "#b91c1c", text: "#fef2f2" }
         }[node.type] || { fill: "#374151", text: "#ffffff" };
+        const desc = node.desc ? escapeXml(truncateText(node.desc, 28)) : "";
+        const attr = (node.nodeType !== undefined && node.nodeIndex !== undefined)
+          ? ` data-node-type="${node.nodeType}" data-node-index="${node.nodeIndex}"`
+          : "";
         return `
+          <g${attr} style="cursor: pointer;">
           <rect x="${node.x}" y="${node.y}" width="${nodeWidth}" height="${nodeHeight}" rx="12" fill="${palette.fill}" opacity="0.95"></rect>
           <text x="${node.x + 12}" y="${node.y + 25}" fill="${palette.text}" font-size="13">${escapeXml(node.label)}</text>
+          ${desc ? `<text x="${node.x + 12}" y="${node.y + 38}" fill="${palette.text}" opacity="0.82" font-size="10.5">${desc}</text>` : ""}
+          </g>
         `;
       }).join("");
 
@@ -1876,6 +2087,9 @@
           <marker id="arrow-fail" markerWidth="8" markerHeight="8" refX="4.5" refY="4" orient="auto">
             <path d="M 0 0 L 8 4 L 0 8 z" fill="#b91c1c"></path>
           </marker>
+          <marker id="arrow-consume" markerWidth="8" markerHeight="8" refX="4.5" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#9333ea"></path>
+          </marker>
         </defs>
         ${edgeSvg}
         ${nodeSvg}
@@ -1883,7 +2097,11 @@
 
       const precheckCount = (dsl.prechecks || []).length;
       const stepCount = dsl.steps.length;
-      flowSummaryEl.textContent = `当前流程共 ${precheckCount + stepCount + 4} 个阶段节点（含入口、判定与结果），其中 precheck 短路分支 ${precheckCount + 1} 条。`;
+      const consumeEdgeCount = graph.edges.filter((edge) => edge.kind === "consume").length;
+      const consumeSummary = consumeEdgeToggleEl.checked
+        ? `；可见 consumes 连线 ${consumeEdgeCount} 条`
+        : "；consumes 连线已隐藏";
+      flowSummaryEl.textContent = `当前流程共 ${precheckCount + stepCount + 4} 个阶段节点（含入口、判定与结果），其中 precheck 短路分支 ${precheckCount + 1} 条${consumeSummary}。`;
     }
 
     function collectOptimizationTips(dsl, issues) {
@@ -1928,6 +2146,232 @@
       return tips;
     }
 
+    function findNodeCard(nodeType, index) {
+      if (nodeType === "precheck") {
+        return prechecksListEl.querySelectorAll(".precheck-card")[index] || null;
+      }
+      if (nodeType === "step") {
+        return stepsListEl.querySelectorAll(".step-card")[index] || null;
+      }
+      return null;
+    }
+
+    function focusNodeCard(nodeType, index) {
+      const card = findNodeCard(nodeType, index);
+      if (!card) {
+        return;
+      }
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      highlightTarget(card);
+      const firstInput = card.querySelector("input, textarea, select");
+      if (firstInput) {
+        firstInput.focus({ preventScroll: true });
+      }
+    }
+
+    function createPlannerConsumeRow(options, from = "", alias = "") {
+      const row = document.createElement("div");
+      row.className = "planner-consume-row";
+      row.innerHTML = `
+        <select data-role="planner-consume-from"></select>
+        <input data-role="planner-consume-alias" placeholder="alias，例如 am" />
+        <button type="button" class="btn-secondary btn-mini" data-apply-link-row="true">应用</button>
+        <button type="button" class="btn-danger btn-mini" data-remove-link-row="true">删除</button>
+      `;
+      const fromSelect = row.querySelector('[data-role="planner-consume-from"]');
+      fromSelect.innerHTML = `<option value="">选择前置 step</option>${options.map((name) => `<option value="${escapeXml(name)}">${escapeXml(name)}</option>`).join("")}`;
+      fromSelect.value = from;
+      row.querySelector('[data-role="planner-consume-alias"]').value = alias;
+      return row;
+    }
+
+    function createPlannerNode(type, index, data, issueCount = 0) {
+      const card = document.createElement("div");
+      card.className = "planner-node";
+      card.draggable = true;
+      card.dataset.nodeType = type;
+      card.dataset.index = String(index);
+      card.dataset.nodeId = `${type}-${index}`;
+      const titlePrefix = type === "precheck" ? "Precheck" : "Step";
+      const nodeName = data.name || `未命名_${index + 1}`;
+      const nodeDesc = data.description ? String(data.description) : "（未配置 description）";
+      card.innerHTML = `
+        <div class="planner-node-head">
+          <p class="planner-node-name">${escapeXml(titlePrefix)} · ${escapeXml(nodeName)}</p>
+          <div class="planner-node-actions">
+            ${issueCount > 0 ? `<span class="planner-node-error">${issueCount} 个提醒</span>` : ""}
+            <button type="button" class="btn-ghost btn-mini" data-node-focus="true">编辑</button>
+            <button type="button" class="btn-ghost btn-mini" data-node-move="up">上移</button>
+            <button type="button" class="btn-ghost btn-mini" data-node-move="down">下移</button>
+          </div>
+        </div>
+        <p class="planner-node-desc">${escapeXml(nodeDesc)}</p>
+      `;
+      return card;
+    }
+
+    function renderFlowPlanner(dsl, issueIndexMap) {
+      plannerNodeListEl.innerHTML = "";
+      const nodes = [];
+      (dsl.prechecks || []).forEach((item, index) => {
+        const issueKey = `precheck:${index}`;
+        nodes.push(createPlannerNode("precheck", index, item, issueIndexMap.get(issueKey) || 0));
+      });
+      dsl.steps.forEach((item, index) => {
+        const issueKey = `step:${index}`;
+        const stepNode = createPlannerNode("step", index, item, issueIndexMap.get(issueKey) || 0);
+        if (index > 0) {
+          const consumeBar = document.createElement("div");
+          consumeBar.className = "planner-consume-editor";
+          const options = dsl.steps.slice(0, index).map((step) => step.name).filter(Boolean);
+          const consumes = Array.isArray(item.consumes) && item.consumes.length > 0 ? item.consumes : [{ from: "", alias: "" }];
+          consumes.forEach((consume) => {
+            const consumedStepName = String(consume.from || "").replace("$steps.", "");
+            consumeBar.appendChild(createPlannerConsumeRow(options, consumedStepName, consume.alias || ""));
+          });
+          const addButton = document.createElement("button");
+          addButton.type = "button";
+          addButton.className = "btn-ghost btn-mini";
+          addButton.dataset.addLinkRow = "true";
+          addButton.textContent = "新增连线";
+          consumeBar.appendChild(addButton);
+          stepNode.appendChild(consumeBar);
+        }
+        nodes.push(stepNode);
+      });
+      nodes.forEach((node) => plannerNodeListEl.appendChild(node));
+    }
+
+    function moveCardByIndex(nodeType, index, direction) {
+      const container = nodeType === "precheck" ? prechecksListEl : stepsListEl;
+      const selector = nodeType === "precheck" ? ".precheck-card" : ".step-card";
+      const card = container.querySelectorAll(selector)[index];
+      if (!card) {
+        return;
+      }
+      if (direction === "up" && card.previousElementSibling) {
+        container.insertBefore(card, card.previousElementSibling);
+      } else if (direction === "down" && card.nextElementSibling) {
+        container.insertBefore(card.nextElementSibling, card);
+      } else {
+        return;
+      }
+      refreshPreview();
+    }
+
+    function moveCardByDrag(sourceType, sourceIndex, targetIndex) {
+      if (sourceType !== "precheck" && sourceType !== "step") {
+        return;
+      }
+      const container = sourceType === "precheck" ? prechecksListEl : stepsListEl;
+      const selector = sourceType === "precheck" ? ".precheck-card" : ".step-card";
+      const cards = Array.from(container.querySelectorAll(selector));
+      const sourceCard = cards[sourceIndex];
+      const targetCard = cards[targetIndex];
+      if (!sourceCard || !targetCard || sourceCard === targetCard) {
+        return;
+      }
+      container.removeChild(sourceCard);
+      const remainingCards = Array.from(container.querySelectorAll(selector));
+      let insertIndex = targetIndex;
+      if (sourceIndex < targetIndex) {
+        insertIndex -= 1;
+      }
+      if (plannerDropPosition === "after") {
+        insertIndex += 1;
+      }
+      insertIndex = Math.max(0, insertIndex);
+      const referenceCard = remainingCards[insertIndex] || null;
+      container.insertBefore(sourceCard, referenceCard);
+      refreshPreview();
+    }
+
+    function clearPlannerDropIndicators() {
+      plannerDropNodeId = "";
+      plannerDropPosition = "before";
+      plannerNodeListEl.querySelectorAll(".planner-node.drop-before, .planner-node.drop-after").forEach((node) => {
+        node.classList.remove("drop-before", "drop-after");
+      });
+    }
+
+    function setPlannerDropIndicator(targetNode, clientY) {
+      clearPlannerDropIndicators();
+      if (!targetNode) {
+        return;
+      }
+      const rect = targetNode.getBoundingClientRect();
+      const isBefore = clientY < rect.top + rect.height / 2;
+      plannerDropNodeId = targetNode.dataset.nodeId || "";
+      plannerDropPosition = isBefore ? "before" : "after";
+      targetNode.classList.add(isBefore ? "drop-before" : "drop-after");
+    }
+
+    function readStepConsumesFromCard(stepCard) {
+      const consumes = [];
+      stepCard.querySelectorAll('[data-role="consumes"] .dynamic-row').forEach((row) => {
+        const from = row.querySelector('[data-role="from"]').value.trim();
+        const alias = row.querySelector('[data-role="alias"]').value.trim();
+        if (from || alias) {
+          consumes.push({ from, alias });
+        }
+      });
+      return consumes;
+    }
+
+    function writeStepConsumesToCard(stepCard, consumes) {
+      const consumesContainer = stepCard.querySelector('[data-role="consumes"]');
+      consumesContainer.innerHTML = "";
+      if (consumes.length === 0) {
+        addConsumeRow(consumesContainer);
+        return;
+      }
+      consumes.forEach((consume) => {
+        addConsumeRow(consumesContainer, consume.from, consume.alias);
+      });
+    }
+
+    function applyStepConsumeFromPlanner(stepIndex, fromStepName, alias) {
+      const stepCard = stepsListEl.querySelectorAll(".step-card")[stepIndex];
+      if (!stepCard) {
+        return;
+      }
+      if (!fromStepName || !alias) {
+        return;
+      }
+      const consumes = readStepConsumesFromCard(stepCard);
+      const normalizedFrom = `$steps.${fromStepName}`;
+      const existingIndex = consumes.findIndex((item) => item.from === normalizedFrom);
+      if (existingIndex >= 0) {
+        consumes[existingIndex].alias = alias;
+      } else {
+        consumes.push({ from: normalizedFrom, alias });
+      }
+      writeStepConsumesToCard(stepCard, consumes);
+      refreshPreview();
+    }
+
+    function removeStepConsumeFromPlanner(stepIndex, fromStepName, alias) {
+      const stepCard = stepsListEl.querySelectorAll(".step-card")[stepIndex];
+      if (!stepCard) {
+        return;
+      }
+      const normalizedFrom = fromStepName ? `$steps.${fromStepName}` : "";
+      const consumes = readStepConsumesFromCard(stepCard).filter((item) => {
+        if (!normalizedFrom && !alias) {
+          return true;
+        }
+        if (normalizedFrom && item.from !== normalizedFrom) {
+          return true;
+        }
+        if (!alias) {
+          return false;
+        }
+        return item.alias !== alias;
+      });
+      writeStepConsumesToCard(stepCard, consumes);
+      refreshPreview();
+    }
+
     function saveState(dsl) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dsl));
     }
@@ -1935,6 +2379,7 @@
     function refreshPreview() {
       const dsl = collectDsl();
       const issues = validateDsl(dsl);
+      const issueIndexMap = buildIssueIndexMap(issues);
       previewEl.textContent = JSON.stringify(dsl, null, 2);
       issuesEl.innerHTML = "";
 
@@ -1957,6 +2402,7 @@
       }
 
       renderFlowGraph(dsl);
+      renderFlowPlanner(dsl, issueIndexMap);
       optimizationListEl.innerHTML = "";
       collectOptimizationTips(dsl, issues).forEach((tip) => {
         const item = document.createElement("li");
@@ -2157,6 +2603,107 @@
       }
       focusIssueField(button.dataset.path);
     });
+    flowSvgEl.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-node-type][data-node-index]");
+      if (!target) {
+        return;
+      }
+      focusNodeCard(target.dataset.nodeType, Number(target.dataset.nodeIndex));
+    });
+    plannerNodeListEl.addEventListener("click", (event) => {
+      const plannerNode = event.target.closest(".planner-node");
+      if (!plannerNode) {
+        return;
+      }
+      const nodeType = plannerNode.dataset.nodeType;
+      const index = Number(plannerNode.dataset.index);
+      if (event.target.closest("[data-node-focus]")) {
+        focusNodeCard(nodeType, index);
+        return;
+      }
+      const moveButton = event.target.closest("[data-node-move]");
+      if (moveButton) {
+        moveCardByIndex(nodeType, index, moveButton.dataset.nodeMove);
+        return;
+      }
+      const addLinkRowButton = event.target.closest("[data-add-link-row]");
+      if (addLinkRowButton && nodeType === "step") {
+        const options = collectDsl().steps.slice(0, index).map((step) => step.name).filter(Boolean);
+        const editor = plannerNode.querySelector(".planner-consume-editor");
+        editor.insertBefore(createPlannerConsumeRow(options), addLinkRowButton);
+        return;
+      }
+      const applyLinkButton = event.target.closest("[data-apply-link-row]");
+      if (applyLinkButton && nodeType === "step") {
+        const row = applyLinkButton.closest(".planner-consume-row");
+        const fromStepName = row.querySelector('[data-role="planner-consume-from"]').value;
+        const alias = row.querySelector('[data-role="planner-consume-alias"]').value.trim();
+        applyStepConsumeFromPlanner(index, fromStepName, alias);
+        return;
+      }
+      const removeLinkButton = event.target.closest("[data-remove-link-row]");
+      if (removeLinkButton && nodeType === "step") {
+        const row = removeLinkButton.closest(".planner-consume-row");
+        const fromStepName = row.querySelector('[data-role="planner-consume-from"]').value;
+        const alias = row.querySelector('[data-role="planner-consume-alias"]').value.trim();
+        removeStepConsumeFromPlanner(index, fromStepName, alias);
+      }
+    });
+    plannerNodeListEl.addEventListener("dragstart", (event) => {
+      const plannerNode = event.target.closest(".planner-node");
+      if (!plannerNode) {
+        return;
+      }
+      draggingPlannerNodeId = plannerNode.dataset.nodeId;
+      plannerNode.classList.add("dragging");
+      event.dataTransfer.effectAllowed = "move";
+    });
+    plannerNodeListEl.addEventListener("dragend", (event) => {
+      const plannerNode = event.target.closest(".planner-node");
+      if (plannerNode) {
+        plannerNode.classList.remove("dragging");
+      }
+      draggingPlannerNodeId = "";
+      clearPlannerDropIndicators();
+    });
+    plannerNodeListEl.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      const targetNode = event.target.closest(".planner-node");
+      if (!targetNode || targetNode.dataset.nodeId === draggingPlannerNodeId) {
+        clearPlannerDropIndicators();
+        return;
+      }
+      setPlannerDropIndicator(targetNode, event.clientY);
+    });
+    plannerNodeListEl.addEventListener("dragleave", (event) => {
+      if (!plannerNodeListEl.contains(event.relatedTarget)) {
+        clearPlannerDropIndicators();
+      }
+    });
+    plannerNodeListEl.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const targetNode = event.target.closest(".planner-node");
+      if (!targetNode || !draggingPlannerNodeId) {
+        clearPlannerDropIndicators();
+        return;
+      }
+      const sourceNode = plannerNodeListEl.querySelector(`[data-node-id="${draggingPlannerNodeId}"]`);
+      if (!sourceNode || sourceNode === targetNode) {
+        clearPlannerDropIndicators();
+        return;
+      }
+      if (sourceNode.dataset.nodeType !== targetNode.dataset.nodeType) {
+        clearPlannerDropIndicators();
+        return;
+      }
+      moveCardByDrag(
+        sourceNode.dataset.nodeType,
+        Number(sourceNode.dataset.index),
+        Number(targetNode.dataset.index)
+      );
+      clearPlannerDropIndicators();
+    });
     document.getElementById("open-import-dialog").addEventListener("click", openImportDialog);
     document.getElementById("cancel-import").addEventListener("click", closeImportDialog);
     document.getElementById("confirm-import").addEventListener("click", importJsonToForm);
@@ -2187,6 +2734,9 @@
     });
     document.getElementById("scroll-top").addEventListener("click", () => {
       window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    consumeEdgeToggleEl.addEventListener("change", () => {
+      refreshPreview();
     });
 
     document.body.addEventListener("click", handleCollectionActions);
