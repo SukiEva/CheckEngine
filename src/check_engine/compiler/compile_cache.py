@@ -30,10 +30,6 @@ class CompileCacheLike(ABC, Generic[CompiledValueT]):
     def info(self) -> Optional[CompileCacheInfo]:
         """返回缓存统计信息。"""
 
-    @abstractmethod
-    def debug_keys(self) -> tuple[str, ...]:
-        """返回调试用途的缓存 key 列表。"""
-
 
 class NoopCompileCache(CompileCacheLike[CompiledValueT]):
     """关闭缓存时使用的空实现。"""
@@ -49,9 +45,6 @@ class NoopCompileCache(CompileCacheLike[CompiledValueT]):
 
     def info(self) -> Optional[CompileCacheInfo]:
         return None
-
-    def debug_keys(self) -> tuple[str, ...]:
-        return tuple()
 
 
 class HashedLruCompileCache(CompileCacheLike[CompiledValueT]):
