@@ -31,7 +31,7 @@
     .app {
       display: grid;
       grid-template-columns: 280px 1fr 360px;
-      min-height: 100vh;
+      height: calc(100vh - 28px);
       gap: 14px;
       padding: 14px;
     }
@@ -42,6 +42,7 @@
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       overflow: hidden;
+      min-height: 0;
     }
 
     .panel-head {
@@ -102,6 +103,7 @@
       position: relative;
       display: grid;
       grid-template-rows: auto 1fr;
+      min-height: 0;
     }
 
     .canvas-toolbar {
@@ -137,13 +139,14 @@
         linear-gradient(#f3f4f6 1px, transparent 1px),
         linear-gradient(90deg, #f3f4f6 1px, transparent 1px);
       background-size: 24px 24px;
-      min-height: calc(100vh - 170px);
+      min-height: 0;
     }
 
     #dropZone {
       position: relative;
       width: 2200px;
       height: 1400px;
+      transform-origin: left top;
     }
     #linkLayer {
       position: absolute;
@@ -195,6 +198,27 @@
       display: grid;
       gap: 6px;
       font-size: 0.84rem;
+    }
+    .step-block {
+      border: 1px dashed #93c5fd;
+      border-radius: 10px;
+      background: #f8fbff;
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+    }
+    .step-sub-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .step-sub-item {
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      background: #e0ecff;
+      color: #1e40af;
+      font-size: 0.76rem;
+      padding: 2px 8px;
     }
 
     .muted { color: var(--muted); }
@@ -307,6 +331,9 @@
       <div class="canvas-toolbar">
         <button class="btn-primary" id="btnReset">清空画布</button>
         <button class="btn-muted" id="btnArrange">自动横向排布</button>
+        <button class="btn-muted" id="btnZoomOut">缩小</button>
+        <button class="btn-muted" id="btnZoomIn">放大</button>
+        <button class="btn-muted" id="btnZoomReset">100%</button>
         <button class="btn-muted" id="btnImport">导入 JSON</button>
         <button class="btn-muted" id="btnPreview">预览 JSON</button>
         <button class="btn-muted" id="btnExport">下载 JSON</button>
@@ -361,6 +388,7 @@
       dragNodeId: null,
       dragOffsetX: 0,
       dragOffsetY: 0,
+      zoom: 1,
     };
 
     const LAYOUT = {
@@ -380,6 +408,7 @@
         y,
         sql: 'SELECT 1 AS ok;',
         sqlParamsText: '{}',
+        sqlParams: [{ key: '', value: '' }],
         datasource: 'saas_db',
         resultMode: def.type === 'context' ? 'record' : 'records',
         decision: def.type === 'on_fail' ? 'exists($steps.some_step.some_output)' : 'exists',
@@ -393,6 +422,7 @@
         consumes: '',
         note: '',
         stepOrder: def.type === 'step' ? getNextStepOrder() : null,
+        stepChildren: def.type === 'step' ? ['sql_node_1'] : [],
       };
     }
 
@@ -417,6 +447,7 @@
 
     function renderCanvas() {
       dropZone.innerHTML = '';
+      dropZone.style.transform = `scale(${state.zoom})`;
       const linkLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       linkLayer.setAttribute('id', 'linkLayer');
       linkLayer.setAttribute('viewBox', '0 0 2200 1400');
@@ -443,6 +474,7 @@
             <strong>${escapeHtml(node.title || '(未命名节点)')}</strong>
             <div class="muted">ds: ${escapeHtml(node.datasource || '-')} / mode: ${escapeHtml(node.resultMode || '-')}</div>
             <div class="muted">outputs: ${escapeHtml(node.outputs || '无')}</div>
+            ${node.type === 'step' ? renderStepChildrenPreview(node) : ''}
           </div>
         `;
 
@@ -511,8 +543,9 @@
           <div class="autocomplete-panel" id="ac_sql"></div>
         </div>
         <div class="field">
-          <label>SQL Params（JSON 对象）</label>
-          <textarea id="f_sql_params">${escapeHtml(node.sqlParamsText || '{}')}</textarea>
+          <label>SQL 变量（key/value）</label>
+          <div id="f_sql_params_rows"></div>
+          <button class="btn-muted" id="btnAddSqlParam" type="button">+ 新增变量</button>
         </div>
         ` : ''}
         <div class="field">
@@ -565,11 +598,25 @@
           <label>备注</label>
           <textarea id="f_note">${escapeHtml(node.note)}</textarea>
         </div>
+        ${node.type === 'step' ? `
+        <div class="field">
+          <label>Step 块内节点</label>
+          <div id="f_step_children"></div>
+          <button class="btn-muted" id="btnAddStepChild" type="button">+ 添加块内节点</button>
+        </div>
+        ` : ''}
         <div style="display:flex; gap:8px; flex-wrap: wrap;">
           <button class="btn-primary" id="btnSaveNode">保存节点</button>
           <button class="btn-danger" id="btnDeleteNode">删除节点</button>
         </div>
       `;
+
+      if (node.type === 'context' || node.type === 'precheck' || node.type === 'step') {
+        renderSqlParamRows(node);
+      }
+      if (node.type === 'step') {
+        renderStepChildrenEditor(node);
+      }
 
       document.getElementById('btnSaveNode').addEventListener('click', () => {
         node.title = document.getElementById('f_title').value.trim();
@@ -580,7 +627,8 @@
         }
         if (node.type === 'context' || node.type === 'precheck' || node.type === 'step') {
           node.sql = document.getElementById('f_sql').value;
-          node.sqlParamsText = document.getElementById('f_sql_params').value.trim() || '{}';
+          node.sqlParams = readSqlParamRows();
+          node.sqlParamsText = JSON.stringify(sqlParamsRowsToObject(node.sqlParams));
           node.datasource = document.getElementById('f_datasource').value.trim();
           node.resultMode = document.getElementById('f_result_mode').value;
         }
@@ -593,6 +641,9 @@
         node.outputs = document.getElementById('f_outputs').value.trim();
         node.consumes = document.getElementById('f_consumes').value.trim();
         node.note = document.getElementById('f_note').value;
+        if (node.type === 'step') {
+          node.stepChildren = readStepChildrenRows();
+        }
         renderCanvas();
         saveLocal();
         statusText.innerHTML = `<strong>已保存：</strong>${escapeHtml(node.title || node.id)}`;
@@ -625,6 +676,112 @@
         .map((item) => item.stepOrder);
       if (!stepOrders.length) return 1;
       return Math.max(...stepOrders) + 1;
+    }
+
+    function renderStepChildrenPreview(node) {
+      const children = Array.isArray(node.stepChildren) ? node.stepChildren.filter(Boolean) : [];
+      if (!children.length) {
+        return '<div class="step-block"><div class="muted">块内暂无节点</div></div>';
+      }
+      return `
+        <div class="step-block">
+          <div class="muted">块内节点</div>
+          <div class="step-sub-list">
+            ${children.map((child) => `<span class="step-sub-item">${escapeHtml(child)}</span>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSqlParamRows(node) {
+      const rowsContainer = document.getElementById('f_sql_params_rows');
+      const addButton = document.getElementById('btnAddSqlParam');
+      if (!rowsContainer || !addButton) return;
+      const rows = Array.isArray(node.sqlParams) && node.sqlParams.length ? node.sqlParams : [{ key: '', value: '' }];
+      const drawRows = () => {
+        rowsContainer.innerHTML = rows.map((row, index) => `
+          <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
+            <input data-sql-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="变量名，如 user_id" />
+            <input data-sql-value="${index}" value="${escapeAttr(row.value || '')}" placeholder="值，如 $input.user_id 或 100" />
+            <button class="btn-danger" type="button" data-sql-remove="${index}">删</button>
+          </div>
+        `).join('');
+        rowsContainer.querySelectorAll('[data-sql-remove]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const removeIndex = Number(button.getAttribute('data-sql-remove'));
+            rows.splice(removeIndex, 1);
+            if (!rows.length) rows.push({ key: '', value: '' });
+            drawRows();
+          });
+        });
+      };
+      drawRows();
+      addButton.addEventListener('click', () => {
+        rows.push({ key: '', value: '' });
+        drawRows();
+      });
+    }
+
+    function readSqlParamRows() {
+      const keyInputs = Array.from(document.querySelectorAll('[data-sql-key]'));
+      const valueInputs = Array.from(document.querySelectorAll('[data-sql-value]'));
+      return keyInputs.map((input, index) => ({
+        key: input.value.trim(),
+        value: valueInputs[index] ? valueInputs[index].value.trim() : '',
+      }));
+    }
+
+    function sqlParamsRowsToObject(rows) {
+      const result = {};
+      rows.forEach((row) => {
+        if (!row.key) return;
+        result[row.key] = parseInputValue(row.value);
+      });
+      return result;
+    }
+
+    function objectToSqlParamsRows(rawObject) {
+      if (!rawObject || typeof rawObject !== 'object' || Array.isArray(rawObject)) {
+        return [{ key: '', value: '' }];
+      }
+      const entries = Object.entries(rawObject).map(([key, value]) => ({
+        key,
+        value: normalizeValueToInput(value),
+      }));
+      return entries.length ? entries : [{ key: '', value: '' }];
+    }
+
+    function renderStepChildrenEditor(node) {
+      const wrapper = document.getElementById('f_step_children');
+      const addButton = document.getElementById('btnAddStepChild');
+      if (!wrapper || !addButton) return;
+      const rows = Array.isArray(node.stepChildren) && node.stepChildren.length ? node.stepChildren : [''];
+      const drawRows = () => {
+        wrapper.innerHTML = rows.map((child, index) => `
+          <div style="display:grid; grid-template-columns:1fr auto; gap:6px; margin-bottom:6px;">
+            <input data-step-child="${index}" value="${escapeAttr(child || '')}" placeholder="例如 fetch_rate_sql" />
+            <button class="btn-danger" type="button" data-step-child-remove="${index}">删</button>
+          </div>
+        `).join('');
+        wrapper.querySelectorAll('[data-step-child-remove]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const removeIndex = Number(button.getAttribute('data-step-child-remove'));
+            rows.splice(removeIndex, 1);
+            if (!rows.length) rows.push('');
+            drawRows();
+          });
+        });
+      };
+      drawRows();
+      addButton.addEventListener('click', () => {
+        rows.push('');
+        drawRows();
+      });
+    }
+
+    function readStepChildrenRows() {
+      const rows = Array.from(document.querySelectorAll('[data-step-child]'));
+      return rows.map((item) => item.value.trim()).filter(Boolean);
     }
 
     function getSortedSteps() {
@@ -700,7 +857,7 @@
         getKeyword: () => {
           const cursor = sqlTextarea.selectionStart || 0;
           const beforeCursor = sqlTextarea.value.slice(0, cursor);
-          const matched = beforeCursor.match(/[$][a-zA-Z0-9_\\.]*$/);
+          const matched = beforeCursor.match(/[$][a-zA-Z0-9_.]*$/);
           return matched ? matched[0] : '';
         },
         buildOptions: (keyword) => {
@@ -712,7 +869,7 @@
           const cursor = sqlTextarea.selectionStart || 0;
           const beforeCursor = sqlTextarea.value.slice(0, cursor);
           const afterCursor = sqlTextarea.value.slice(cursor);
-          const matched = beforeCursor.match(/[$][a-zA-Z0-9_\\.]*$/);
+          const matched = beforeCursor.match(/[$][a-zA-Z0-9_.]*$/);
           if (!matched) return;
           const start = cursor - matched[0].length;
           sqlTextarea.value = `${beforeCursor.slice(0, start)}${value}${afterCursor}`;
@@ -914,7 +1071,9 @@
           .split(',')
           .map((item) => item.trim())
           .filter(Boolean);
-        const sqlParams = parseJsonObjectOrEmpty(node.sqlParamsText || '{}');
+        const sqlParams = Array.isArray(node.sqlParams)
+          ? sqlParamsRowsToObject(node.sqlParams)
+          : parseJsonObjectOrEmpty(node.sqlParamsText || '{}');
 
         if (node.type === 'context') {
           context = {
@@ -965,6 +1124,7 @@
             sql_params: sqlParams,
             consumes: parseConsumesText(node.consumes),
             outputs,
+            nodes: Array.isArray(node.stepChildren) ? node.stepChildren.filter(Boolean) : [],
             _step_order: node.stepOrder || 0,
           });
         }
@@ -1039,6 +1199,7 @@
           y: 0,
           sql: extra.sql || 'SELECT 1 AS ok;',
           sqlParamsText: extra.sqlParamsText || '{}',
+          sqlParams: Array.isArray(extra.sqlParams) ? extra.sqlParams : objectToSqlParamsRows(parseJsonObjectOrEmpty(extra.sqlParamsText || '{}')),
           datasource: extra.datasource || 'saas_db',
           resultMode: extra.resultMode || (nodeType === 'context' ? 'record' : 'records'),
           decision: extra.decision || 'exists',
@@ -1051,6 +1212,7 @@
           outputs: extra.outputs || '',
           consumes: extra.consumes || '',
           note: extra.note || '',
+          stepChildren: Array.isArray(extra.stepChildren) ? extra.stepChildren : (nodeType === 'step' ? ['sql_node_1'] : []),
           stepOrder: Object.prototype.hasOwnProperty.call(extra, 'stepOrder')
             ? extra.stepOrder
             : (nodeType === 'step' ? nextNodes.filter((node) => node.type === 'step').length + 1 : null),
@@ -1065,6 +1227,7 @@
           datasource: contextValue.datasource || 'saas_db',
           resultMode: contextValue.result_mode || 'record',
           sqlParamsText: JSON.stringify(contextValue.sql_params || {}, null, 2),
+          sqlParams: objectToSqlParamsRows(contextValue.sql_params || {}),
         });
       }
 
@@ -1092,6 +1255,7 @@
           datasource: item.datasource || 'saas_db',
           resultMode: item.result_mode || 'records',
           sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
+          sqlParams: objectToSqlParamsRows(item.sql_params || {}),
           outputs: Array.isArray(item.outputs) ? item.outputs.join(', ') : '',
         });
       });
@@ -1104,6 +1268,8 @@
           datasource: item.datasource || 'saas_db',
           resultMode: item.result_mode || 'records',
           sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
+          sqlParams: objectToSqlParamsRows(item.sql_params || {}),
+          stepChildren: Array.isArray(item.nodes) ? item.nodes.map((child) => String(child || '').trim()).filter(Boolean) : ['sql_node_1'],
           stepOrder: nextNodes.filter((node) => node.type === 'step').length + 1,
         });
       });
@@ -1134,6 +1300,7 @@
         const normalized = {
           ...node,
           sqlParamsText: typeof node.sqlParamsText === 'string' ? node.sqlParamsText : '{}',
+          sqlParams: Array.isArray(node.sqlParams) ? node.sqlParams : objectToSqlParamsRows(parseJsonObjectOrEmpty(typeof node.sqlParamsText === 'string' ? node.sqlParamsText : '{}')),
           datasource: typeof node.datasource === 'string' ? node.datasource : 'saas_db',
           resultMode: typeof node.resultMode === 'string' ? node.resultMode : (node.type === 'context' ? 'record' : 'records'),
           failMode: typeof node.failMode === 'string' ? node.failMode : 'single',
@@ -1142,6 +1309,7 @@
           divider: typeof node.divider === 'string' ? node.divider : '',
           variableValue: typeof node.variableValue === 'string' ? node.variableValue : '',
           variableDefault: typeof node.variableDefault === 'string' ? node.variableDefault : '',
+          stepChildren: Array.isArray(node.stepChildren) ? node.stepChildren : (node.type === 'step' ? ['sql_node_1'] : []),
           stepOrder: safeStepOrder,
         };
         if (node.type === 'step') {
@@ -1398,6 +1566,14 @@
       return escapeHtml(value).replaceAll('\n', '&#10;');
     }
 
+    function getCanvasPointByEvent(event) {
+      const rect = dropZone.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) / state.zoom,
+        y: (event.clientY - rect.top) / state.zoom,
+      };
+    }
+
     dropZone.addEventListener('dragover', (event) => {
       event.preventDefault();
     });
@@ -1407,9 +1583,9 @@
       const nodeType = event.dataTransfer.getData('node-type');
       const def = NODE_DEFS.find((item) => item.type === nodeType);
       if (!def) return;
-      const rect = dropZone.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
+      const point = getCanvasPointByEvent(event);
+      const x = point.x;
+      const y = point.y;
       const node = makeNode(def, Math.max(12, x - 100), Math.max(12, y - 20));
       state.nodes.push(node);
       state.selectedId = node.id;
@@ -1423,9 +1599,9 @@
       if (!state.dragNodeId) return;
       const node = state.nodes.find((item) => item.id === state.dragNodeId);
       if (!node) return;
-      const rect = dropZone.getBoundingClientRect();
-      node.x = Math.max(8, event.clientX - rect.left - state.dragOffsetX);
-      node.y = Math.max(8, event.clientY - rect.top - state.dragOffsetY);
+      const point = getCanvasPointByEvent(event);
+      node.x = Math.max(8, point.x - state.dragOffsetX);
+      node.y = Math.max(8, point.y - state.dragOffsetY);
       renderCanvas();
     });
 
@@ -1450,6 +1626,22 @@
       renderCanvas();
       saveLocal();
       statusText.textContent = '已按执行阶段横向自动排布。';
+    });
+
+    function updateZoom(nextZoom) {
+      state.zoom = Math.min(1.8, Math.max(0.45, nextZoom));
+      renderCanvas();
+      statusText.textContent = `画布缩放：${Math.round(state.zoom * 100)}%`;
+    }
+
+    document.getElementById('btnZoomIn').addEventListener('click', () => {
+      updateZoom(state.zoom + 0.1);
+    });
+    document.getElementById('btnZoomOut').addEventListener('click', () => {
+      updateZoom(state.zoom - 0.1);
+    });
+    document.getElementById('btnZoomReset').addEventListener('click', () => {
+      updateZoom(1);
     });
 
     document.getElementById('btnImport').addEventListener('click', () => {
