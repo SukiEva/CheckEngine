@@ -1,10 +1,12 @@
 [project]
 name = "playground-app"
 version = "0.1.0"
-description = "ExecDSL Flask playground"
+description = "ExecDSL FastAPI playground"
 requires-python = ">=3.9"
 dependencies = [
-  "flask",
+  "fastapi",
+  "uvicorn",
+  "jinja2",
   "sqlalchemy",
   "psycopg2-binary",
   "check-engine",
@@ -14,7 +16,7 @@ dependencies = [
 check-engine = { path = "../..", editable = true }
 
 [project.scripts]
-playground-server = "playground_app.app:main"
+playground-server = "playground_app:main"
 
 [build-system]
 requires = ["uv_build>=0.9.5,<0.10.0"]

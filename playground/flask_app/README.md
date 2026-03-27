@@ -1,4 +1,4 @@
-# Flask Playground（独立子项目）
+# FastAPI Playground（独立子项目）
 
 该子项目基于 `exec_dsl_flow_designer.html` 提供可执行闭环：
 
@@ -14,7 +14,6 @@ playground/flask_app/
   README.md
   src/playground_app/
     __init__.py
-    app.py
     templates/exec_dsl_flow_designer.html
 ```
 
@@ -26,7 +25,16 @@ uv sync
 uv run playground-server
 ```
 
-启动后访问：<http://127.0.0.1:5001>
+默认会监听 `0.0.0.0:5001`，方便容器/远程环境端口转发。
+
+- 本机浏览器访问：<http://127.0.0.1:5001>
+- 远程开发环境请使用对应的端口转发地址
+
+可用环境变量覆盖：
+
+- `PLAYGROUND_HOST`（默认 `0.0.0.0`）
+- `PLAYGROUND_PORT`（默认 `5001`）
+- `PLAYGROUND_DEBUG`（默认 `false`）
 
 ## 数据源配置要求
 
@@ -36,6 +44,12 @@ uv run playground-server
 - `postgresql+psycopg2://user:password@host:5432/dbname`
 
 后端会在执行前对每个数据源执行 `SELECT 1` 进行连通性校验。
+
+## 前端数据源配置与运行
+
+- 运行弹窗新增「从 SQLite 载入」「保存数据源配置」「执行当前 DSL」按钮。
+- 数据源配置会持久化到 SQLite 文件：`playground/flask_app/data/playground.db`。
+- 点击「执行当前 DSL」时会使用当前页面配置作为 `datasources` 请求参数。
 
 ## 接口说明
 
