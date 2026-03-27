@@ -65,6 +65,20 @@ class EngineCompileCacheTestCase(unittest.TestCase):
             self.fail("compile cache info should not be None when cache is enabled")
         self.assertEqual(cache_info.hits, 1)
 
+    def test_compile_cache_key_does_not_store_raw_dsl_text(self) -> None:
+        engine = DslEngine(compile_cache_size=2)
+
+        engine.compile(self.dsl_text)
+        cache_backend = getattr(engine, "_compile_cache_backend")
+        cache_keys = cache_backend.debug_keys()
+        if len(cache_keys) != 1:
+            self.fail("compile cache should contain exactly one key")
+        cache_key = cache_keys[0]
+
+        self.assertIsInstance(cache_key, str)
+        self.assertNotEqual(cache_key, self.dsl_text)
+        self.assertLess(len(cache_key), len(self.dsl_text))
+
     def test_compile_returns_immutable_cached_document_content(self) -> None:
         engine = DslEngine(compile_cache_size=2)
 
@@ -233,12 +247,24 @@ class EngineCompileCacheTestCase(unittest.TestCase):
         self.assertEqual(parser.parse_count, 3)
         self.assertEqual(validator.validate_count, 3)
 
-    def test_execute_document_validates_before_execution(self) -> None:
+    def test_execute_document_skips_validation_by_default(self) -> None:
         engine = DslEngine(compile_cache_size=1)
         invalid_document = JsonDslParser().parse(
-            '{"steps": [{"name": "s1", "type": "sql", "datasource": "db", "result_mode": "record", "sql_template": "select 1 as value", "sql_params": {}, "outputs": ["value"]}], "on_fail": {"decision": "exists", "mode": "single", "message_cn": "x", "message_en": "y"}}'
+            '{"steps": [], "on_fail": {"decision": "$steps.not_exists.value > 0", "mode": "single", "message_cn": "x", "message_en": "y"}}'
         )
         registry = cast(DatasourceRegistry, _UnusedRegistry())
 
+        result = engine.execute_document(invalid_document, {"source_object_id": "x"}, datasource_registry=registry)
+
+        self.assertFalse(result.passed)
+        self.assertEqual(result.phase, "runtime")
+        self.assertEqual(result.failed_node, "on_fail")
+
+    def test_validate_document_can_be_used_before_execution(self) -> None:
+        engine = DslEngine(compile_cache_size=1)
+        invalid_document = JsonDslParser().parse(
+            '{"steps": [], "on_fail": {"decision": "$steps.not_exists.value > 0", "mode": "single", "message_cn": "x", "message_en": "y"}}'
+        )
+
         with self.assertRaisesRegex(DSLValidationError, "on_fail.decision"):
-            engine.execute_document(invalid_document, {"source_object_id": "x"}, datasource_registry=registry)
+            engine.validate_document(invalid_document)
