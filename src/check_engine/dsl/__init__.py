@@ -21,7 +21,6 @@ from .models import (
     VariableCondition,
     VariableDefinition,
 )
-
 __all__ = [
     "ConsumeSpec",
     "ContextNode",
