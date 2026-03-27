@@ -248,27 +248,6 @@
       overflow-wrap: anywhere;
       word-break: break-word;
     }
-    .step-block {
-      border: 1px dashed #93c5fd;
-      border-radius: 10px;
-      background: #f8fbff;
-      padding: 8px;
-      display: grid;
-      gap: 6px;
-    }
-    .step-sub-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .step-sub-item {
-      border: 1px solid #bfdbfe;
-      border-radius: 999px;
-      background: #e0ecff;
-      color: #1e40af;
-      font-size: 0.76rem;
-      padding: 2px 8px;
-    }
     .node-head-actions {
       display: inline-flex;
       align-items: center;
@@ -286,6 +265,17 @@
     }
     .node-delete-btn:hover {
       background: #ffe4e6;
+    }
+    .icon-btn {
+      min-width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.94rem;
+      padding: 0;
+      line-height: 1;
     }
 
     .muted { color: var(--muted); }
@@ -503,7 +493,6 @@
         outputs: 'ok',
         consumes: '',
         stepOrder: def.type === 'step' ? getNextStepOrder() : null,
-        stepChildren: def.type === 'step' ? ['sql_node_1'] : [],
       };
     }
 
@@ -538,7 +527,7 @@
         laneEl.innerHTML = `
           <div class="flow-lane-head">
             <strong>${lane.label}</strong>
-            <button class="btn-muted" data-add-type="${lane.type}" type="button">+ 添加</button>
+            <button class="btn-muted icon-btn" data-add-type="${lane.type}" type="button" title="新增 ${lane.type} 节点" aria-label="新增 ${lane.type} 节点">＋</button>
           </div>
           <div class="flow-lane-body" data-lane-body="${lane.type}"></div>
         `;
@@ -572,14 +561,13 @@
               <span>${node.type}</span>
               <span class="node-head-actions">
                 <span>${nodeRank}</span>
-                <button class="node-delete-btn" type="button" data-node-delete="${node.id}">删除</button>
+                <button class="node-delete-btn icon-btn" type="button" data-node-delete="${node.id}" title="删除节点" aria-label="删除节点">🗑</button>
               </span>
             </div>
             <div class="node-body">
               <strong>${escapeHtml(node.title || '(未命名节点)')}</strong>
               <div class="muted">ds: ${escapeHtml(node.datasource || '-')} / mode: ${escapeHtml(node.resultMode || '-')}</div>
               <div class="muted">outputs: ${escapeHtml(node.outputs || '无')}</div>
-              ${node.type === 'step' ? renderStepChildrenPreview(node) : ''}
             </div>
           `;
           el.addEventListener('click', () => selectNode(node.id));
@@ -669,7 +657,7 @@
         <div class="field">
           <label>SQL 变量（key/value）</label>
           <div id="f_sql_params_rows"></div>
-          <button class="btn-muted" id="btnAddSqlParam" type="button">+ 新增变量</button>
+          <button class="btn-muted icon-btn" id="btnAddSqlParam" type="button" title="新增 SQL 变量" aria-label="新增 SQL 变量">＋</button>
         </div>
         ` : ''}
         <div class="field">
@@ -717,15 +705,7 @@
           <input id="f_consumes" value="${escapeAttr(node.consumes)}" />
           <div class="field-note">输入时会联想已有 step 节点 name。</div>
           <div class="autocomplete-panel" id="ac_consumes"></div>
-        </div>
-        ${node.type === 'step' ? `
-        <div class="field">
-          <label>Step 块内节点</label>
-          <div id="f_step_children"></div>
-          <button class="btn-muted" id="btnAddStepChild" type="button">+ 添加块内节点</button>
-        </div>
-        ` : ''}
-      `;
+        </div>      `;
 
       const persistEditorNode = () => {
         node.title = document.getElementById('f_title').value.trim();
@@ -749,9 +729,6 @@
         }
         node.outputs = document.getElementById('f_outputs').value.trim();
         node.consumes = document.getElementById('f_consumes').value.trim();
-        if (node.type === 'step') {
-          node.stepChildren = readStepChildrenRows();
-        }
         renderCanvas();
         saveLocal();
         statusText.classList.remove('status-warn');
@@ -761,10 +738,6 @@
       if (node.type === 'context' || node.type === 'precheck' || node.type === 'step') {
         renderSqlParamRows(node, persistEditorNode);
       }
-      if (node.type === 'step') {
-        renderStepChildrenEditor(node, persistEditorNode);
-      }
-
       [
         'f_title',
         'f_decision',
@@ -818,21 +791,6 @@
       return Math.max(...stepOrders) + 1;
     }
 
-    function renderStepChildrenPreview(node) {
-      const children = Array.isArray(node.stepChildren) ? node.stepChildren.filter(Boolean) : [];
-      if (!children.length) {
-        return '<div class="step-block"><div class="muted">块内暂无节点</div></div>';
-      }
-      return `
-        <div class="step-block">
-          <div class="muted">块内节点</div>
-          <div class="step-sub-list">
-            ${children.map((child) => `<span class="step-sub-item">${escapeHtml(child)}</span>`).join('')}
-          </div>
-        </div>
-      `;
-    }
-
     function renderSqlParamRows(node, onChanged) {
       const rowsContainer = document.getElementById('f_sql_params_rows');
       const addButton = document.getElementById('btnAddSqlParam');
@@ -843,7 +801,7 @@
           <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
             <input data-sql-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="变量名，如 user_id" />
             <input data-sql-value="${index}" value="${escapeAttr(row.value || '')}" placeholder="值，如 $input.user_id 或 100" />
-            <button class="btn-danger" type="button" data-sql-remove="${index}">删</button>
+            <button class="btn-danger icon-btn" type="button" data-sql-remove="${index}" title="删除 SQL 变量" aria-label="删除 SQL 变量">🗑</button>
           </div>
         `).join('');
         rowsContainer.querySelectorAll('[data-sql-remove]').forEach((button) => {
@@ -896,46 +854,6 @@
         value: normalizeValueToInput(value),
       }));
       return entries.length ? entries : [{ key: '', value: '' }];
-    }
-
-    function renderStepChildrenEditor(node, onChanged) {
-      const wrapper = document.getElementById('f_step_children');
-      const addButton = document.getElementById('btnAddStepChild');
-      if (!wrapper || !addButton) return;
-      const rows = Array.isArray(node.stepChildren) && node.stepChildren.length ? node.stepChildren : [''];
-      const drawRows = () => {
-        wrapper.innerHTML = rows.map((child, index) => `
-          <div style="display:grid; grid-template-columns:1fr auto; gap:6px; margin-bottom:6px;">
-            <input data-step-child="${index}" value="${escapeAttr(child || '')}" placeholder="例如 fetch_rate_sql" />
-            <button class="btn-danger" type="button" data-step-child-remove="${index}">删</button>
-          </div>
-        `).join('');
-        wrapper.querySelectorAll('[data-step-child-remove]').forEach((button) => {
-          button.addEventListener('click', () => {
-            const removeIndex = Number(button.getAttribute('data-step-child-remove'));
-            rows.splice(removeIndex, 1);
-            if (!rows.length) rows.push('');
-            drawRows();
-            if (typeof onChanged === 'function') onChanged();
-          });
-        });
-        wrapper.querySelectorAll('[data-step-child]').forEach((input) => {
-          input.addEventListener('change', () => {
-            if (typeof onChanged === 'function') onChanged();
-          });
-        });
-      };
-      drawRows();
-      addButton.addEventListener('click', () => {
-        rows.push('');
-        drawRows();
-        if (typeof onChanged === 'function') onChanged();
-      });
-    }
-
-    function readStepChildrenRows() {
-      const rows = Array.from(document.querySelectorAll('[data-step-child]'));
-      return rows.map((item) => item.value.trim()).filter(Boolean);
     }
 
     function getSortedSteps() {
@@ -1399,7 +1317,6 @@
             sql_params: sqlParams,
             consumes: parseConsumesText(node.consumes),
             outputs,
-            nodes: Array.isArray(node.stepChildren) ? node.stepChildren.filter(Boolean) : [],
             _step_order: node.stepOrder || 0,
           });
         }
@@ -1486,7 +1403,6 @@
           divider: extra.divider || '',
           outputs: extra.outputs || '',
           consumes: extra.consumes || '',
-          stepChildren: Array.isArray(extra.stepChildren) ? extra.stepChildren : (nodeType === 'step' ? ['sql_node_1'] : []),
           stepOrder: Object.prototype.hasOwnProperty.call(extra, 'stepOrder')
             ? extra.stepOrder
             : (nodeType === 'step' ? nextNodes.filter((node) => node.type === 'step').length + 1 : null),
@@ -1543,7 +1459,6 @@
           resultMode: item.result_mode || 'records',
           sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
           sqlParams: objectToSqlParamsRows(item.sql_params || {}),
-          stepChildren: Array.isArray(item.nodes) ? item.nodes.map((child) => String(child || '').trim()).filter(Boolean) : ['sql_node_1'],
           stepOrder: nextNodes.filter((node) => node.type === 'step').length + 1,
         });
       });
@@ -1583,7 +1498,6 @@
           divider: typeof node.divider === 'string' ? node.divider : '',
           variableValue: typeof node.variableValue === 'string' ? node.variableValue : '',
           variableDefault: typeof node.variableDefault === 'string' ? node.variableDefault : '',
-          stepChildren: Array.isArray(node.stepChildren) ? node.stepChildren : (node.type === 'step' ? ['sql_node_1'] : []),
           stepOrder: safeStepOrder,
         };
         if (node.type === 'step') {
