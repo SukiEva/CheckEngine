@@ -400,6 +400,7 @@
         <button class="btn-muted" id="btnImport">导入 JSON</button>
         <button class="btn-muted" id="btnPreview">预览 JSON</button>
         <button class="btn-muted" id="btnRun">运行 DSL</button>
+        <button class="btn-muted" id="btnDatasourcePage">数据源配置页面</button>
         <button class="btn-muted" id="btnExport">下载 JSON</button>
         <input type="file" id="fileImportJson" accept="application/json" style="display:none;" />
       </div>
@@ -437,13 +438,10 @@
     </div>
     <div style="padding:12px; display:grid; gap:12px;">
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <button type="button" class="btn-muted" id="btnLoadDatasourceConfig">从 SQLite 载入</button>
-        <button type="button" class="btn-muted" id="btnSaveDatasourceConfig">保存数据源配置</button>
-        <button type="button" class="btn-primary" id="btnAddDatasource">新增数据源</button>
         <button type="button" class="btn-primary" id="btnRunNow">执行当前 DSL</button>
-        <span style="font-size:0.8rem; color:#6b7280;">仅支持 PostgreSQL（postgresql:// 或 postgresql+psycopg2://）。</span>
+        <button type="button" class="btn-muted" id="btnGoDatasourceConfig">打开数据源配置页面</button>
+        <span style="font-size:0.8rem; color:#6b7280;">运行时自动读取全局数据源配置（SQLite）。</span>
       </div>
-      <div id="datasourceList" style="display:grid; gap:10px;"></div>
       <div>
         <label for="runtimeInputJson" style="display:block; font-size:0.82rem; color:#6b7280; margin-bottom:6px;">input_data(JSON)</label>
         <textarea id="runtimeInputJson" style="width:100%; min-height:88px; border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; font:inherit;">{"source_object_id": "DEMO_1"}</textarea>
@@ -469,9 +467,6 @@
     const dslPreview = document.getElementById('dslPreview');
     const jsonPreviewDialog = document.getElementById('jsonPreviewDialog');
     const runtimeDialog = document.getElementById('runtimeDialog');
-    const datasourceList = document.getElementById('datasourceList');
-    const btnLoadDatasourceConfig = document.getElementById('btnLoadDatasourceConfig');
-    const btnSaveDatasourceConfig = document.getElementById('btnSaveDatasourceConfig');
     const runtimeInputJson = document.getElementById('runtimeInputJson');
     const runtimeStatus = document.getElementById('runtimeStatus');
     const runtimeResult = document.getElementById('runtimeResult');
@@ -506,6 +501,7 @@
         outputs: 'ok',
         consumes: '',
         note: '',
+        description: '',
         stepOrder: def.type === 'step' ? getNextStepOrder() : null,
         stepChildren: def.type === 'step' ? ['sql_node_1'] : [],
       };
@@ -579,6 +575,9 @@
             <div class="node-body">
               <strong>${escapeHtml(node.title || '(未命名节点)')}</strong>
               <div class="muted">ds: ${escapeHtml(node.datasource || '-')} / mode: ${escapeHtml(node.resultMode || '-')}</div>
+              ${(node.type === 'precheck' || node.type === 'step') && node.description
+                ? `<div class="muted">description: ${escapeHtml(node.description)}</div>`
+                : ''}
               <div class="muted">outputs: ${escapeHtml(node.outputs || '无')}</div>
               ${node.type === 'step' ? renderStepChildrenPreview(node) : ''}
             </div>
@@ -712,6 +711,12 @@
           <div class="field-note">输入时会联想已有 step 节点 name。</div>
           <div class="autocomplete-panel" id="ac_consumes"></div>
         </div>
+        ${node.type === 'precheck' || node.type === 'step' ? `
+        <div class="field">
+          <label>Description</label>
+          <input id="f_description" value="${escapeAttr(node.description || '')}" placeholder="可选：用于 precheck/step 的说明" />
+        </div>
+        ` : ''}
         <div class="field">
           <label>备注</label>
           <textarea id="f_note">${escapeHtml(node.note)}</textarea>
@@ -758,6 +763,9 @@
         }
         node.outputs = document.getElementById('f_outputs').value.trim();
         node.consumes = document.getElementById('f_consumes').value.trim();
+        if (node.type === 'precheck' || node.type === 'step') {
+          node.description = document.getElementById('f_description').value.trim();
+        }
         node.note = document.getElementById('f_note').value;
         if (node.type === 'step') {
           node.stepChildren = readStepChildrenRows();
@@ -1338,6 +1346,7 @@
         if (node.type === 'precheck') {
           prechecks.push({
             name: key,
+            ...(node.description ? { description: node.description } : {}),
             type: 'sql',
             datasource: node.datasource || 'saas_db',
             result_mode: node.resultMode || 'records',
@@ -1357,6 +1366,7 @@
         if (node.type === 'step') {
           steps.push({
             name: key,
+            ...(node.description ? { description: node.description } : {}),
             type: 'sql',
             datasource: node.datasource || 'saas_db',
             result_mode: node.resultMode || 'records',
@@ -1451,6 +1461,7 @@
           divider: extra.divider || '',
           outputs: extra.outputs || '',
           consumes: extra.consumes || '',
+          description: extra.description || '',
           note: extra.note || '',
           stepChildren: Array.isArray(extra.stepChildren) ? extra.stepChildren : (nodeType === 'step' ? ['sql_node_1'] : []),
           stepOrder: Object.prototype.hasOwnProperty.call(extra, 'stepOrder')
@@ -1497,6 +1508,7 @@
           sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
           sqlParams: objectToSqlParamsRows(item.sql_params || {}),
           outputs: Array.isArray(item.outputs) ? item.outputs.join(', ') : '',
+          description: item.description || '',
         });
       });
 
@@ -1511,6 +1523,7 @@
           sqlParams: objectToSqlParamsRows(item.sql_params || {}),
           stepChildren: Array.isArray(item.nodes) ? item.nodes.map((child) => String(child || '').trim()).filter(Boolean) : ['sql_node_1'],
           stepOrder: nextNodes.filter((node) => node.type === 'step').length + 1,
+          description: item.description || '',
         });
       });
 
@@ -1527,89 +1540,22 @@
       return applyHorizontalLayout(nextNodes);
     }
 
-    function createDatasourceCard(data) {
-      const card = document.createElement('div');
-      card.style.border = '1px solid #e5e7eb';
-      card.style.borderRadius = '10px';
-      card.style.padding = '10px';
-      card.style.display = 'grid';
-      card.style.gap = '8px';
-      card.innerHTML = `
-        <div style="display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap:8px; align-items:center;">
-          <input data-role="name" placeholder="datasource 名称，例如 saas_db" style="width:100%; border:1px solid #e5e7eb; border-radius:8px; padding:7px 9px;" />
-          <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" style="width:100%; border:1px solid #e5e7eb; border-radius:8px; padding:7px 9px;" />
-          <button class="btn-danger" type="button" data-role="remove">删除</button>
-        </div>
-      `;
-      card.querySelector('[data-role="name"]').value = data && data.name ? data.name : '';
-      card.querySelector('[data-role="db_url"]').value = data && data.db_url ? data.db_url : '';
-      card.querySelector('[data-role="remove"]').addEventListener('click', () => card.remove());
-      return card;
-    }
-
-    function readDatasourceConfig() {
-      return Array.from(datasourceList.children).map((card) => ({
-        name: card.querySelector('[data-role="name"]').value.trim(),
-        db_url: card.querySelector('[data-role="db_url"]').value.trim(),
-      })).filter((item) => item.name || item.db_url);
-    }
-
-    function renderDatasourceCards(datasourceItems) {
-      datasourceList.innerHTML = '';
-      datasourceItems.forEach((item) => datasourceList.appendChild(createDatasourceCard(item)));
-    }
-
-    async function loadDatasourceConfigFromServer() {
-      runtimeStatus.textContent = '正在从 SQLite 载入数据源配置...';
+    async function fetchDatasourceConfig() {
       try {
         const response = await fetch('/api/datasource-configs');
         const payload = await response.json();
         if (!response.ok) {
-          runtimeStatus.textContent = `载入失败: ${payload.detail || payload.error || '未知错误'}`;
-          return;
+          throw new Error(payload.detail || payload.error || '未知错误');
         }
-        const datasources = Array.isArray(payload.datasources) ? payload.datasources : [];
-        if (!datasources.length) {
-          runtimeStatus.textContent = 'SQLite 中暂无数据源配置，请先新增后保存。';
-          renderDatasourceCards([]);
-          return;
-        }
-        renderDatasourceCards(datasources);
-        runtimeStatus.textContent = '已从 SQLite 载入数据源配置。';
+        return Array.isArray(payload.datasources) ? payload.datasources : [];
       } catch (error) {
-        runtimeStatus.textContent = `载入失败: ${error.message || '网络错误'}`;
-      }
-    }
-
-    async function saveDatasourceConfigToServer() {
-      const datasourcePayload = readDatasourceConfig();
-      if (!datasourcePayload.length) {
-        runtimeStatus.textContent = '请至少配置一个数据源后再保存。';
-        return;
-      }
-      runtimeStatus.textContent = '正在保存到 SQLite...';
-      try {
-        const response = await fetch('/api/datasource-configs', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ datasources: datasourcePayload }),
-        });
-        const payload = await response.json();
-        if (!response.ok) {
-          runtimeStatus.textContent = `保存失败: ${payload.detail || payload.error || '未知错误'}`;
-          return;
-        }
-        renderDatasourceCards(Array.isArray(payload.datasources) ? payload.datasources : datasourcePayload);
-        runtimeStatus.textContent = `已保存 ${payload.saved || datasourcePayload.length} 个数据源到 SQLite。`;
-      } catch (error) {
-        runtimeStatus.textContent = `保存失败: ${error.message || '网络错误'}`;
+        throw new Error(error.message || '网络错误');
       }
     }
 
     async function openRuntimeDialog() {
-      runtimeStatus.textContent = '请确认数据源连接串后执行。';
+      runtimeStatus.textContent = '运行时将自动读取全局数据源配置。';
       runtimeResult.textContent = '{}';
-      await loadDatasourceConfigFromServer();
       if (typeof runtimeDialog.showModal === 'function') {
         runtimeDialog.showModal();
       } else {
@@ -1634,14 +1580,14 @@
         runtimeStatus.textContent = `input_data 解析失败: ${error.message || '不是合法 JSON'}`;
         return;
       }
-      const datasourcePayload = readDatasourceConfig();
-      if (!datasourcePayload.length) {
-        runtimeStatus.textContent = '请至少配置一个 PostgreSQL 数据源。';
-        return;
-      }
       runtimeStatus.textContent = '执行中...';
       runtimeResult.textContent = '{}';
       try {
+        const datasourcePayload = await fetchDatasourceConfig();
+        if (!datasourcePayload.length) {
+          runtimeStatus.textContent = '全局数据源配置为空，请先到“数据源配置页面”维护。';
+          return;
+        }
         const response = await fetch('/api/run-dsl', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1684,6 +1630,7 @@
           messageCn: typeof node.messageCn === 'string' ? node.messageCn : '',
           messageEn: typeof node.messageEn === 'string' ? node.messageEn : '',
           divider: typeof node.divider === 'string' ? node.divider : '',
+          description: typeof node.description === 'string' ? node.description : '',
           variableValue: typeof node.variableValue === 'string' ? node.variableValue : '',
           variableDefault: typeof node.variableDefault === 'string' ? node.variableDefault : '',
           stepChildren: Array.isArray(node.stepChildren) ? node.stepChildren : (node.type === 'step' ? ['sql_node_1'] : []),
@@ -2001,16 +1948,12 @@
       closeRuntimeDialog();
     });
 
-    btnLoadDatasourceConfig.addEventListener('click', () => {
-      loadDatasourceConfigFromServer();
+    document.getElementById('btnDatasourcePage').addEventListener('click', () => {
+      window.open('/datasource-configs', '_blank', 'noopener,noreferrer');
     });
 
-    btnSaveDatasourceConfig.addEventListener('click', () => {
-      saveDatasourceConfigToServer();
-    });
-
-    document.getElementById('btnAddDatasource').addEventListener('click', () => {
-      datasourceList.appendChild(createDatasourceCard({ name: '', db_url: '' }));
+    document.getElementById('btnGoDatasourceConfig').addEventListener('click', () => {
+      window.open('/datasource-configs', '_blank', 'noopener,noreferrer');
     });
 
     document.getElementById('btnRunNow').addEventListener('click', () => {

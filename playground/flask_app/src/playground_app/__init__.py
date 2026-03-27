@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
+from sqlalchemy.dialects.postgresql.psycopg2 import PGDialect_psycopg2
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -30,6 +31,7 @@ class DatasourceConfig:
 _SQLITE_FILE = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "data", "playground.db")
 )
+PGDialect_psycopg2._get_server_version_info = lambda *args: (9, 2)
 
 
 class SqlAlchemyDatasource:
@@ -63,6 +65,14 @@ def create_app() -> FastAPI:
         return templates.TemplateResponse(
             request=request,
             name="exec_dsl_flow_designer.html",
+            context={"request": request},
+        )
+
+    @app.get("/datasource-configs", response_class=HTMLResponse)
+    def datasource_config_page(request: Request) -> Any:
+        return templates.TemplateResponse(
+            request=request,
+            name="datasource_configs.html",
             context={"request": request},
         )
 
