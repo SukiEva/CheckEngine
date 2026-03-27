@@ -371,7 +371,14 @@
         x,
         y,
         sql: 'SELECT 1 AS ok;',
-        decision: 'exists',
+        sqlParamsText: '{}',
+        datasource: 'saas_db',
+        resultMode: def.type === 'context' ? 'record' : 'records',
+        decision: def.type === 'on_fail' ? 'exists($steps.some_step.some_output)' : 'exists',
+        failMode: 'single',
+        messageCn: '',
+        messageEn: '',
+        divider: '',
         outputs: 'ok',
         consumes: '',
         note: '',
@@ -424,6 +431,7 @@
           </div>
           <div class="node-body">
             <strong>${escapeHtml(node.title || '(未命名节点)')}</strong>
+            <div class="muted">ds: ${escapeHtml(node.datasource || '-')} / mode: ${escapeHtml(node.resultMode || '-')}</div>
             <div class="muted">outputs: ${escapeHtml(node.outputs || '无')}</div>
           </div>
         `;
@@ -474,6 +482,18 @@
           </div>
         </div>
         ` : ''}
+        ${node.type === 'context' || node.type === 'precheck' || node.type === 'step' ? `
+        <div class="field">
+          <label>Datasource</label>
+          <input id="f_datasource" value="${escapeAttr(node.datasource || '')}" />
+        </div>
+        <div class="field">
+          <label>Result Mode</label>
+          <select id="f_result_mode">
+            <option value="record" ${(node.resultMode || '') === 'record' ? 'selected' : ''}>record</option>
+            <option value="records" ${(node.resultMode || '') === 'records' ? 'selected' : ''}>records</option>
+          </select>
+        </div>
         <div class="field field-autocomplete">
           <label>SQL</label>
           <textarea id="f_sql">${escapeHtml(node.sql)}</textarea>
@@ -481,22 +501,44 @@
           <div class="autocomplete-panel" id="ac_sql"></div>
         </div>
         <div class="field">
+          <label>SQL Params（JSON 对象）</label>
+          <textarea id="f_sql_params">${escapeHtml(node.sqlParamsText || '{}')}</textarea>
+        </div>
+        ` : ''}
+        <div class="field">
           <label>Decision（用于 precheck/on_fail/variable）</label>
-          <select id="f_decision">
-            <option value="exists" ${node.decision === 'exists' ? 'selected' : ''}>exists</option>
-            <option value="eq" ${node.decision === 'eq' ? 'selected' : ''}>eq</option>
-            <option value="gt" ${node.decision === 'gt' ? 'selected' : ''}>gt</option>
-            <option value="custom" ${node.decision === 'custom' ? 'selected' : ''}>custom</option>
+          <input id="f_decision" value="${escapeAttr(node.decision || '')}" />
+        </div>
+        ${node.type === 'precheck' || node.type === 'on_fail' ? `
+        <div class="field">
+          <label>Fail Mode</label>
+          <select id="f_fail_mode">
+            <option value="single" ${(node.failMode || '') === 'single' ? 'selected' : ''}>single</option>
+            <option value="sub_repeat" ${(node.failMode || '') === 'sub_repeat' ? 'selected' : ''}>sub_repeat</option>
+            <option value="full_repeat" ${(node.failMode || '') === 'full_repeat' ? 'selected' : ''}>full_repeat</option>
           </select>
         </div>
+        <div class="field">
+          <label>Message CN</label>
+          <textarea id="f_message_cn">${escapeHtml(node.messageCn || '')}</textarea>
+        </div>
+        <div class="field">
+          <label>Message EN</label>
+          <textarea id="f_message_en">${escapeHtml(node.messageEn || '')}</textarea>
+        </div>
+        <div class="field">
+          <label>Divider（sub_repeat 时使用）</label>
+          <input id="f_divider" value="${escapeAttr(node.divider || '')}" />
+        </div>
+        ` : ''}
         <div class="field">
           <label>Outputs（逗号分隔）</label>
           <input id="f_outputs" value="${escapeAttr(node.outputs)}" />
         </div>
         <div class="field field-autocomplete">
-          <label>Consumes（逗号分隔 step id）</label>
+          <label>Consumes（逗号分隔 step name，可写 step_name:alias）</label>
           <input id="f_consumes" value="${escapeAttr(node.consumes)}" />
-          <div class="field-note">输入时会联想已有 step 节点 ID。</div>
+          <div class="field-note">输入时会联想已有 step 节点 name。</div>
           <div class="autocomplete-panel" id="ac_consumes"></div>
         </div>
         <div class="field">
@@ -511,8 +553,19 @@
 
       document.getElementById('btnSaveNode').addEventListener('click', () => {
         node.title = document.getElementById('f_title').value.trim();
-        node.sql = document.getElementById('f_sql').value;
-        node.decision = document.getElementById('f_decision').value;
+        node.decision = document.getElementById('f_decision').value.trim();
+        if (node.type === 'context' || node.type === 'precheck' || node.type === 'step') {
+          node.sql = document.getElementById('f_sql').value;
+          node.sqlParamsText = document.getElementById('f_sql_params').value.trim() || '{}';
+          node.datasource = document.getElementById('f_datasource').value.trim();
+          node.resultMode = document.getElementById('f_result_mode').value;
+        }
+        if (node.type === 'precheck' || node.type === 'on_fail') {
+          node.failMode = document.getElementById('f_fail_mode').value;
+          node.messageCn = document.getElementById('f_message_cn').value;
+          node.messageEn = document.getElementById('f_message_en').value;
+          node.divider = document.getElementById('f_divider').value.trim();
+        }
         node.outputs = document.getElementById('f_outputs').value.trim();
         node.consumes = document.getElementById('f_consumes').value.trim();
         node.note = document.getElementById('f_note').value;
@@ -613,6 +666,10 @@
       const consumesInput = document.getElementById('f_consumes');
       const consumesPanel = document.getElementById('ac_consumes');
 
+      if (!sqlTextarea || !sqlPanel) {
+        return;
+      }
+
       createAutocomplete({
         inputEl: sqlTextarea,
         panelEl: sqlPanel,
@@ -642,33 +699,35 @@
         },
       });
 
-      createAutocomplete({
-        inputEl: consumesInput,
-        panelEl: consumesPanel,
-        getKeyword: () => {
-          const cursor = consumesInput.selectionStart || 0;
-          const beforeCursor = consumesInput.value.slice(0, cursor);
-          const token = beforeCursor.split(',').pop() || '';
-          return token.trim();
-        },
-        buildOptions: (keyword) => {
-          const stepIds = getStepIdSuggestions(node.id);
-          return stepIds.filter((item) => item.toLowerCase().includes(keyword.toLowerCase()));
-        },
-        applySuggestion: (value) => {
-          const cursor = consumesInput.selectionStart || 0;
-          const beforeCursor = consumesInput.value.slice(0, cursor);
-          const afterCursor = consumesInput.value.slice(cursor);
-          const parts = beforeCursor.split(',');
-          parts[parts.length - 1] = ` ${value}`;
-          const nextBefore = parts.join(',').replace(/^ /, '');
-          consumesInput.value = `${nextBefore}${afterCursor}`;
-          const nextCursor = nextBefore.length;
-          consumesInput.selectionStart = nextCursor;
-          consumesInput.selectionEnd = nextCursor;
-          consumesInput.focus();
-        },
-      });
+      if (consumesInput && consumesPanel) {
+        createAutocomplete({
+          inputEl: consumesInput,
+          panelEl: consumesPanel,
+          getKeyword: () => {
+            const cursor = consumesInput.selectionStart || 0;
+            const beforeCursor = consumesInput.value.slice(0, cursor);
+            const token = beforeCursor.split(',').pop() || '';
+            return token.trim();
+          },
+          buildOptions: (keyword) => {
+            const stepIds = getStepIdSuggestions(node.id);
+            return stepIds.filter((item) => item.toLowerCase().includes(keyword.toLowerCase()));
+          },
+          applySuggestion: (value) => {
+            const cursor = consumesInput.selectionStart || 0;
+            const beforeCursor = consumesInput.value.slice(0, cursor);
+            const afterCursor = consumesInput.value.slice(cursor);
+            const parts = beforeCursor.split(',');
+            parts[parts.length - 1] = ` ${value}`;
+            const nextBefore = parts.join(',').replace(/^ /, '');
+            consumesInput.value = `${nextBefore}${afterCursor}`;
+            const nextCursor = nextBefore.length;
+            consumesInput.selectionStart = nextCursor;
+            consumesInput.selectionEnd = nextCursor;
+            consumesInput.focus();
+          },
+        });
+      }
     }
 
     function createAutocomplete(config) {
@@ -819,47 +878,52 @@
     }
 
     function toDslObject() {
-      const context = {};
+      let context = null;
       const variables = {};
       const prechecks = [];
       const steps = [];
       let onFail = null;
 
       state.nodes.forEach((node, index) => {
-        const key = node.title || `${node.type}_${index + 1}`;
+        const key = normalizeNodeKey(node, index + 1);
         const outputs = node.outputs
           .split(',')
           .map((item) => item.trim())
           .filter(Boolean);
+        const sqlParams = parseJsonObjectOrEmpty(node.sqlParamsText || '{}');
 
         if (node.type === 'context') {
-          context[key] = {
+          context = {
             type: 'sql',
-            sql: node.sql,
+            datasource: node.datasource || 'saas_db',
+            result_mode: node.resultMode || 'record',
+            sql_template: node.sql,
+            sql_params: sqlParams,
             outputs,
           };
         }
 
         if (node.type === 'variable') {
           variables[key] = {
-            assign_by_condition: {
-              decision: node.decision,
-              value: `TODO_${key}`,
-            },
+            when: node.decision ? [{ condition: node.decision, value: `TODO_${key}` }] : [],
+            default: `TODO_${key}`,
           };
         }
 
         if (node.type === 'precheck') {
           prechecks.push({
-            id: key,
+            name: key,
             type: 'sql',
-            sql: node.sql,
+            datasource: node.datasource || 'saas_db',
+            result_mode: node.resultMode || 'records',
+            sql_template: node.sql,
+            sql_params: sqlParams,
             on_fail: {
-              decision: node.decision,
-              message: {
-                zh: `${key} 未通过`,
-                en: `${key} failed`,
-              },
+              decision: node.decision || 'exists',
+              mode: node.failMode || 'single',
+              message_cn: node.messageCn || `${key} 未通过`,
+              message_en: node.messageEn || `${key} failed`,
+              ...(node.divider ? { divider: node.divider } : {}),
             },
             outputs,
           });
@@ -867,13 +931,13 @@
 
         if (node.type === 'step') {
           steps.push({
-            id: key,
+            name: key,
             type: 'sql',
-            sql: node.sql,
-            consumes: node.consumes
-              .split(',')
-              .map((item) => item.trim())
-              .filter(Boolean),
+            datasource: node.datasource || 'saas_db',
+            result_mode: node.resultMode || 'records',
+            sql_template: node.sql,
+            sql_params: sqlParams,
+            consumes: parseConsumesText(node.consumes),
             outputs,
             _step_order: node.stepOrder || 0,
           });
@@ -881,11 +945,11 @@
 
         if (node.type === 'on_fail') {
           onFail = {
-            decision: node.decision,
-            message: {
-              zh: `${key} 命中失败条件`,
-              en: `${key} failure condition matched`,
-            },
+            decision: node.decision || 'exists($steps.some_step.some_output)',
+            mode: node.failMode || 'single',
+            message_cn: node.messageCn || `${key} 命中失败条件`,
+            message_en: node.messageEn || `${key} failure condition matched`,
+            ...(node.divider ? { divider: node.divider } : {}),
           };
         }
       });
@@ -897,16 +961,21 @@
           return stepPayload;
         });
 
-      return {
-        context,
+      const result = {
         variables,
         prechecks,
         steps: sortedSteps,
         on_fail: onFail || {
-          decision: 'exists',
-          message: { zh: '默认失败', en: 'default failure' },
+          decision: 'exists($steps.some_step.some_output)',
+          mode: 'single',
+          message_cn: '默认失败',
+          message_en: 'default failure',
         },
       };
+      if (context) {
+        result.context = context;
+      }
+      return result;
     }
 
     function renderDslPreview() {
@@ -932,6 +1001,8 @@
     }
 
     function fromDslObject(payload) {
+      const normalizedPayload = normalizeDslPayload(payload);
+      validateDslPayload(normalizedPayload);
       const nextNodes = [];
       let cursorX = 80;
       let cursorY = 80;
@@ -950,7 +1021,14 @@
           x: cursorX,
           y: cursorY,
           sql: extra.sql || 'SELECT 1 AS ok;',
+          sqlParamsText: extra.sqlParamsText || '{}',
+          datasource: extra.datasource || 'saas_db',
+          resultMode: extra.resultMode || (nodeType === 'context' ? 'record' : 'records'),
           decision: extra.decision || 'exists',
+          failMode: extra.failMode || 'single',
+          messageCn: extra.messageCn || '',
+          messageEn: extra.messageEn || '',
+          divider: extra.divider || '',
           outputs: extra.outputs || '',
           consumes: extra.consumes || '',
           note: extra.note || '',
@@ -961,42 +1039,60 @@
         moveCursor();
       };
 
-      const contextMap = payload.context || {};
-      Object.entries(contextMap).forEach(([key, value]) => {
-        pushNode('context', key, {
-          sql: value.sql || '',
-          outputs: Array.isArray(value.outputs) ? value.outputs.join(', ') : '',
+      const contextValue = normalizedPayload.context || null;
+      if (contextValue) {
+        pushNode('context', 'context', {
+          sql: contextValue.sql_template || '',
+          outputs: Array.isArray(contextValue.outputs) ? contextValue.outputs.join(', ') : '',
+          datasource: contextValue.datasource || 'saas_db',
+          resultMode: contextValue.result_mode || 'record',
+          sqlParamsText: JSON.stringify(contextValue.sql_params || {}, null, 2),
         });
-      });
+      }
 
-      const variableMap = payload.variables || {};
+      const variableMap = normalizedPayload.variables || {};
       Object.entries(variableMap).forEach(([key, value]) => {
-        const assign = value.assign_by_condition || {};
+        const whenItems = Array.isArray(value.when) ? value.when : [];
+        const decisionText = whenItems.length ? String(whenItems[0].condition || '') : '';
         pushNode('variable', key, {
-          decision: assign.decision || 'exists',
+          decision: decisionText,
         });
       });
 
-      (payload.prechecks || []).forEach((item) => {
-        pushNode('precheck', item.id || '', {
-          sql: item.sql || '',
+      (normalizedPayload.prechecks || []).forEach((item) => {
+        pushNode('precheck', item.name || '', {
+          sql: item.sql_template || '',
           decision: item.on_fail && item.on_fail.decision ? item.on_fail.decision : 'exists',
+          failMode: item.on_fail && item.on_fail.mode ? item.on_fail.mode : 'single',
+          messageCn: item.on_fail && item.on_fail.message_cn ? item.on_fail.message_cn : '',
+          messageEn: item.on_fail && item.on_fail.message_en ? item.on_fail.message_en : '',
+          divider: item.on_fail && item.on_fail.divider ? item.on_fail.divider : '',
+          datasource: item.datasource || 'saas_db',
+          resultMode: item.result_mode || 'records',
+          sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
           outputs: Array.isArray(item.outputs) ? item.outputs.join(', ') : '',
         });
       });
 
-      (payload.steps || []).forEach((item) => {
-        pushNode('step', item.id || '', {
-          sql: item.sql || '',
+      (normalizedPayload.steps || []).forEach((item) => {
+        pushNode('step', item.name || '', {
+          sql: item.sql_template || '',
           outputs: Array.isArray(item.outputs) ? item.outputs.join(', ') : '',
-          consumes: Array.isArray(item.consumes) ? item.consumes.join(', ') : '',
+          consumes: formatConsumesText(item.consumes),
+          datasource: item.datasource || 'saas_db',
+          resultMode: item.result_mode || 'records',
+          sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
           stepOrder: nextNodes.filter((node) => node.type === 'step').length + 1,
         });
       });
 
-      if (payload.on_fail) {
+      if (normalizedPayload.on_fail) {
         pushNode('on_fail', 'on_fail', {
-          decision: payload.on_fail.decision || 'exists',
+          decision: normalizedPayload.on_fail.decision || 'exists($steps.some_step.some_output)',
+          failMode: normalizedPayload.on_fail.mode || 'single',
+          messageCn: normalizedPayload.on_fail.message_cn || '',
+          messageEn: normalizedPayload.on_fail.message_en || '',
+          divider: normalizedPayload.on_fail.divider || '',
         });
       }
 
@@ -1012,6 +1108,13 @@
       state.nodes = state.nodes.map((node) => {
         const normalized = {
           ...node,
+          sqlParamsText: typeof node.sqlParamsText === 'string' ? node.sqlParamsText : '{}',
+          datasource: typeof node.datasource === 'string' ? node.datasource : 'saas_db',
+          resultMode: typeof node.resultMode === 'string' ? node.resultMode : (node.type === 'context' ? 'record' : 'records'),
+          failMode: typeof node.failMode === 'string' ? node.failMode : 'single',
+          messageCn: typeof node.messageCn === 'string' ? node.messageCn : '',
+          messageEn: typeof node.messageEn === 'string' ? node.messageEn : '',
+          divider: typeof node.divider === 'string' ? node.divider : '',
           stepOrder: node.type === 'step' ? (Number.isFinite(node.stepOrder) ? node.stepOrder : stepCursor) : null,
         };
         if (node.type === 'step' && !Number.isFinite(node.stepOrder)) {
@@ -1023,6 +1126,164 @@
       sortedSteps.forEach((item, index) => {
         item.stepOrder = index + 1;
       });
+    }
+
+    function parseJsonObjectOrEmpty(rawText) {
+      if (!rawText || !rawText.trim()) return {};
+      const parsed = JSON.parse(rawText);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('sql_params 必须是 JSON 对象。');
+      }
+      return parsed;
+    }
+
+    function parseConsumesText(rawText) {
+      if (!rawText || !rawText.trim()) return [];
+      return rawText
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((token) => {
+          const [rawName, rawAlias] = token.split(':').map((part) => part.trim());
+          const fromPath = rawName.startsWith('$') ? rawName : `$steps.${rawName}`;
+          const fallbackAlias = rawName.replace(/^\$steps\./, '').replace(/[^a-zA-Z0-9_]/g, '_');
+          return {
+            from: fromPath,
+            alias: rawAlias || fallbackAlias || 'cte_alias',
+          };
+        });
+    }
+
+    function formatConsumesText(consumes) {
+      if (!Array.isArray(consumes)) return '';
+      return consumes
+        .map((consume) => {
+          const fromPath = consume && typeof consume.from === 'string' ? consume.from : '';
+          const alias = consume && typeof consume.alias === 'string' ? consume.alias : '';
+          const compactFrom = fromPath.replace(/^\$steps\./, '');
+          if (!compactFrom) return '';
+          if (alias && alias !== compactFrom) {
+            return `${compactFrom}:${alias}`;
+          }
+          return compactFrom;
+        })
+        .filter(Boolean)
+        .join(', ');
+    }
+
+    function normalizeDslPayload(payload) {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('DSL 顶层必须是对象。');
+      }
+      const normalized = { ...payload };
+      const context = normalized.context;
+      if (context && typeof context === 'object' && !Array.isArray(context) && !Object.prototype.hasOwnProperty.call(context, 'sql_template')) {
+        const contextValues = Object.values(context);
+        if (contextValues.length && contextValues[0] && typeof contextValues[0] === 'object') {
+          normalized.context = contextValues[0];
+        }
+      }
+      if (normalized.context && typeof normalized.context === 'object' && !Array.isArray(normalized.context)) {
+        normalized.context = {
+          ...normalized.context,
+          sql_template: normalized.context.sql_template || normalized.context.sql || '',
+          sql_params: normalized.context.sql_params || {},
+        };
+      }
+      normalized.variables = normalizeVariables(normalized.variables || {});
+      normalized.prechecks = normalizePrechecks(normalized.prechecks || []);
+      normalized.steps = normalizeSteps(normalized.steps || []);
+      normalized.on_fail = normalizeFailPolicy(normalized.on_fail || {});
+      return normalized;
+    }
+
+    function normalizeVariables(rawVariables) {
+      const normalized = {};
+      Object.entries(rawVariables || {}).forEach(([name, value]) => {
+        if (!value || typeof value !== 'object') return;
+        if (Array.isArray(value.when) || Object.prototype.hasOwnProperty.call(value, 'default')) {
+          normalized[name] = value;
+          return;
+        }
+        const assign = value.assign_by_condition || {};
+        normalized[name] = {
+          when: assign.decision ? [{ condition: assign.decision, value: assign.value }] : [],
+          default: Object.prototype.hasOwnProperty.call(assign, 'value') ? assign.value : null,
+        };
+      });
+      return normalized;
+    }
+
+    function normalizeFailPolicy(rawPolicy) {
+      const safePolicy = rawPolicy && typeof rawPolicy === 'object' && !Array.isArray(rawPolicy) ? rawPolicy : {};
+      const message = safePolicy.message && typeof safePolicy.message === 'object' ? safePolicy.message : {};
+      const normalized = {
+        ...safePolicy,
+        mode: safePolicy.mode || 'single',
+        message_cn: safePolicy.message_cn || message.zh || '',
+        message_en: safePolicy.message_en || message.en || '',
+      };
+      delete normalized.message;
+      return normalized;
+    }
+
+    function normalizePrechecks(rawPrechecks) {
+      if (!Array.isArray(rawPrechecks)) return [];
+      return rawPrechecks.map((item) => ({
+        ...item,
+        name: item.name || item.id || '',
+        sql_template: item.sql_template || item.sql || '',
+        sql_params: item.sql_params || {},
+        on_fail: normalizeFailPolicy(item.on_fail || {}),
+      }));
+    }
+
+    function normalizeSteps(rawSteps) {
+      if (!Array.isArray(rawSteps)) return [];
+      return rawSteps.map((item) => ({
+        ...item,
+        name: item.name || item.id || '',
+        sql_template: item.sql_template || item.sql || '',
+        sql_params: item.sql_params || {},
+        consumes: normalizeConsumes(item.consumes),
+      }));
+    }
+
+    function normalizeConsumes(rawConsumes) {
+      if (!Array.isArray(rawConsumes)) return [];
+      return rawConsumes.map((consume) => {
+        if (consume && typeof consume === 'object' && !Array.isArray(consume)) {
+          return {
+            from: consume.from || '',
+            alias: consume.alias || 'cte_alias',
+          };
+        }
+        if (typeof consume === 'string') {
+          const compact = consume.replace(/^\$steps\./, '');
+          return {
+            from: consume.startsWith('$') ? consume : `$steps.${compact}`,
+            alias: compact.replace(/[^a-zA-Z0-9_]/g, '_') || 'cte_alias',
+          };
+        }
+        return { from: '', alias: 'cte_alias' };
+      });
+    }
+
+    function validateDslPayload(payload) {
+      const allowedTopFields = ['context', 'variables', 'prechecks', 'steps', 'on_fail'];
+      const unknownTopFields = Object.keys(payload).filter((key) => !allowedTopFields.includes(key));
+      if (unknownTopFields.length) {
+        throw new Error(`存在未知顶层字段: ${unknownTopFields.join(', ')}`);
+      }
+      if (!Array.isArray(payload.steps)) {
+        throw new Error('steps 必须是数组。');
+      }
+      if (!payload.on_fail || typeof payload.on_fail !== 'object' || Array.isArray(payload.on_fail)) {
+        throw new Error('on_fail 必须是对象。');
+      }
+      if (payload.context && (!payload.context.type || !payload.context.datasource || !payload.context.result_mode || !payload.context.sql_template)) {
+        throw new Error('context 缺少必要字段（type/datasource/result_mode/sql_template）。');
+      }
     }
 
     function loadLocal() {
@@ -1134,16 +1395,22 @@
         renderEditor();
         saveLocal();
         statusText.innerHTML = `<strong>导入成功：</strong>${escapeHtml(selectedFile.name)}`;
-      } catch (_error) {
+      } catch (error) {
         statusText.classList.add('status-warn');
-        statusText.innerHTML = '<strong>导入失败：</strong>JSON 格式不正确或结构无法解析。';
+        statusText.innerHTML = `<strong>导入失败：</strong>${escapeHtml(error.message || 'JSON 格式不正确或结构无法解析。')}`;
       }
     });
 
     document.getElementById('btnPreview').addEventListener('click', () => {
-      openDslPreview();
-      statusText.classList.remove('status-warn');
-      statusText.textContent = '已打开 JSON 预览。';
+      try {
+        validateDslPayload(toDslObject());
+        openDslPreview();
+        statusText.classList.remove('status-warn');
+        statusText.textContent = '已打开 JSON 预览（通过基础结构校验）。';
+      } catch (error) {
+        statusText.classList.add('status-warn');
+        statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(error.message || '结构不合法')}`;
+      }
     });
 
     document.getElementById('btnClosePreview').addEventListener('click', () => {
