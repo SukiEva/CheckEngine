@@ -75,7 +75,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "runtime")
         self.assertEqual(result.failed_node, "step_a")
         self.assertEqual(result.error_code, ExecutionErrorCode.SQL_EXECUTION_FAILED.value)
-        self.assertEqual(result.error_detail, "SQL node execution failed: step_a")
         self.assertEqual(result.message_cn, "SQL node execution failed: step_a")
         self.assertEqual(result.message_en, "SQL node execution failed: step_a")
 
@@ -137,7 +136,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertTrue(result.passed)
         self.assertEqual(result.phase, "pass")
         self.assertIsNone(result.error_code)
-        self.assertIsNone(result.error_detail)
 
     def test_execute_compiled_reuses_shared_compiled_dsl_without_state_leak(self) -> None:
         class _InputDrivenSqlExecutor:
@@ -168,7 +166,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             phase="final",
             failed_node="on_fail",
             error_code=None,
-            error_detail=None,
             message_cn="x",
             message_en="y",
             context=MappingProxyType({"flow": "f1"}),
@@ -185,7 +182,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 "phase": "final",
                 "failed_node": "on_fail",
                 "error_code": None,
-                "error_detail": None,
                 "message_cn": "x",
                 "message_en": "y",
                 "context": {"flow": "f1"},
@@ -201,7 +197,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             phase="pass",
             failed_node=None,
             error_code=None,
-            error_detail=None,
             message_cn=None,
             message_en=None,
             context=MappingProxyType({"flow": "f1"}),
@@ -218,7 +213,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 "phase": "pass",
                 "failed_node": None,
                 "error_code": None,
-                "error_detail": None,
                 "message_cn": None,
                 "message_en": None,
                 "context": {"flow": "f1"},
