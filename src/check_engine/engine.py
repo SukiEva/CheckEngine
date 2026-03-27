@@ -5,18 +5,18 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from functools import lru_cache
-from typing import Any, Callable, Optional, Protocol, TypeVar
+from typing import Any, Optional, Protocol, TypeVar
 
+from .compiler import CompileCacheInfo, CompileCacheLike, HashedLruCompileCache, NoopCompileCache
 from .dsl import DslDocument, EXISTS_DECISION, FailPolicy, PrecheckNode, SqlNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
-from .exceptions import DSLExecutionError, DSLValidationError
+from .exceptions import DSLExecutionError
 from .parser import JsonDslParser
 from .renderer import MessageRenderer
 from .result import ResultBuilder
 from .runtime import ExecutionResult, ExecutionState, NodeExecutionResult
 from .sql import DatasourceRegistry, SqlExecutor
-from .validator import DslValidator
+from .validator import DslCompileValidator, DslValidator
 
 RuntimeValueT = TypeVar("RuntimeValueT")
 
@@ -67,6 +67,7 @@ class DslEngine:
         self,
         parser: Optional[JsonDslParser] = None,
         validator: Optional[DslValidator] = None,
+        compile_validator: Optional[DslCompileValidator] = None,
         expression_evaluator: Optional[ExpressionEvaluator] = None,
         sql_executor: Optional[SqlExecutorLike] = None,
         message_renderer: Optional[MessageRendererLike] = None,
@@ -80,29 +81,45 @@ class DslEngine:
         self.parser = parser or JsonDslParser()
         self.validator = validator or DslValidator()
         self.expression_evaluator = expression_evaluator or ExpressionEvaluator()
+        self.logger = logger or logging.getLogger(__name__)
+        self.compile_validator = compile_validator or DslCompileValidator(
+            dsl_validator=self.validator,
+            expression_evaluator=self.expression_evaluator,
+            logger=self.logger,
+        )
         self.sql_executor = sql_executor or SqlExecutor()
         self.message_renderer = message_renderer or MessageRenderer()
         self.result_builder = result_builder or ResultBuilder()
         self.compile_cache_size = compile_cache_size
-        self.logger = logger or logging.getLogger(__name__)
-        self._compile_callable = self._build_compile_callable(compile_cache_size)
+        self._compile_cache_backend: CompileCacheLike[CompiledDsl] = (
+            HashedLruCompileCache(compile_cache_size) if compile_cache_size > 0 else NoopCompileCache()
+        )
 
     def compile(self, dsl_text: str) -> CompiledDsl:
-        """编译 DSL，并返回可由缓存共享复用的只读结果。"""
+        """编译并校验 DSL，并返回可由缓存共享复用的只读结果。"""
         if not isinstance(dsl_text, str):
             raise TypeError("dsl_text must be a string.")
-        return self._compile_callable(dsl_text)
+        cached = self._compile_cache_backend.get(dsl_text)
+        if cached is not None:
+            return cached
+
+        compiled = self._compile_uncached(dsl_text)
+        self._compile_cache_backend.put(dsl_text, compiled)
+        return compiled
+
+    def validate(self, dsl_text: str) -> CompiledDsl:
+        """显式校验 DSL（适合保存/更新规则时调用）。"""
+        return self.compile(dsl_text)
+
+    def validate_document(self, document: DslDocument) -> CompiledDsl:
+        """显式校验已解析 DSL 文档（适合保存/更新规则时调用）。"""
+        return self._compile_document(document, run_validation=True)
 
     def clear_compile_cache(self) -> None:
-        cache_clear = getattr(self._compile_callable, "cache_clear", None)
-        if cache_clear is not None:
-            cache_clear()
+        self._compile_cache_backend.clear()
 
-    def compile_cache_info(self) -> Optional[Any]:
-        cache_info = getattr(self._compile_callable, "cache_info", None)
-        if cache_info is None:
-            return None
-        return cache_info()
+    def compile_cache_info(self) -> Optional[CompileCacheInfo]:
+        return self._compile_cache_backend.info()
 
     def execute(
         self,
@@ -110,7 +127,10 @@ class DslEngine:
         input_data: Mapping[str, Any],
         datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult:
-        return self.execute_compiled(self.compile(dsl_text), input_data, datasource_registry)
+        if not isinstance(dsl_text, str):
+            raise TypeError("dsl_text must be a string.")
+        document = self.parser.parse(dsl_text)
+        return self.execute_document(document, input_data, datasource_registry)
 
     def execute_document(
         self,
@@ -118,7 +138,7 @@ class DslEngine:
         input_data: Mapping[str, Any],
         datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult:
-        return self.execute_compiled(self._compile_document(document), input_data, datasource_registry)
+        return self.execute_compiled(self._compile_document(document, run_validation=False), input_data, datasource_registry)
 
     def execute_compiled(
         self,
@@ -319,49 +339,21 @@ class DslEngine:
         )
         return result
 
-    def _build_compile_callable(self, compile_cache_size: int) -> Callable[[str], CompiledDsl]:
-        if compile_cache_size == 0:
-            return self._compile_uncached
-        return lru_cache(maxsize=compile_cache_size)(self._compile_uncached)
-
     def _compile_uncached(self, dsl_text: str) -> CompiledDsl:
         document = self.parser.parse(dsl_text)
-        return self._compile_document(document)
+        return self._compile_document(document, run_validation=True)
 
-    def _compile_document(self, document: DslDocument) -> CompiledDsl:
-        self.validator.validate(document)
-        precheck_decisions: dict[str, Optional[CompiledExpression]] = {}
-        for precheck in document.prechecks:
-            if precheck.on_fail is None:
-                raise DSLValidationError(
-                    f"prechecks.{precheck.name}.on_fail must be provided.",
-                )
-            precheck_decisions[precheck.name] = (
-                None
-                if precheck.on_fail.decision == EXISTS_DECISION
-                else self._compile_expression(precheck.on_fail.decision, f"prechecks.{precheck.name}.on_fail.decision")
-            )
+    def _compile_document(self, document: DslDocument, run_validation: bool) -> CompiledDsl:
+        variable_conditions, precheck_decisions, on_fail_decision = self.compile_validator.validate_and_compile(
+            document=document,
+            run_validation=run_validation,
+        )
         return CompiledDsl(
             document=document,
-            variable_conditions={
-                variable_name: tuple(
-                    self._compile_expression(item.condition, f"variables.{variable_name}.when[{index}].condition")
-                    for index, item in enumerate(definition.when)
-                )
-                for variable_name, definition in document.variables.items()
-            },
+            variable_conditions=variable_conditions,
             precheck_decisions=precheck_decisions,
-            on_fail_decision=self._compile_expression(document.on_fail.decision, "on_fail.decision"),
+            on_fail_decision=on_fail_decision,
         )
-
-    def _compile_expression(self, expression: str, path: str) -> CompiledExpression:
-        try:
-            return self.expression_evaluator.compile(expression)
-        except DSLExecutionError as exc:
-            self.logger.exception("Failed to compile expression at %s: %s", path, expression)
-            raise DSLValidationError(
-                f"{path} is invalid: {exc}",
-            ) from exc
 
     def _evaluate_variable(
         self,
