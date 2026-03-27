@@ -14,7 +14,6 @@ from .expression import CompiledExpression, ExpressionEvaluator
 from .exceptions import DSLExecutionError
 from .parser import JsonDslParser
 from .renderer import MessageRenderer
-from .result import ResultBuilder
 from .runtime import ExecutionResult, ExecutionState, NodeExecutionResult
 from .sql import DatasourceRegistry, SqlExecutor
 from .validator import DslCompileValidator, DslValidator
@@ -74,7 +73,6 @@ class DslEngine:
         expression_evaluator: Optional[ExpressionEvaluator] = None,
         sql_executor: Optional[SqlExecutorLike] = None,
         message_renderer: Optional[MessageRendererLike] = None,
-        result_builder: Optional[ResultBuilder] = None,
         compile_cache_size: int = 128,
         logger: Optional[logging.Logger] = None,
     ) -> None:
@@ -92,7 +90,6 @@ class DslEngine:
         )
         self.sql_executor = sql_executor or SqlExecutor()
         self.message_renderer = message_renderer or MessageRenderer()
-        self.result_builder = result_builder or ResultBuilder()
         self.compile_cache_size = compile_cache_size
         self._compile_cache_backend: CompileCacheLike[CompiledDsl] = (
             HashedLruCompileCache(compile_cache_size) if compile_cache_size > 0 else NoopCompileCache()
@@ -172,7 +169,7 @@ class DslEngine:
         if final_failure is not None:
             return final_failure
 
-        return self.result_builder.build_pass(state)
+        return ExecutionResult.build_pass(state)
 
     def _run_context(
         self,
@@ -252,7 +249,7 @@ class DslEngine:
                 if precheck.on_fail is None:
                     raise RuntimeError("precheck.on_fail is unexpectedly None.")
                 message_cn, message_en = self.message_renderer.render(precheck.on_fail, state, result.raw_rows)
-                return self.result_builder.build_failure(
+                return ExecutionResult.build_failure(
                     phase="precheck",
                     failed_node=precheck.name,
                     message_cn=message_cn,
@@ -308,7 +305,7 @@ class DslEngine:
             if rendered_message is None:
                 raise RuntimeError("rendered failure message is unexpectedly None.")
             message_cn, message_en = rendered_message
-            return self.result_builder.build_failure(
+            return ExecutionResult.build_failure(
                 phase="final",
                 failed_node="on_fail",
                 message_cn=message_cn,
@@ -397,4 +394,4 @@ class DslEngine:
             return action(), None
         except DSLExecutionError as exc:
             self.logger.exception("Runtime execution failed at node %s", failed_node)
-            return None, self.result_builder.build_runtime_failure(exc, state, failed_node=failed_node)
+            return None, ExecutionResult.build_runtime_failure(exc, state, failed_node=failed_node)

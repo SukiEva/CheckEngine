@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from types import MappingProxyType
 from typing import Any, Literal, Mapping, Optional, Sequence
 
 NODE_TYPE_SQL = "sql"
@@ -17,18 +16,6 @@ EXISTS_DECISION = "exists"
 NodeType = Literal["sql"]
 ResultMode = Literal["record", "records"]
 FailMode = Literal["sub_repeat", "full_repeat", "single"]
-
-
-def _deep_freeze(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return MappingProxyType({key: _deep_freeze(item) for key, item in value.items()})
-    if isinstance(value, list):
-        return tuple(_deep_freeze(item) for item in value)
-    if isinstance(value, tuple):
-        return tuple(_deep_freeze(item) for item in value)
-    if isinstance(value, set):
-        return frozenset(_deep_freeze(item) for item in value)
-    return value
 
 
 @dataclass(frozen=True)
@@ -65,7 +52,7 @@ class SqlNode:
     description: Optional[str] = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "sql_params", _deep_freeze(self.sql_params))
+        object.__setattr__(self, "sql_params", dict(self.sql_params))
         object.__setattr__(self, "outputs", tuple(self.outputs))
 
 
@@ -81,9 +68,6 @@ class VariableCondition:
     condition: str
     value: Any
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "value", _deep_freeze(self.value))
-
 
 @dataclass(frozen=True)
 class VariableDefinition:
@@ -94,7 +78,6 @@ class VariableDefinition:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "when", tuple(self.when))
-        object.__setattr__(self, "default", _deep_freeze(self.default))
 
 
 @dataclass(frozen=True)
@@ -130,6 +113,6 @@ class DslDocument:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "steps", tuple(self.steps))
-        object.__setattr__(self, "raw", _deep_freeze(self.raw))
-        object.__setattr__(self, "variables", MappingProxyType(dict(self.variables)))
+        object.__setattr__(self, "raw", dict(self.raw))
+        object.__setattr__(self, "variables", dict(self.variables))
         object.__setattr__(self, "prechecks", tuple(self.prechecks))

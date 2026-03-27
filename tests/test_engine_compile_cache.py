@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any, cast
 import unittest
 
@@ -79,23 +78,18 @@ class EngineCompileCacheTestCase(unittest.TestCase):
         self.assertNotEqual(cache_key, self.dsl_text)
         self.assertLess(len(cache_key), len(self.dsl_text))
 
-    def test_compile_returns_immutable_cached_document_content(self) -> None:
+    def test_compile_returns_expected_document_collections(self) -> None:
         engine = DslEngine(compile_cache_size=2)
 
         compiled = engine.compile(self.dsl_text)
 
-        self.assertIsInstance(compiled.document.raw, MappingProxyType)
+        self.assertIsInstance(compiled.document.raw, dict)
         self.assertIsInstance(compiled.document.steps, tuple)
-        self.assertIsInstance(compiled.document.variables, MappingProxyType)
+        self.assertIsInstance(compiled.document.variables, dict)
         self.assertIsInstance(compiled.document.steps[0].outputs, tuple)
-        self.assertIsInstance(compiled.document.steps[0].sql_params, MappingProxyType)
-        with self.assertRaises(AttributeError):
-            cast(Any, compiled.document.steps[0].outputs).append("x")
-        with self.assertRaises(TypeError):
-            cast(Any, compiled.document.variables)["threshold"] = object()
+        self.assertIsInstance(compiled.document.steps[0].sql_params, dict)
 
-
-    def test_compile_freezes_variable_default_nested_value(self) -> None:
+    def test_compile_keeps_variable_default_nested_value_mutable(self) -> None:
         engine = DslEngine(compile_cache_size=2)
         dsl_text = json.dumps(
             {
@@ -128,13 +122,13 @@ class EngineCompileCacheTestCase(unittest.TestCase):
         compiled = engine.compile(dsl_text)
         default_value = compiled.document.variables["thresholds"].default
 
-        self.assertIsInstance(default_value, MappingProxyType)
-        self.assertIsInstance(default_value["levels"], tuple)
-        self.assertIsInstance(default_value["flags"], MappingProxyType)
-        with self.assertRaises(TypeError):
-            default_value["flags"]["strict"] = False
+        self.assertIsInstance(default_value, dict)
+        self.assertIsInstance(default_value["levels"], list)
+        self.assertIsInstance(default_value["flags"], dict)
+        default_value["flags"]["strict"] = False
+        self.assertFalse(default_value["flags"]["strict"])
 
-    def test_compile_freezes_variable_condition_nested_value(self) -> None:
+    def test_compile_keeps_variable_condition_nested_value_mutable(self) -> None:
         engine = DslEngine(compile_cache_size=2)
         dsl_text = json.dumps(
             {
@@ -173,11 +167,11 @@ class EngineCompileCacheTestCase(unittest.TestCase):
         value = compiled.document.variables["thresholds"].when[0].value
 
         self.assertIsInstance(compiled.document.variables["thresholds"].when, tuple)
-        self.assertIsInstance(value, MappingProxyType)
-        self.assertIsInstance(value["levels"], tuple)
-        self.assertIsInstance(value["meta"], MappingProxyType)
-        with self.assertRaises(TypeError):
-            value["meta"]["currency"] = "USD"
+        self.assertIsInstance(value, dict)
+        self.assertIsInstance(value["levels"], list)
+        self.assertIsInstance(value["meta"], dict)
+        value["meta"]["currency"] = "USD"
+        self.assertEqual(value["meta"]["currency"], "USD")
 
     def test_compile_freezes_step_consumes_sequence(self) -> None:
         engine = DslEngine(compile_cache_size=2)

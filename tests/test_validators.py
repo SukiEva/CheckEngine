@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from types import MappingProxyType
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -93,13 +92,13 @@ class ValidatorTestCase(unittest.TestCase):
 
         self.structure_validator.validate(document)
 
-    def test_reference_validator_accepts_frozen_mapping_views(self) -> None:
+    def test_reference_validator_accepts_mapping_collections(self) -> None:
         document = self.parser.parse(json.dumps(self.example_data))
 
-        self.assertIsInstance(document.variables, MappingProxyType)
-        self.assertIsInstance(document.steps[0].sql_params, MappingProxyType)
+        self.assertIsInstance(document.variables, dict)
+        self.assertIsInstance(document.steps[0].sql_params, dict)
         if document.prechecks:
-            self.assertIsInstance(document.prechecks[0].sql_params, MappingProxyType)
+            self.assertIsInstance(document.prechecks[0].sql_params, dict)
 
         self.reference_validator.validate(document)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict
 
 from ..exceptions import DSLExecutionError
 from .reference_resolver import RuntimeReferenceResolver
@@ -17,6 +17,13 @@ def _to_plain_data(value: Any) -> Any:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [_to_plain_data(item) for item in value]
     return value
+
+
+class _StatePayload(TypedDict):
+    context: Mapping[str, Any]
+    variables: Mapping[str, Any]
+    steps: Mapping[str, Any]
+    executed_nodes: Sequence[ExecutedNodeTrace]
 
 
 @dataclass(frozen=True)
@@ -70,6 +77,50 @@ class ExecutionResult:
     steps: Mapping[str, Any]
     executed_nodes: Sequence[ExecutedNodeTrace] = field(default_factory=tuple)
 
+    @staticmethod
+    def build_pass(state: "ExecutionState") -> "ExecutionResult":
+        return ExecutionResult(
+            passed=True,
+            phase="pass",
+            failed_node=None,
+            message_cn=None,
+            message_en=None,
+            **ExecutionResult._state_payload(state),
+        )
+
+    @staticmethod
+    def build_failure(
+        phase: str,
+        failed_node: str,
+        message_cn: str,
+        message_en: str,
+        state: "ExecutionState",
+    ) -> "ExecutionResult":
+        return ExecutionResult(
+            passed=False,
+            phase=phase,
+            failed_node=failed_node,
+            message_cn=message_cn,
+            message_en=message_en,
+            **ExecutionResult._state_payload(state),
+        )
+
+    @staticmethod
+    def build_runtime_failure(
+        error: DSLExecutionError,
+        state: "ExecutionState",
+        *,
+        failed_node: Optional[str] = None,
+    ) -> "ExecutionResult":
+        return ExecutionResult(
+            passed=False,
+            phase="runtime",
+            failed_node=failed_node,
+            message_cn=str(error),
+            message_en=str(error),
+            **ExecutionResult._state_payload(state),
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "passed": self.passed,
@@ -81,6 +132,15 @@ class ExecutionResult:
             "variables": _to_plain_data(self.variables),
             "steps": _to_plain_data(self.steps),
             "executed_nodes": [item.to_dict() for item in self.executed_nodes],
+        }
+
+    @staticmethod
+    def _state_payload(state: "ExecutionState") -> _StatePayload:
+        return {
+            "context": state.context_data,
+            "variables": state.variables_data,
+            "steps": state.step_data,
+            "executed_nodes": tuple(state.executed_nodes),
         }
 
 
