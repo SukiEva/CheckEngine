@@ -383,6 +383,40 @@
       font-size: 0.84rem;
     }
 
+    .flow-summary {
+      margin-bottom: 10px;
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .flow-canvas {
+      width: 100%;
+      min-height: 240px;
+      max-height: min(40vh, 420px);
+      overflow: auto;
+      border-radius: 14px;
+      background: #f8f4eb;
+      border: 1px solid rgba(30, 36, 29, 0.09);
+      padding: 8px;
+      margin-bottom: 12px;
+    }
+
+    .flow-canvas svg {
+      display: block;
+      min-width: 100%;
+    }
+
+    .tips-list {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+
     dialog.import-dialog {
       width: min(760px, calc(100vw - 24px));
       border: 1px solid var(--line);
@@ -603,6 +637,16 @@
         </section>
 
         <section class="panel">
+          <h2>执行流程预览</h2>
+          <div id="flow-summary" class="flow-summary">将根据当前 DSL 自动生成执行顺序图。</div>
+          <div class="flow-canvas">
+            <svg id="flow-svg" viewBox="0 0 360 260" role="img" aria-label="执行流程图预览"></svg>
+          </div>
+          <h3>可优化点分析</h3>
+          <ul id="optimization-list" class="tips-list"></ul>
+        </section>
+
+        <section class="panel">
           <h2>快捷动作</h2>
           <div class="toolbar">
             <button class="btn-ghost" id="add-context-param">给 Context 加参数</button>
@@ -751,6 +795,9 @@
     const previewEl = document.getElementById("json-preview");
     const issuesEl = document.getElementById("issues");
     const statusEl = document.getElementById("status");
+    const flowSummaryEl = document.getElementById("flow-summary");
+    const flowSvgEl = document.getElementById("flow-svg");
+    const optimizationListEl = document.getElementById("optimization-list");
     const importDialogEl = document.getElementById("import-dialog");
     const importJsonInputEl = document.getElementById("import-json-input");
     const importJsonStatusEl = document.getElementById("import-json-status");
@@ -1701,6 +1748,186 @@
       return issues;
     }
 
+    function escapeXml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function buildFlowGraphData(dsl) {
+      const nodes = [];
+      const edges = [];
+      const addNode = (id, label, type) => {
+        nodes.push({ id, label, type });
+      };
+      const addEdge = (from, to, kind = "normal", label = "") => {
+        edges.push({ from, to, kind, label });
+      };
+
+      addNode("start", "1. 绑定 $input", "start");
+      let previousId = "start";
+
+      if (dsl.context) {
+        addNode("context", "2. 执行 context", "main");
+        addEdge(previousId, "context");
+        previousId = "context";
+      }
+
+      if (dsl.variables && Object.keys(dsl.variables).length > 0) {
+        addNode("variables", "3. 计算 variables", "main");
+        addEdge(previousId, "variables");
+        previousId = "variables";
+      }
+
+      (dsl.prechecks || []).forEach((item, index) => {
+        const nodeId = `precheck_${index}`;
+        addNode(nodeId, `Precheck: ${item.name || `#${index + 1}`}`, "precheck");
+        addEdge(previousId, nodeId);
+        addEdge(nodeId, "fail", "fail", "失败短路");
+        previousId = nodeId;
+      });
+
+      dsl.steps.forEach((item, index) => {
+        const nodeId = `step_${index}`;
+        addNode(nodeId, `Step: ${item.name || `#${index + 1}`}`, "step");
+        addEdge(previousId, nodeId);
+        previousId = nodeId;
+      });
+
+      addNode("on_fail", "顶层 on_fail 判定", "main");
+      addEdge(previousId, "on_fail");
+      addNode("pass", "PASS", "pass");
+      addNode("fail", "FAIL", "fail");
+      addEdge("on_fail", "pass", "normal", "未命中");
+      addEdge("on_fail", "fail", "fail", "命中");
+
+      return { nodes, edges };
+    }
+
+    function renderFlowGraph(dsl) {
+      const graph = buildFlowGraphData(dsl);
+      const nodeWidth = 236;
+      const nodeHeight = 42;
+      const startX = 56;
+      const startY = 18;
+      const gapY = 28;
+      const failX = 300;
+      const failY = startY + (graph.nodes.length - 1) * (nodeHeight + gapY);
+      const positionedNodes = graph.nodes.map((node, index) => {
+        if (node.id === "fail") {
+          return { ...node, x: failX, y: failY };
+        }
+        return {
+          ...node,
+          x: startX,
+          y: startY + index * (nodeHeight + gapY)
+        };
+      });
+      const nodeMap = new Map(positionedNodes.map((node) => [node.id, node]));
+      const height = Math.max(280, startY + positionedNodes.length * (nodeHeight + gapY));
+      const width = 620;
+
+      const edgeSvg = graph.edges.map((edge) => {
+        const fromNode = nodeMap.get(edge.from);
+        const toNode = nodeMap.get(edge.to);
+        if (!fromNode || !toNode) {
+          return "";
+        }
+        const x1 = fromNode.x + nodeWidth / 2;
+        const y1 = fromNode.y + nodeHeight;
+        const x2 = toNode.x + nodeWidth / 2;
+        const y2 = toNode.y;
+        const isSideway = Math.abs(x1 - x2) > 10;
+        const stroke = edge.kind === "fail" ? "#b91c1c" : "#115e59";
+        const dash = edge.kind === "fail" ? ' stroke-dasharray="6 4"' : "";
+        const path = isSideway
+          ? `M ${x1} ${y1} C ${x1} ${y1 + 30}, ${x2} ${y2 - 30}, ${x2} ${y2}`
+          : `M ${x1} ${y1} L ${x2} ${y2}`;
+        const label = edge.label
+          ? `<text x="${(x1 + x2) / 2 + (isSideway ? 16 : 0)}" y="${(y1 + y2) / 2 - 6}" fill="${stroke}" font-size="12">${escapeXml(edge.label)}</text>`
+          : "";
+        return `<path d="${path}" fill="none" stroke="${stroke}" stroke-width="2"${dash} marker-end="url(#arrow-${edge.kind})"></path>${label}`;
+      }).join("");
+
+      const nodeSvg = positionedNodes.map((node) => {
+        const palette = {
+          start: { fill: "#0f766e", text: "#f8fcfb" },
+          main: { fill: "#1f2937", text: "#f9fafb" },
+          precheck: { fill: "#6d28d9", text: "#faf5ff" },
+          step: { fill: "#1d4ed8", text: "#eff6ff" },
+          pass: { fill: "#047857", text: "#ecfdf5" },
+          fail: { fill: "#b91c1c", text: "#fef2f2" }
+        }[node.type] || { fill: "#374151", text: "#ffffff" };
+        return `
+          <rect x="${node.x}" y="${node.y}" width="${nodeWidth}" height="${nodeHeight}" rx="12" fill="${palette.fill}" opacity="0.95"></rect>
+          <text x="${node.x + 12}" y="${node.y + 25}" fill="${palette.text}" font-size="13">${escapeXml(node.label)}</text>
+        `;
+      }).join("");
+
+      flowSvgEl.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      flowSvgEl.innerHTML = `
+        <defs>
+          <marker id="arrow-normal" markerWidth="8" markerHeight="8" refX="4.5" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#115e59"></path>
+          </marker>
+          <marker id="arrow-fail" markerWidth="8" markerHeight="8" refX="4.5" refY="4" orient="auto">
+            <path d="M 0 0 L 8 4 L 0 8 z" fill="#b91c1c"></path>
+          </marker>
+        </defs>
+        ${edgeSvg}
+        ${nodeSvg}
+      `;
+
+      const precheckCount = (dsl.prechecks || []).length;
+      const stepCount = dsl.steps.length;
+      flowSummaryEl.textContent = `当前流程共 ${precheckCount + stepCount + 4} 个阶段节点（含入口、判定与结果），其中 precheck 短路分支 ${precheckCount + 1} 条。`;
+    }
+
+    function collectOptimizationTips(dsl, issues) {
+      const tips = [];
+      const pushTip = (message) => {
+        if (!tips.includes(message)) {
+          tips.push(message);
+        }
+      };
+
+      if (issues.length > 0) {
+        pushTip(`建议先处理当前 ${issues.length} 个结构提醒，再继续扩展 DSL，避免后续调试成本放大。`);
+      }
+
+      const stepsWithoutConsumes = dsl.steps.filter((step) => !step.consumes || step.consumes.length === 0);
+      if (dsl.steps.length >= 3 && stepsWithoutConsumes.length === dsl.steps.length) {
+        pushTip("当前 steps 全部独立执行，可评估是否需要通过 consumes 串联结果，减少重复查询与参数传递。");
+      }
+
+      const datasourceSet = new Set(dsl.steps.map((step) => step.datasource).filter(Boolean));
+      if (datasourceSet.size >= 3) {
+        pushTip("steps 涉及较多 datasource，建议按数据域分组并统一命名，便于后续排查跨库延迟。");
+      }
+
+      if ((dsl.prechecks || []).length === 0) {
+        pushTip("可补充 prechecks 提前拦截脏数据或空结果，避免昂贵步骤执行后才失败。");
+      }
+
+      const stepsWithoutOutputs = dsl.steps.filter((step) => !Array.isArray(step.outputs) || step.outputs.length === 0);
+      if (stepsWithoutOutputs.length > 0) {
+        pushTip(`有 ${stepsWithoutOutputs.length} 个 step 未声明 outputs；若后续会被引用，建议提前补齐白名单字段。`);
+      }
+
+      if (dsl.on_fail && dsl.on_fail.mode === "single" && /\$steps\./.test(dsl.on_fail.decision || "")) {
+        pushTip("on_fail 当前为 single 且依赖步骤字段，建议确认引用来源不是 records 结果，避免运行时判定歧义。");
+      }
+
+      if (tips.length === 0) {
+        pushTip("当前结构较完整：下一步可重点优化 SQL 模板复用、消息模板可读性和集成测试覆盖率。");
+      }
+
+      return tips;
+    }
+
     function saveState(dsl) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dsl));
     }
@@ -1729,6 +1956,13 @@
         statusEl.textContent = "结构看起来没有明显缺项";
       }
 
+      renderFlowGraph(dsl);
+      optimizationListEl.innerHTML = "";
+      collectOptimizationTips(dsl, issues).forEach((tip) => {
+        const item = document.createElement("li");
+        item.textContent = tip;
+        optimizationListEl.appendChild(item);
+      });
       saveState(dsl);
       return dsl;
     }
