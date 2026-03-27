@@ -437,6 +437,8 @@
     </div>
     <div style="padding:12px; display:grid; gap:12px;">
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button type="button" class="btn-muted" id="btnLoadDatasourceConfig">从 SQLite 载入</button>
+        <button type="button" class="btn-muted" id="btnSaveDatasourceConfig">保存数据源配置</button>
         <button type="button" class="btn-primary" id="btnAddDatasource">新增数据源</button>
         <button type="button" class="btn-primary" id="btnRunNow">执行当前 DSL</button>
         <span style="font-size:0.8rem; color:#6b7280;">仅支持 PostgreSQL（postgresql:// 或 postgresql+psycopg2://）。</span>
@@ -468,6 +470,8 @@
     const jsonPreviewDialog = document.getElementById('jsonPreviewDialog');
     const runtimeDialog = document.getElementById('runtimeDialog');
     const datasourceList = document.getElementById('datasourceList');
+    const btnLoadDatasourceConfig = document.getElementById('btnLoadDatasourceConfig');
+    const btnSaveDatasourceConfig = document.getElementById('btnSaveDatasourceConfig');
     const runtimeInputJson = document.getElementById('runtimeInputJson');
     const runtimeStatus = document.getElementById('runtimeStatus');
     const runtimeResult = document.getElementById('runtimeResult');
@@ -1547,16 +1551,65 @@
       return Array.from(datasourceList.children).map((card) => ({
         name: card.querySelector('[data-role="name"]').value.trim(),
         db_url: card.querySelector('[data-role="db_url"]').value.trim(),
-      }));
+      })).filter((item) => item.name || item.db_url);
     }
 
-    function openRuntimeDialog() {
-      if (!datasourceList.children.length) {
-        datasourceList.appendChild(createDatasourceCard({ name: 'saas_db', db_url: 'postgresql+psycopg2://user:password@127.0.0.1:5432/saas_db' }));
-        datasourceList.appendChild(createDatasourceCard({ name: 'data_db', db_url: 'postgresql+psycopg2://user:password@127.0.0.1:5432/data_db' }));
+    function renderDatasourceCards(datasourceItems) {
+      datasourceList.innerHTML = '';
+      datasourceItems.forEach((item) => datasourceList.appendChild(createDatasourceCard(item)));
+    }
+
+    async function loadDatasourceConfigFromServer() {
+      runtimeStatus.textContent = '正在从 SQLite 载入数据源配置...';
+      try {
+        const response = await fetch('/api/datasource-configs');
+        const payload = await response.json();
+        if (!response.ok) {
+          runtimeStatus.textContent = `载入失败: ${payload.detail || payload.error || '未知错误'}`;
+          return;
+        }
+        const datasources = Array.isArray(payload.datasources) ? payload.datasources : [];
+        if (!datasources.length) {
+          runtimeStatus.textContent = 'SQLite 中暂无数据源配置，请先新增后保存。';
+          renderDatasourceCards([]);
+          return;
+        }
+        renderDatasourceCards(datasources);
+        runtimeStatus.textContent = '已从 SQLite 载入数据源配置。';
+      } catch (error) {
+        runtimeStatus.textContent = `载入失败: ${error.message || '网络错误'}`;
       }
+    }
+
+    async function saveDatasourceConfigToServer() {
+      const datasourcePayload = readDatasourceConfig();
+      if (!datasourcePayload.length) {
+        runtimeStatus.textContent = '请至少配置一个数据源后再保存。';
+        return;
+      }
+      runtimeStatus.textContent = '正在保存到 SQLite...';
+      try {
+        const response = await fetch('/api/datasource-configs', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ datasources: datasourcePayload }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          runtimeStatus.textContent = `保存失败: ${payload.detail || payload.error || '未知错误'}`;
+          return;
+        }
+        renderDatasourceCards(Array.isArray(payload.datasources) ? payload.datasources : datasourcePayload);
+        runtimeStatus.textContent = `已保存 ${payload.saved || datasourcePayload.length} 个数据源到 SQLite。`;
+      } catch (error) {
+        runtimeStatus.textContent = `保存失败: ${error.message || '网络错误'}`;
+      }
+    }
+
+    async function openRuntimeDialog() {
       runtimeStatus.textContent = '请确认数据源连接串后执行。';
       runtimeResult.textContent = '{}';
+      await loadDatasourceConfigFromServer();
       if (typeof runtimeDialog.showModal === 'function') {
         runtimeDialog.showModal();
       } else {
@@ -1600,7 +1653,7 @@
         });
         const payload = await response.json();
         if (!response.ok) {
-          runtimeStatus.textContent = `执行失败: ${payload.error || '未知错误'}`;
+          runtimeStatus.textContent = `执行失败: ${payload.detail || payload.error || '未知错误'}`;
           runtimeResult.textContent = JSON.stringify(payload, null, 2);
           return;
         }
@@ -1946,6 +1999,14 @@
 
     document.getElementById('btnCloseRuntime').addEventListener('click', () => {
       closeRuntimeDialog();
+    });
+
+    btnLoadDatasourceConfig.addEventListener('click', () => {
+      loadDatasourceConfigFromServer();
+    });
+
+    btnSaveDatasourceConfig.addEventListener('click', () => {
+      saveDatasourceConfigToServer();
     });
 
     document.getElementById('btnAddDatasource').addEventListener('click', () => {
