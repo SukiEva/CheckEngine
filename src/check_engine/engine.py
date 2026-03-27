@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Optional, Protocol, TypeVar
 
 from .compiler import CompileCacheInfo, CompileCacheLike, HashedLruCompileCache, NoopCompileCache
@@ -207,14 +208,11 @@ class DslEngine:
         state: ExecutionState,
     ) -> Optional[ExecutionResult]:
         for variable_name, definition in document.variables.items():
+            compiled_conditions = compiled_dsl.variable_conditions.get(variable_name, ())
             value, runtime_failure = self._run_runtime_action(
                 state=state,
                 failed_node=f"variables.{variable_name}",
-                action=lambda definition=definition, variable_name=variable_name: self._evaluate_variable(
-                    definition,
-                    compiled_dsl.variable_conditions.get(variable_name, ()),
-                    state,
-                ),
+                action=partial(self._evaluate_variable, definition, compiled_conditions, state),
             )
             if runtime_failure is not None:
                 return runtime_failure
@@ -232,7 +230,8 @@ class DslEngine:
             result, runtime_failure = self._run_runtime_action(
                 state=state,
                 failed_node=precheck.name,
-                action=lambda precheck=precheck: self._execute_sql_node(
+                action=partial(
+                    self._execute_sql_node,
                     phase="precheck",
                     node=precheck,
                     state=state,
@@ -272,7 +271,8 @@ class DslEngine:
             result, runtime_failure = self._run_runtime_action(
                 state=state,
                 failed_node=step.name,
-                action=lambda step=step: self._execute_sql_node(
+                action=partial(
+                    self._execute_sql_node,
                     phase="step",
                     node=step,
                     state=state,

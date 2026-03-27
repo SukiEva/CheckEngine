@@ -151,7 +151,7 @@ class ExecutionState:
         return self.resolve_reference(path if path.startswith("$") else "$" + path)
 
     def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
-        parts = RuntimeReferenceResolver._parse_reference_parts(from_path)
+        parts = RuntimeReferenceResolver.parse_reference_parts(from_path)
         if parts == ["context"]:
             if self.context_result is None:
                 raise DSLExecutionError(
@@ -192,4 +192,3 @@ class ExecutionState:
                 f"Steps reference must include step name: {reference}",
             )
         return parts[1]
-
