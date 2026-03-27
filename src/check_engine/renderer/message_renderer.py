@@ -9,6 +9,7 @@ from typing import Any, Mapping, Optional
 from ..dsl import FAIL_MODE_FULL_REPEAT, FAIL_MODE_SINGLE, FAIL_MODE_SUB_REPEAT, FailPolicy
 from ..exceptions import DSLExecutionError
 from ..runtime import ExecutionState
+from .mode_renderers import FullRepeatModeRenderer, ModeRenderer, SingleModeRenderer, SubRepeatModeRenderer
 
 
 class MessageRenderer:
@@ -17,6 +18,13 @@ class MessageRenderer:
     PLACEHOLDER_PATTERN = re.compile(r"\{([^{}]+)\}")
     FORMAT_PLACEHOLDER_PATTERN = re.compile(r"f\{([^{}]+)\}")
     IMPLICIT_PATH_PATTERN = re.compile(r"^(input|context|variables|steps)\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$")
+
+    def __init__(self) -> None:
+        self.mode_renderers: dict[str, ModeRenderer] = {
+            FAIL_MODE_SINGLE: SingleModeRenderer(),
+            FAIL_MODE_FULL_REPEAT: FullRepeatModeRenderer(),
+            FAIL_MODE_SUB_REPEAT: SubRepeatModeRenderer(),
+        }
 
     def render(
         self,
@@ -38,46 +46,18 @@ class MessageRenderer:
         state: ExecutionState,
         rows: Sequence[Mapping[str, Any]],
     ) -> str:
-        if policy.mode == FAIL_MODE_SINGLE:
-            if len(rows) > 1:
-                raise DSLExecutionError(
-                    "single mode requires at most one result row.",
-                )
-            row = rows[0] if rows else None
-            return self._render_once(template, state, row)
-
-        if policy.mode == FAIL_MODE_FULL_REPEAT:
-            if not rows:
-                return self._render_once(template, state, None)
-            divider = self._resolve_full_repeat_divider(policy, locale)
-            return divider.join(self._render_once(template, state, row) for row in rows)
-
-        if policy.mode == FAIL_MODE_SUB_REPEAT:
-            return self._render_sub_repeat(template, policy, locale, state, rows)
-
-        raise DSLExecutionError(
-            f"Unknown message rendering mode: {policy.mode}",
-        )
-
-    def _render_sub_repeat(
-        self,
-        template: str,
-        policy: FailPolicy,
-        locale: str,
-        state: ExecutionState,
-        rows: Sequence[Mapping[str, Any]],
-    ) -> str:
-        left = template.index("[")
-        right = template.index("]")
-        prefix = template[:left]
-        segment = template[left + 1 : right]
-        suffix = template[right + 1 :]
-        divider = self._resolve_sub_repeat_divider(policy, locale)
-        repeated = divider.join(self._render_sub_repeat_segments(segment, state, rows))
-        return "{0}{1}{2}".format(
-            self._render_once(prefix, state, None),
-            repeated,
-            self._render_once(suffix, state, None),
+        mode_renderer = self.mode_renderers.get(policy.mode)
+        if mode_renderer is None:
+            raise DSLExecutionError(
+                f"Unknown message rendering mode: {policy.mode}",
+            )
+        return mode_renderer.render(
+            template=template,
+            policy=policy,
+            locale=locale,
+            state=state,
+            rows=rows,
+            helpers=self,
         )
 
     def _render_sub_repeat_segments(
@@ -116,6 +96,29 @@ class MessageRenderer:
             if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
                 token_map[reference_token] = list(value)
         return token_map
+
+
+    def render_once(
+        self,
+        template: str,
+        state: ExecutionState,
+        row: Optional[Mapping[str, Any]],
+    ) -> str:
+        return self._render_once(template, state, row)
+
+    def render_sub_repeat_segments(
+        self,
+        segment: str,
+        state: ExecutionState,
+        rows: Sequence[Mapping[str, Any]],
+    ) -> list[str]:
+        return self._render_sub_repeat_segments(segment, state, rows)
+
+    def resolve_full_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
+        return self._resolve_full_repeat_divider(policy, locale)
+
+    def resolve_sub_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
+        return self._resolve_sub_repeat_divider(policy, locale)
 
     def _render_once(
         self,

@@ -72,6 +72,7 @@ src/check_engine/
     models.py
   parser/
     json_parser.py
+    node_parsers.py
   validator/
     structure_validator.py
     reference_validator.py
@@ -80,12 +81,14 @@ src/check_engine/
     evaluator.py
   runtime/
     state.py
+    reference_resolver.py
   sql/
     executor.py
     cte_builder.py
     datasource.py
   renderer/
     message_renderer.py
+    mode_renderers.py
   result/
     builder.py
 tests/
@@ -99,13 +102,16 @@ references/
 
 - `engine.py`：执行入口
 - `dsl/models.py`：内部数据模型
-- `parser/json_parser.py`：DSL 文本到模型对象的转换
+- `parser/json_parser.py`：DSL 文本入口解析与顶层块编排
+- `parser/node_parsers.py`：变量/步骤/失败策略等节点级转换组件
 - `validator/`：静态校验器
 - `expression/evaluator.py`：条件表达式求值
-- `runtime/state.py`：运行时上下文
+- `runtime/state.py`：运行时上下文与节点执行轨迹
+- `runtime/reference_resolver.py`：运行时引用解析策略（按 `$input/$context/$variables/$steps` 分发）
 - `sql/executor.py`：SQLAlchemy 执行封装
 - `sql/cte_builder.py`：`consumes` 转 CTE
-- `renderer/message_renderer.py`：失败消息渲染
+- `renderer/message_renderer.py`：失败消息渲染入口与占位符解析
+- `renderer/mode_renderers.py`：single/full_repeat/sub_repeat 模式渲染策略
 - `result/builder.py`：统一返回值封装
 
 ## 5. 核心对象设计
@@ -165,6 +171,25 @@ class ExecutionState:
 
 - 节点原始结果：用于调试和消息渲染
 - 节点导出结果：用于 `$context` / `$steps` 引用
+
+### 5.3 运行时引用解析模式
+
+运行时引用解析建议采用**策略模式（Strategy Pattern）**，避免把所有 `$scope` 判断和路径解析逻辑堆在 `ExecutionState` 中。
+
+推荐做法：
+
+- 入口类：`RuntimeReferenceResolver`
+- 策略接口：`ScopeResolver`
+- 具体策略：
+  - `MappingScopeResolver`：处理 `$input/$context/$variables` 这类映射作用域
+  - `StepScopeResolver`：处理 `$steps.<step_name>...`，并支持序列投影
+
+收益：
+
+1. `ExecutionState` 只保留状态管理职责，降低文件复杂度。
+2. 新增作用域时只需新增策略并注册，不需要改动大段 `if/elif`。
+3. 引用解析可单测隔离，便于定位错误消息与边界行为。
+4. 运行期可在 `ExecutionState` 初始化时缓存解析器实例，后续通过可变作用域数据更新，避免每次解析重复构建策略对象。
 
 ## 6. 对外接口设计
 
@@ -248,6 +273,13 @@ def execute(dsl_text, input_data, datasource_registry):
 1. `json.loads`
 2. 必填顶层块检查（当前仅 `steps`、`on_fail`）
 3. 转换为内部 `dataclass` 模型（可选块补默认值）
+
+对于第 3 步，可继续拆分为“入口解析器 + 节点解析器”组合：
+
+- 入口层（`JsonDslParser`）负责顶层块顺序与默认值装配
+- 节点层（如 `JsonNodeParser`）负责变量、步骤、失败策略、SQL 节点字段等细粒度解析
+
+这样可以把复杂字段解析逻辑从入口类中剥离，降低单文件复杂度。
 
 不建议在解析器里做过多业务校验，避免职责混乱。
 

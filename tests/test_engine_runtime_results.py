@@ -131,6 +131,27 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
         self.assertEqual(state.resolve_reference("$context.v"), 1)
 
+    def test_set_context_result_reuses_resolver_after_context_update(self) -> None:
+        from check_engine.runtime.state import ExecutionState
+
+        state = ExecutionState.new({})
+        first = NodeExecutionResult(
+            raw_rows=[{"v": 1}],
+            exported_data={"v": 1},
+            exported_fields=["v"],
+        )
+        second = NodeExecutionResult(
+            raw_rows=[{"v": 2}],
+            exported_data={"v": 2},
+            exported_fields=["v"],
+        )
+
+        state.set_context_result(first)
+        self.assertEqual(state.resolve_reference("$context.v"), 1)
+
+        state.set_context_result(second)
+        self.assertEqual(state.resolve_reference("$context.v"), 2)
+
     def test_execute_pass_result_has_empty_runtime_error_fields(self) -> None:
         engine = DslEngine(sql_executor=_PassingSqlExecutor())
         registry = cast(DatasourceRegistry, _UnusedRegistry())
@@ -299,6 +320,14 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         )
 
 class ExecutionStateReferenceResolutionTestCase(unittest.TestCase):
+    def test_resolve_reference_when_step_data_mapping_reassigned(self) -> None:
+        from check_engine.runtime.state import ExecutionState
+
+        state = ExecutionState.new({})
+        state.step_data = {"step_a": {"value": 10}}
+
+        self.assertEqual(state.resolve_reference("$steps.step_a.value"), 10)
+
     def test_resolve_step_path_from_read_only_sequence(self) -> None:
         from check_engine.runtime.state import ExecutionState
 
