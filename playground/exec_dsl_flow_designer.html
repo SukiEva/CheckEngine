@@ -219,12 +219,34 @@
       border-radius: 12px 12px 0 0;
       font-weight: 700;
     }
+    .flow-node .node-head span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .flow-node .node-head span:first-child {
+      flex: 1 1 auto;
+      padding-right: 8px;
+    }
+    .flow-node .node-head span:last-child {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
 
     .flow-node .node-body {
       padding: 10px;
       display: grid;
       gap: 6px;
       font-size: 0.84rem;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .flow-node .node-body strong,
+    .flow-node .node-body .muted,
+    .step-sub-item {
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .step-block {
       border: 1px dashed #93c5fd;
