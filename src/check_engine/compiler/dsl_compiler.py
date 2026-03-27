@@ -1,36 +1,38 @@
-"""DSL 编译前校验与表达式预编译。"""
+"""DSL 编译：校验与表达式预编译。"""
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
 from ..dsl import DslDocument, EXISTS_DECISION
-from ..expression import CompiledExpression, ExpressionEvaluator
 from ..exceptions import DSLExecutionError, DSLValidationError
-from .document_validator import DslValidator
+from ..expression import CompiledExpression, ExpressionEvaluator
 
 
-class DslCompileValidator:
-    """负责 DSL 编译阶段的校验与表达式预编译。"""
+@dataclass(frozen=True)
+class CompiledDsl:
+    """已完成解析与表达式预编译的 DSL。"""
+
+    document: DslDocument
+    variable_conditions: dict[str, tuple[CompiledExpression, ...]]
+    precheck_decisions: dict[str, Optional[CompiledExpression]]
+    on_fail_decision: CompiledExpression
+
+
+class DslCompiler:
+    """负责 DSL 的表达式预编译。"""
 
     def __init__(
         self,
-        dsl_validator: Optional[DslValidator] = None,
         expression_evaluator: Optional[ExpressionEvaluator] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
-        self.dsl_validator = dsl_validator or DslValidator()
         self.expression_evaluator = expression_evaluator or ExpressionEvaluator()
         self.logger = logger or logging.getLogger(__name__)
 
-    def validate(self, document: DslDocument) -> None:
-        self.dsl_validator.validate(document)
-
-    def compile(
-        self,
-        document: DslDocument,
-    ) -> tuple[dict[str, tuple[CompiledExpression, ...]], dict[str, Optional[CompiledExpression]], CompiledExpression]:
+    def compile(self, document: DslDocument) -> CompiledDsl:
         variable_conditions = {
             variable_name: tuple(
                 self._compile_expression(item.condition, f"variables.{variable_name}.when[{index}].condition")
@@ -50,7 +52,12 @@ class DslCompileValidator:
                 else self._compile_expression(precheck.on_fail.decision, f"prechecks.{precheck.name}.on_fail.decision")
             )
         on_fail_decision = self._compile_expression(document.on_fail.decision, "on_fail.decision")
-        return variable_conditions, precheck_decisions, on_fail_decision
+        return CompiledDsl(
+            document=document,
+            variable_conditions=variable_conditions,
+            precheck_decisions=precheck_decisions,
+            on_fail_decision=on_fail_decision,
+        )
 
     def _compile_expression(self, expression: str, path: str) -> CompiledExpression:
         try:
