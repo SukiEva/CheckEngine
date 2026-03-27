@@ -63,7 +63,6 @@ class ExecutionResult:
     phase: str
     failed_node: Optional[str]
     error_code: Optional[str]
-    error_detail: Optional[str]
     message_cn: Optional[str]
     message_en: Optional[str]
     context: Mapping[str, Any]
@@ -77,7 +76,6 @@ class ExecutionResult:
             "phase": self.phase,
             "failed_node": self.failed_node,
             "error_code": self.error_code,
-            "error_detail": self.error_detail,
             "message_cn": self.message_cn,
             "message_en": self.message_en,
             "context": _to_plain_data(self.context),
