@@ -76,9 +76,15 @@
       padding: 10px 12px;
       cursor: grab;
       user-select: none;
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
     }
 
     .tool-item:active { cursor: grabbing; }
+    .tool-item:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.14);
+      border-color: #93c5fd;
+    }
 
     .tool-item strong {
       display: block;
@@ -114,11 +120,15 @@
       font: inherit;
       font-size: 0.85rem;
       cursor: pointer;
+      transition: transform .15s ease, opacity .15s ease, box-shadow .15s ease;
     }
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(0); opacity: .9; }
 
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-muted { background: #f3f4f6; color: #374151; }
     .btn-danger { background: #fee2e2; color: var(--danger); }
+    .btn-primary:hover { box-shadow: 0 8px 16px rgba(37, 99, 235, 0.24); }
 
     #canvas {
       position: relative;
@@ -135,6 +145,19 @@
       width: 2200px;
       height: 1400px;
     }
+    #linkLayer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: visible;
+    }
+    .flow-link {
+      fill: none;
+      stroke: #93c5fd;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
 
     .flow-node {
       position: absolute;
@@ -148,6 +171,7 @@
     }
 
     .flow-node:active { cursor: grabbing; }
+    .flow-node:hover { box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14); }
 
     .flow-node.selected {
       border-color: var(--accent);
@@ -201,6 +225,51 @@
     }
 
     .field textarea { min-height: 90px; line-height: 1.5; }
+    .field-note {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.5;
+    }
+
+    .field-autocomplete { position: relative; }
+    .autocomplete-panel {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% - 4px);
+      z-index: 12;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
+      padding: 8px;
+      gap: 6px;
+      max-height: 180px;
+      overflow: auto;
+    }
+    .autocomplete-panel.show { display: grid; }
+    .autocomplete-item {
+      border: 1px solid #dbeafe;
+      background: #f8fbff;
+      color: #1e3a8a;
+      border-radius: 8px;
+      text-align: left;
+      padding: 6px 8px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .autocomplete-item:hover,
+    .autocomplete-item.active {
+      background: #dbeafe;
+      border-color: #93c5fd;
+    }
+    .autocomplete-waiting {
+      font-size: 0.8rem;
+      color: var(--muted);
+      padding: 4px 2px;
+    }
 
     pre {
       margin: 0;
@@ -221,6 +290,7 @@
     }
 
     .status strong { color: var(--success); }
+    .status-warn strong { color: #b45309; }
   </style>
 </head>
 <body>
@@ -237,7 +307,10 @@
       <div class="canvas-toolbar">
         <button class="btn-primary" id="btnReset">清空画布</button>
         <button class="btn-muted" id="btnArrange">自动纵向排布</button>
+        <button class="btn-muted" id="btnImport">导入 JSON</button>
+        <button class="btn-muted" id="btnPreview">预览 JSON</button>
         <button class="btn-muted" id="btnExport">下载 JSON</button>
+        <input type="file" id="fileImportJson" accept="application/json" style="display:none;" />
       </div>
       <section id="canvas">
         <div id="dropZone"></div>
@@ -248,16 +321,23 @@
     <aside class="panel">
       <div class="panel-head">
         <h2 class="panel-title">节点编辑 + DSL 预览</h2>
-        <div class="panel-sub">编辑仅针对当前选中的节点；右下角会实时更新 DSL 预览。</div>
+        <div class="panel-sub">编辑仅针对当前选中的节点；可通过上方“预览 JSON”查看完整 DSL。</div>
       </div>
       <div class="panel-body" id="editorPanel">
         <div class="muted">请先在画布中选择一个节点。</div>
       </div>
-      <div class="panel-body">
-        <pre id="dslPreview"></pre>
-      </div>
     </aside>
   </div>
+
+  <dialog id="jsonPreviewDialog" style="width:min(920px,92vw); border:1px solid #e5e7eb; border-radius:14px; padding:0; box-shadow:0 24px 48px rgba(15, 23, 42, .2);">
+    <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+      <strong style="font-size:0.95rem;">ExecDSL JSON 预览</strong>
+      <button class="btn-muted" id="btnClosePreview" style="padding:6px 10px;">关闭</button>
+    </div>
+    <div style="padding:12px;">
+      <pre id="dslPreview" style="max-height:60vh;"></pre>
+    </div>
+  </dialog>
 
   <script>
     const NODE_DEFS = [
@@ -272,6 +352,7 @@
     const dropZone = document.getElementById('dropZone');
     const editorPanel = document.getElementById('editorPanel');
     const dslPreview = document.getElementById('dslPreview');
+    const jsonPreviewDialog = document.getElementById('jsonPreviewDialog');
     const statusText = document.getElementById('statusText');
 
     const state = {
@@ -284,7 +365,7 @@
 
     function makeNode(def, x, y) {
       return {
-        id: `node_${Date.now()}_${Math.random().toString(16).slice(2, 7)}`,
+        id: makeNodeId(),
         type: def.type,
         title: def.defaultTitle,
         x,
@@ -294,7 +375,12 @@
         outputs: 'ok',
         consumes: '',
         note: '',
+        stepOrder: def.type === 'step' ? getNextStepOrder() : null,
       };
+    }
+
+    function makeNodeId() {
+      return `node_${Date.now()}_${Math.random().toString(16).slice(2, 7)}`;
     }
 
     function renderToolbox() {
@@ -314,6 +400,17 @@
 
     function renderCanvas() {
       dropZone.innerHTML = '';
+      const linkLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      linkLayer.setAttribute('id', 'linkLayer');
+      linkLayer.setAttribute('viewBox', '0 0 2200 1400');
+      linkLayer.innerHTML = `
+        <defs>
+          <marker id="flowArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="#93c5fd"></path>
+          </marker>
+        </defs>
+      `;
+      dropZone.appendChild(linkLayer);
       state.nodes.forEach((node) => {
         const el = document.createElement('article');
         el.className = `flow-node${state.selectedId === node.id ? ' selected' : ''}`;
@@ -323,7 +420,7 @@
         el.innerHTML = `
           <div class="node-head">
             <span>${node.type}</span>
-            <span>#${node.id.slice(-4)}</span>
+            <span>${node.type === 'step' && node.stepOrder ? `S${node.stepOrder}` : `#${node.id.slice(-4)}`}</span>
           </div>
           <div class="node-body">
             <strong>${escapeHtml(node.title || '(未命名节点)')}</strong>
@@ -342,7 +439,7 @@
         el.addEventListener('click', () => selectNode(node.id));
         dropZone.appendChild(el);
       });
-      renderDslPreview();
+      renderLinks(linkLayer);
     }
 
     function selectNode(nodeId) {
@@ -367,9 +464,21 @@
           <label>类型（只读）</label>
           <input value="${node.type}" disabled />
         </div>
+        ${node.type === 'step' ? `
         <div class="field">
+          <label>Step 顺序</label>
+          <input value="${node.stepOrder || '-'}" disabled />
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn-muted" id="btnStepUp">上移</button>
+            <button class="btn-muted" id="btnStepDown">下移</button>
+          </div>
+        </div>
+        ` : ''}
+        <div class="field field-autocomplete">
           <label>SQL</label>
           <textarea id="f_sql">${escapeHtml(node.sql)}</textarea>
+          <div class="field-note">输入 <code>$</code> 可联想运行时变量路径（例如 <code>$steps.xx.yy</code>）。</div>
+          <div class="autocomplete-panel" id="ac_sql"></div>
         </div>
         <div class="field">
           <label>Decision（用于 precheck/on_fail/variable）</label>
@@ -384,9 +493,11 @@
           <label>Outputs（逗号分隔）</label>
           <input id="f_outputs" value="${escapeAttr(node.outputs)}" />
         </div>
-        <div class="field">
+        <div class="field field-autocomplete">
           <label>Consumes（逗号分隔 step id）</label>
           <input id="f_consumes" value="${escapeAttr(node.consumes)}" />
+          <div class="field-note">输入时会联想已有 step 节点 ID。</div>
+          <div class="autocomplete-panel" id="ac_consumes"></div>
         </div>
         <div class="field">
           <label>备注</label>
@@ -418,6 +529,293 @@
         saveLocal();
         statusText.innerHTML = '已删除节点。';
       });
+
+      if (node.type === 'step') {
+        document.getElementById('btnStepUp').addEventListener('click', () => {
+          moveStepOrder(node.id, -1);
+        });
+        document.getElementById('btnStepDown').addEventListener('click', () => {
+          moveStepOrder(node.id, 1);
+        });
+      }
+
+      bindAutocompletes(node);
+    }
+
+    function getNextStepOrder() {
+      const stepOrders = state.nodes
+        .filter((item) => item.type === 'step' && Number.isFinite(item.stepOrder))
+        .map((item) => item.stepOrder);
+      if (!stepOrders.length) return 1;
+      return Math.max(...stepOrders) + 1;
+    }
+
+    function getSortedSteps() {
+      return state.nodes
+        .filter((item) => item.type === 'step')
+        .sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
+    }
+
+    function moveStepOrder(nodeId, offset) {
+      const steps = getSortedSteps();
+      const currentIndex = steps.findIndex((item) => item.id === nodeId);
+      if (currentIndex < 0) return;
+      const targetIndex = currentIndex + offset;
+      if (targetIndex < 0 || targetIndex >= steps.length) return;
+      const currentStep = steps[currentIndex];
+      const targetStep = steps[targetIndex];
+      const temp = currentStep.stepOrder;
+      currentStep.stepOrder = targetStep.stepOrder;
+      targetStep.stepOrder = temp;
+      renderCanvas();
+      renderEditor();
+      saveLocal();
+      statusText.classList.remove('status-warn');
+      statusText.innerHTML = `<strong>已调整 Step 顺序：</strong>${escapeHtml(currentStep.title || currentStep.id)}`;
+    }
+
+    function getOrderedFlowNodes() {
+      const order = [];
+      const pushByType = (type) => {
+        state.nodes
+          .filter((item) => item.type === type)
+          .forEach((item) => order.push(item));
+      };
+      pushByType('context');
+      pushByType('variable');
+      pushByType('precheck');
+      getSortedSteps().forEach((stepNode) => order.push(stepNode));
+      pushByType('on_fail');
+      return order;
+    }
+
+    function renderLinks(linkLayer) {
+      const orderedNodes = getOrderedFlowNodes();
+      for (let index = 0; index < orderedNodes.length - 1; index += 1) {
+        const fromNode = orderedNodes[index];
+        const toNode = orderedNodes[index + 1];
+        const startX = fromNode.x + 220;
+        const startY = fromNode.y + 54;
+        const endX = toNode.x;
+        const endY = toNode.y + 54;
+        const midX = startX + (endX - startX) * 0.5;
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('class', 'flow-link');
+        path.setAttribute('marker-end', 'url(#flowArrow)');
+        path.setAttribute('d', `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`);
+        linkLayer.appendChild(path);
+      }
+    }
+
+    function bindAutocompletes(node) {
+      const sqlTextarea = document.getElementById('f_sql');
+      const sqlPanel = document.getElementById('ac_sql');
+      const consumesInput = document.getElementById('f_consumes');
+      const consumesPanel = document.getElementById('ac_consumes');
+
+      createAutocomplete({
+        inputEl: sqlTextarea,
+        panelEl: sqlPanel,
+        getKeyword: () => {
+          const cursor = sqlTextarea.selectionStart || 0;
+          const beforeCursor = sqlTextarea.value.slice(0, cursor);
+          const matched = beforeCursor.match(/[$][a-zA-Z0-9_\\.]*$/);
+          return matched ? matched[0] : '';
+        },
+        buildOptions: (keyword) => {
+          const suggestionPool = getRuntimePathSuggestions(node);
+          if (!keyword) return [];
+          return suggestionPool.filter((item) => item.toLowerCase().includes(keyword.toLowerCase()));
+        },
+        applySuggestion: (value) => {
+          const cursor = sqlTextarea.selectionStart || 0;
+          const beforeCursor = sqlTextarea.value.slice(0, cursor);
+          const afterCursor = sqlTextarea.value.slice(cursor);
+          const matched = beforeCursor.match(/[$][a-zA-Z0-9_\\.]*$/);
+          if (!matched) return;
+          const start = cursor - matched[0].length;
+          sqlTextarea.value = `${beforeCursor.slice(0, start)}${value}${afterCursor}`;
+          const nextCursor = start + value.length;
+          sqlTextarea.selectionStart = nextCursor;
+          sqlTextarea.selectionEnd = nextCursor;
+          sqlTextarea.focus();
+        },
+      });
+
+      createAutocomplete({
+        inputEl: consumesInput,
+        panelEl: consumesPanel,
+        getKeyword: () => {
+          const cursor = consumesInput.selectionStart || 0;
+          const beforeCursor = consumesInput.value.slice(0, cursor);
+          const token = beforeCursor.split(',').pop() || '';
+          return token.trim();
+        },
+        buildOptions: (keyword) => {
+          const stepIds = getStepIdSuggestions(node.id);
+          return stepIds.filter((item) => item.toLowerCase().includes(keyword.toLowerCase()));
+        },
+        applySuggestion: (value) => {
+          const cursor = consumesInput.selectionStart || 0;
+          const beforeCursor = consumesInput.value.slice(0, cursor);
+          const afterCursor = consumesInput.value.slice(cursor);
+          const parts = beforeCursor.split(',');
+          parts[parts.length - 1] = ` ${value}`;
+          const nextBefore = parts.join(',').replace(/^ /, '');
+          consumesInput.value = `${nextBefore}${afterCursor}`;
+          const nextCursor = nextBefore.length;
+          consumesInput.selectionStart = nextCursor;
+          consumesInput.selectionEnd = nextCursor;
+          consumesInput.focus();
+        },
+      });
+    }
+
+    function createAutocomplete(config) {
+      const {
+        inputEl,
+        panelEl,
+        getKeyword,
+        buildOptions,
+        applySuggestion,
+      } = config;
+      let activeIndex = -1;
+      let currentOptions = [];
+      let waitTimer = 0;
+
+      const hidePanel = () => {
+        panelEl.classList.remove('show');
+        panelEl.innerHTML = '';
+        activeIndex = -1;
+        currentOptions = [];
+      };
+
+      const renderWaiting = () => {
+        panelEl.classList.add('show');
+        panelEl.innerHTML = '<div class="autocomplete-waiting">联想中...</div>';
+      };
+
+      const renderOptions = (options) => {
+        currentOptions = options;
+        activeIndex = options.length ? 0 : -1;
+        if (!options.length) {
+          panelEl.classList.remove('show');
+          panelEl.innerHTML = '';
+          return;
+        }
+        panelEl.classList.add('show');
+        panelEl.innerHTML = options
+          .map((item, index) => `
+            <button type="button" class="autocomplete-item${index === activeIndex ? ' active' : ''}" data-value="${escapeAttr(item)}">${escapeHtml(item)}</button>
+          `)
+          .join('');
+        panelEl.querySelectorAll('.autocomplete-item').forEach((button, index) => {
+          button.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+            applySuggestion(options[index]);
+            hidePanel();
+          });
+        });
+      };
+
+      const updateActiveVisual = () => {
+        panelEl.querySelectorAll('.autocomplete-item').forEach((button, index) => {
+          button.classList.toggle('active', index === activeIndex);
+        });
+      };
+
+      const requestSuggestions = () => {
+        const keyword = getKeyword();
+        if (!keyword) {
+          hidePanel();
+          return;
+        }
+        renderWaiting();
+        clearTimeout(waitTimer);
+        waitTimer = window.setTimeout(() => {
+          const options = buildOptions(keyword).slice(0, 10);
+          renderOptions(options);
+        }, 220);
+      };
+
+      inputEl.addEventListener('focus', requestSuggestions);
+      inputEl.addEventListener('input', requestSuggestions);
+      inputEl.addEventListener('blur', () => {
+        window.setTimeout(hidePanel, 120);
+      });
+      inputEl.addEventListener('keydown', (event) => {
+        if (!panelEl.classList.contains('show') || !currentOptions.length) return;
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          activeIndex = (activeIndex + 1) % currentOptions.length;
+          updateActiveVisual();
+          return;
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          activeIndex = (activeIndex - 1 + currentOptions.length) % currentOptions.length;
+          updateActiveVisual();
+          return;
+        }
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          if (activeIndex >= 0 && activeIndex < currentOptions.length) {
+            applySuggestion(currentOptions[activeIndex]);
+            hidePanel();
+          }
+          return;
+        }
+        if (event.key === 'Escape') {
+          hidePanel();
+        }
+      });
+    }
+
+    function getStepIdSuggestions(currentNodeId) {
+      return state.nodes
+        .filter((item) => item.type === 'step' && item.id !== currentNodeId)
+        .map((item, index) => normalizeNodeKey(item, index + 1));
+    }
+
+    function getRuntimePathSuggestions(currentNode) {
+      const basics = [
+        '$input',
+        '$context',
+        '$variables',
+        '$steps',
+      ];
+      const runtimePaths = [];
+
+      state.nodes.forEach((item, index) => {
+        const nodeKey = normalizeNodeKey(item, index + 1);
+        const outputFields = item.outputs
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean);
+        if (item.type === 'context') {
+          runtimePaths.push(`$context.${nodeKey}`);
+          outputFields.forEach((field) => runtimePaths.push(`$context.${nodeKey}.${field}`));
+        }
+        if (item.type === 'variable') {
+          runtimePaths.push(`$variables.${nodeKey}`);
+        }
+        if (item.type === 'step') {
+          runtimePaths.push(`$steps.${nodeKey}`);
+          outputFields.forEach((field) => runtimePaths.push(`$steps.${nodeKey}.${field}`));
+        }
+      });
+
+      if (currentNode.type !== 'step') {
+        basics.push('$steps.<step_id>.<output>');
+      }
+      return [...new Set([...basics, ...runtimePaths])];
+    }
+
+    function normalizeNodeKey(node, fallbackIndex) {
+      const rawKey = (node.title || `${node.type}_${fallbackIndex}`).trim();
+      return rawKey
+        .replaceAll(/\s+/g, '_')
+        .replaceAll(/[^a-zA-Z0-9_]/g, '_');
     }
 
     function toDslObject() {
@@ -477,6 +875,7 @@
               .map((item) => item.trim())
               .filter(Boolean),
             outputs,
+            _step_order: node.stepOrder || 0,
           });
         }
 
@@ -491,11 +890,18 @@
         }
       });
 
+      const sortedSteps = steps
+        .sort((left, right) => left._step_order - right._step_order)
+        .map((item) => {
+          const { _step_order, ...stepPayload } = item;
+          return stepPayload;
+        });
+
       return {
         context,
         variables,
         prechecks,
-        steps,
+        steps: sortedSteps,
         on_fail: onFail || {
           decision: 'exists',
           message: { zh: '默认失败', en: 'default failure' },
@@ -508,8 +914,115 @@
       dslPreview.textContent = JSON.stringify(payload, null, 2);
     }
 
+    function openDslPreview() {
+      renderDslPreview();
+      if (typeof jsonPreviewDialog.showModal === 'function') {
+        jsonPreviewDialog.showModal();
+      } else {
+        jsonPreviewDialog.setAttribute('open', 'open');
+      }
+    }
+
+    function closeDslPreview() {
+      if (typeof jsonPreviewDialog.close === 'function' && jsonPreviewDialog.hasAttribute('open')) {
+        jsonPreviewDialog.close();
+      } else {
+        jsonPreviewDialog.removeAttribute('open');
+      }
+    }
+
+    function fromDslObject(payload) {
+      const nextNodes = [];
+      let cursorX = 80;
+      let cursorY = 80;
+      const moveCursor = () => {
+        cursorY += 140;
+        if (cursorY > 980) {
+          cursorX += 300;
+          cursorY = 80;
+        }
+      };
+      const pushNode = (nodeType, title, extra) => {
+        nextNodes.push({
+          id: makeNodeId(),
+          type: nodeType,
+          title: title || `${nodeType}_${nextNodes.length + 1}`,
+          x: cursorX,
+          y: cursorY,
+          sql: extra.sql || 'SELECT 1 AS ok;',
+          decision: extra.decision || 'exists',
+          outputs: extra.outputs || '',
+          consumes: extra.consumes || '',
+          note: extra.note || '',
+          stepOrder: Object.prototype.hasOwnProperty.call(extra, 'stepOrder')
+            ? extra.stepOrder
+            : (nodeType === 'step' ? nextNodes.filter((node) => node.type === 'step').length + 1 : null),
+        });
+        moveCursor();
+      };
+
+      const contextMap = payload.context || {};
+      Object.entries(contextMap).forEach(([key, value]) => {
+        pushNode('context', key, {
+          sql: value.sql || '',
+          outputs: Array.isArray(value.outputs) ? value.outputs.join(', ') : '',
+        });
+      });
+
+      const variableMap = payload.variables || {};
+      Object.entries(variableMap).forEach(([key, value]) => {
+        const assign = value.assign_by_condition || {};
+        pushNode('variable', key, {
+          decision: assign.decision || 'exists',
+        });
+      });
+
+      (payload.prechecks || []).forEach((item) => {
+        pushNode('precheck', item.id || '', {
+          sql: item.sql || '',
+          decision: item.on_fail && item.on_fail.decision ? item.on_fail.decision : 'exists',
+          outputs: Array.isArray(item.outputs) ? item.outputs.join(', ') : '',
+        });
+      });
+
+      (payload.steps || []).forEach((item) => {
+        pushNode('step', item.id || '', {
+          sql: item.sql || '',
+          outputs: Array.isArray(item.outputs) ? item.outputs.join(', ') : '',
+          consumes: Array.isArray(item.consumes) ? item.consumes.join(', ') : '',
+          stepOrder: nextNodes.filter((node) => node.type === 'step').length + 1,
+        });
+      });
+
+      if (payload.on_fail) {
+        pushNode('on_fail', 'on_fail', {
+          decision: payload.on_fail.decision || 'exists',
+        });
+      }
+
+      return nextNodes;
+    }
+
     function saveLocal() {
       localStorage.setItem('execdsl_flow_designer_state_v1', JSON.stringify(state.nodes));
+    }
+
+    function normalizeStateNodes() {
+      let stepCursor = 1;
+      state.nodes = state.nodes.map((node) => {
+        const normalized = {
+          ...node,
+          stepOrder: node.type === 'step' ? (Number.isFinite(node.stepOrder) ? node.stepOrder : stepCursor) : null,
+        };
+        if (node.type === 'step' && !Number.isFinite(node.stepOrder)) {
+          stepCursor += 1;
+        }
+        return normalized;
+      });
+      const sortedSteps = getSortedSteps();
+      sortedSteps.forEach((item, index) => {
+        item.stepOrder = index + 1;
+      });
     }
 
     function loadLocal() {
@@ -519,6 +1032,7 @@
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           state.nodes = parsed;
+          normalizeStateNodes();
         }
       } catch (_error) {
         console.warn('加载本地缓存失败，已忽略。');
@@ -602,6 +1116,40 @@
       statusText.textContent = '已自动排布。';
     });
 
+    document.getElementById('btnImport').addEventListener('click', () => {
+      document.getElementById('fileImportJson').click();
+    });
+
+    document.getElementById('fileImportJson').addEventListener('change', async (event) => {
+      const target = event.target;
+      const selectedFile = target.files && target.files[0] ? target.files[0] : null;
+      target.value = '';
+      if (!selectedFile) return;
+      try {
+        const rawText = await selectedFile.text();
+        const payload = JSON.parse(rawText);
+        state.nodes = fromDslObject(payload);
+        state.selectedId = state.nodes.length ? state.nodes[0].id : null;
+        renderCanvas();
+        renderEditor();
+        saveLocal();
+        statusText.innerHTML = `<strong>导入成功：</strong>${escapeHtml(selectedFile.name)}`;
+      } catch (_error) {
+        statusText.classList.add('status-warn');
+        statusText.innerHTML = '<strong>导入失败：</strong>JSON 格式不正确或结构无法解析。';
+      }
+    });
+
+    document.getElementById('btnPreview').addEventListener('click', () => {
+      openDslPreview();
+      statusText.classList.remove('status-warn');
+      statusText.textContent = '已打开 JSON 预览。';
+    });
+
+    document.getElementById('btnClosePreview').addEventListener('click', () => {
+      closeDslPreview();
+    });
+
     document.getElementById('btnExport').addEventListener('click', () => {
       const json = JSON.stringify(toDslObject(), null, 2);
       const blob = new Blob([json], { type: 'application/json' });
@@ -618,6 +1166,7 @@
     renderToolbox();
     renderCanvas();
     renderEditor();
+    closeDslPreview();
   </script>
 </body>
 </html>
