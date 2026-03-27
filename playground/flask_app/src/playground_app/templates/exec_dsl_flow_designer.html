@@ -1,0 +1,1966 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ExecDSL 流程图式设计器（实验版）</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --line: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --accent-soft: #dbeafe;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(320px, 380px);
+      height: calc(100vh - 28px);
+      gap: 14px;
+      padding: 14px;
+    }
+
+    .panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .panel-head {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #fafafa;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .panel-sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.5;
+    }
+
+    .panel-body {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .tool-item {
+      border: 1px dashed #bfdbfe;
+      background: #eff6ff;
+      border-radius: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+      user-select: none;
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    }
+
+    .tool-item:active { cursor: pointer; }
+    .tool-item:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.14);
+      border-color: #93c5fd;
+    }
+
+    .tool-item strong {
+      display: block;
+      font-size: 0.92rem;
+      margin-bottom: 4px;
+    }
+
+    .tool-item span {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    .canvas-wrap {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      min-height: 0;
+    }
+
+    .canvas-toolbar {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      background: #fafafa;
+    }
+
+    button {
+      border: 1px solid transparent;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: transform .15s ease, opacity .15s ease, box-shadow .15s ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(0); opacity: .9; }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-muted { background: #f3f4f6; color: #374151; }
+    .btn-danger { background: #fee2e2; color: var(--danger); }
+    .btn-primary:hover { box-shadow: 0 8px 16px rgba(37, 99, 235, 0.24); }
+
+    #canvas {
+      position: relative;
+      overflow: auto;
+      min-height: 0;
+      background: #f8fafc;
+    }
+
+    #dropZone {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(240px, 280px));
+      gap: 12px;
+      padding: 12px;
+      align-items: start;
+      min-width: 100%;
+      width: max-content;
+    }
+
+    .flow-lane {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      min-height: 420px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .flow-lane-head {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fbff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .flow-lane-head strong {
+      font-size: 0.85rem;
+      color: #1e3a8a;
+    }
+    .flow-lane-body {
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+    .lane-empty {
+      color: var(--muted);
+      font-size: 0.8rem;
+      border: 1px dashed #d1d5db;
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+      background: #fafafa;
+    }
+
+    .flow-node {
+      position: relative;
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+      cursor: pointer;
+      transition: box-shadow .15s ease, border-color .15s ease;
+    }
+
+    .flow-node:hover { box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14); }
+
+    .flow-node.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .flow-node .node-head {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.82rem;
+      display: flex;
+      justify-content: space-between;
+      color: #1d4ed8;
+      background: #eff6ff;
+      border-radius: 12px 12px 0 0;
+      font-weight: 700;
+    }
+    .flow-node .node-head span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .flow-node .node-head span:first-child {
+      flex: 1 1 auto;
+      padding-right: 8px;
+    }
+    .flow-node .node-head span:last-child {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    .flow-node .node-body {
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+      font-size: 0.84rem;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .flow-node .node-body strong,
+    .flow-node .node-body .muted,
+    .step-sub-item {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .step-block {
+      border: 1px dashed #93c5fd;
+      border-radius: 10px;
+      background: #f8fbff;
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+    }
+    .step-sub-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .step-sub-item {
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      background: #e0ecff;
+      color: #1e40af;
+      font-size: 0.76rem;
+      padding: 2px 8px;
+    }
+
+    .muted { color: var(--muted); }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .field label {
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .field input,
+    .field textarea,
+    .field select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 0.86rem;
+      resize: vertical;
+      min-height: 38px;
+    }
+
+    .field textarea { min-height: 90px; line-height: 1.5; }
+    .field-note {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.5;
+    }
+
+    .field-autocomplete { position: relative; }
+    .autocomplete-panel {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% - 4px);
+      z-index: 12;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
+      padding: 8px;
+      gap: 6px;
+      max-height: 180px;
+      overflow: auto;
+    }
+    .autocomplete-panel.show { display: grid; }
+    .autocomplete-item {
+      border: 1px solid #dbeafe;
+      background: #f8fbff;
+      color: #1e3a8a;
+      border-radius: 8px;
+      text-align: left;
+      padding: 6px 8px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .autocomplete-item:hover,
+    .autocomplete-item.active {
+      background: #dbeafe;
+      border-color: #93c5fd;
+    }
+    .autocomplete-waiting {
+      font-size: 0.8rem;
+      color: var(--muted);
+      padding: 4px 2px;
+    }
+
+    pre {
+      margin: 0;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      max-height: 42vh;
+      overflow: auto;
+    }
+
+    .status {
+      font-size: 0.82rem;
+      color: var(--muted);
+      padding: 0 14px 12px;
+    }
+
+    .status strong { color: var(--success); }
+    .status-warn strong { color: #b45309; }
+
+    @media (max-width: 1500px) {
+      .app {
+        grid-template-columns: 260px minmax(0, 1fr) 340px;
+      }
+    }
+
+    @media (max-width: 1280px) {
+      .app {
+        grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+      }
+
+      .app > aside:last-child {
+        grid-column: 1 / -1;
+        min-height: 320px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="panel">
+      <div class="panel-head">
+        <h2 class="panel-title">节点工具箱</h2>
+        <div class="panel-sub">点击节点类型即可添加到固定执行栏，再点击节点进行编辑。</div>
+      </div>
+      <div class="panel-body" id="toolbox"></div>
+    </aside>
+
+    <main class="panel canvas-wrap">
+      <div class="canvas-toolbar">
+        <button class="btn-primary" id="btnReset">清空画布</button>
+        <button class="btn-muted" id="btnArrange">重排顺序（按执行阶段）</button>
+        <button class="btn-muted" id="btnImport">导入 JSON</button>
+        <button class="btn-muted" id="btnPreview">预览 JSON</button>
+        <button class="btn-muted" id="btnRun">运行 DSL</button>
+        <button class="btn-muted" id="btnExport">下载 JSON</button>
+        <input type="file" id="fileImportJson" accept="application/json" style="display:none;" />
+      </div>
+      <section id="canvas">
+        <div id="dropZone"></div>
+      </section>
+      <div class="status" id="statusText">提示：按执行阶段分栏展示，支持在 Precheck / Step 栏添加多个节点。</div>
+    </main>
+
+    <aside class="panel">
+      <div class="panel-head">
+        <h2 class="panel-title">节点编辑 + DSL 预览</h2>
+        <div class="panel-sub">编辑仅针对当前选中的节点；可通过上方“预览 JSON”查看完整 DSL。</div>
+      </div>
+      <div class="panel-body" id="editorPanel">
+        <div class="muted">请先在画布中选择一个节点。</div>
+      </div>
+    </aside>
+  </div>
+
+  <dialog id="jsonPreviewDialog" style="width:min(920px,92vw); border:1px solid #e5e7eb; border-radius:14px; padding:0; box-shadow:0 24px 48px rgba(15, 23, 42, .2);">
+    <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+      <strong style="font-size:0.95rem;">ExecDSL JSON 预览</strong>
+      <button class="btn-muted" id="btnClosePreview" style="padding:6px 10px;">关闭</button>
+    </div>
+    <div style="padding:12px;">
+      <pre id="dslPreview" style="max-height:60vh;"></pre>
+    </div>
+  </dialog>
+
+  <dialog id="runtimeDialog" style="width:min(960px,95vw); border:1px solid #e5e7eb; border-radius:14px; padding:0; box-shadow:0 24px 48px rgba(15, 23, 42, .2);">
+    <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+      <strong style="font-size:0.95rem;">运行 DSL（PostgreSQL 数据源）</strong>
+      <button class="btn-muted" id="btnCloseRuntime" style="padding:6px 10px;">关闭</button>
+    </div>
+    <div style="padding:12px; display:grid; gap:12px;">
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button type="button" class="btn-primary" id="btnAddDatasource">新增数据源</button>
+        <button type="button" class="btn-primary" id="btnRunNow">执行当前 DSL</button>
+        <span style="font-size:0.8rem; color:#6b7280;">仅支持 PostgreSQL（postgresql:// 或 postgresql+psycopg2://）。</span>
+      </div>
+      <div id="datasourceList" style="display:grid; gap:10px;"></div>
+      <div>
+        <label for="runtimeInputJson" style="display:block; font-size:0.82rem; color:#6b7280; margin-bottom:6px;">input_data(JSON)</label>
+        <textarea id="runtimeInputJson" style="width:100%; min-height:88px; border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; font:inherit;">{"source_object_id": "DEMO_1"}</textarea>
+      </div>
+      <div id="runtimeStatus" style="font-size:0.82rem; color:#6b7280;">尚未执行。</div>
+      <pre id="runtimeResult" style="max-height:38vh;">{}</pre>
+    </div>
+  </dialog>
+
+  <script>
+    const NODE_DEFS = [
+      { type: 'context', label: 'Context 节点', hint: '用于填充 $context', defaultTitle: '加载上下文', sqlRole: true },
+      { type: 'variable', label: 'Variable 节点', hint: '用于 variables.assign_by_condition', defaultTitle: '计算变量', decisionRole: true },
+      { type: 'precheck', label: 'Precheck 节点', hint: '前置校验，失败短路', defaultTitle: '前置检查', sqlRole: true },
+      { type: 'step', label: 'Step 节点', hint: '正式执行步骤，支持 consumes', defaultTitle: '执行步骤', sqlRole: true },
+      { type: 'on_fail', label: 'On Fail 节点', hint: '顶层失败判定与消息', defaultTitle: '最终失败判定', decisionRole: true },
+    ];
+
+    const toolbox = document.getElementById('toolbox');
+    const canvas = document.getElementById('canvas');
+    const dropZone = document.getElementById('dropZone');
+    const editorPanel = document.getElementById('editorPanel');
+    const dslPreview = document.getElementById('dslPreview');
+    const jsonPreviewDialog = document.getElementById('jsonPreviewDialog');
+    const runtimeDialog = document.getElementById('runtimeDialog');
+    const datasourceList = document.getElementById('datasourceList');
+    const runtimeInputJson = document.getElementById('runtimeInputJson');
+    const runtimeStatus = document.getElementById('runtimeStatus');
+    const runtimeResult = document.getElementById('runtimeResult');
+    const statusText = document.getElementById('statusText');
+
+    const state = {
+      nodes: [],
+      selectedId: null,
+    };
+
+    const FIXED_TYPES = new Set(['context', 'on_fail']);
+
+    function makeNode(def, x, y) {
+      return {
+        id: makeNodeId(),
+        type: def.type,
+        title: def.defaultTitle,
+        x,
+        y,
+        sql: 'SELECT 1 AS ok;',
+        sqlParamsText: '{}',
+        sqlParams: [{ key: '', value: '' }],
+        datasource: 'saas_db',
+        resultMode: def.type === 'context' ? 'record' : 'records',
+        decision: def.type === 'on_fail' ? 'exists($steps.some_step.some_output)' : 'exists',
+        variableValue: '',
+        variableDefault: '',
+        failMode: 'single',
+        messageCn: '',
+        messageEn: '',
+        divider: '',
+        outputs: 'ok',
+        consumes: '',
+        note: '',
+        stepOrder: def.type === 'step' ? getNextStepOrder() : null,
+        stepChildren: def.type === 'step' ? ['sql_node_1'] : [],
+      };
+    }
+
+    function makeNodeId() {
+      return `node_${Date.now()}_${Math.random().toString(16).slice(2, 7)}`;
+    }
+
+    function renderToolbox() {
+      toolbox.innerHTML = '';
+      NODE_DEFS.forEach((def) => {
+        const card = document.createElement('div');
+        card.className = 'tool-item';
+        card.innerHTML = `<strong>${def.label}</strong><span>${def.hint}</span>`;
+        card.addEventListener('click', () => addNodeByType(def.type));
+        toolbox.appendChild(card);
+      });
+    }
+
+    function renderCanvas() {
+      dropZone.innerHTML = '';
+      const lanes = [
+        { type: 'context', label: '1) Context（固定 1 个）' },
+        { type: 'variable', label: '2) Variables' },
+        { type: 'precheck', label: '3) Prechecks（可多个）' },
+        { type: 'step', label: '4) Steps（可多个）' },
+        { type: 'on_fail', label: '5) On Fail（固定 1 个）' },
+      ];
+
+      lanes.forEach((lane) => {
+        const laneEl = document.createElement('section');
+        laneEl.className = 'flow-lane';
+        laneEl.innerHTML = `
+          <div class="flow-lane-head">
+            <strong>${lane.label}</strong>
+            <button class="btn-muted" data-add-type="${lane.type}" type="button">+ 添加</button>
+          </div>
+          <div class="flow-lane-body" data-lane-body="${lane.type}"></div>
+        `;
+        const addBtn = laneEl.querySelector('[data-add-type]');
+        addBtn.addEventListener('click', () => addNodeByType(lane.type));
+        dropZone.appendChild(laneEl);
+      });
+
+      const laneNodeMap = {
+        context: state.nodes.filter((item) => item.type === 'context'),
+        variable: state.nodes.filter((item) => item.type === 'variable'),
+        precheck: state.nodes.filter((item) => item.type === 'precheck'),
+        step: getSortedSteps(),
+        on_fail: state.nodes.filter((item) => item.type === 'on_fail'),
+      };
+
+      Object.entries(laneNodeMap).forEach(([laneType, laneNodes]) => {
+        const laneBody = dropZone.querySelector(`[data-lane-body="${laneType}"]`);
+        if (!laneBody) return;
+        if (!laneNodes.length) {
+          laneBody.innerHTML = '<div class="lane-empty">暂无节点，点击“+ 添加”创建。</div>';
+          return;
+        }
+        laneNodes.forEach((node, index) => {
+          const nodeRank = node.type === 'step' ? `S${node.stepOrder || index + 1}` : `#${index + 1}`;
+          const el = document.createElement('article');
+          el.className = `flow-node${state.selectedId === node.id ? ' selected' : ''}`;
+          el.dataset.nodeId = node.id;
+          el.innerHTML = `
+            <div class="node-head">
+              <span>${node.type}</span>
+              <span>${nodeRank}</span>
+            </div>
+            <div class="node-body">
+              <strong>${escapeHtml(node.title || '(未命名节点)')}</strong>
+              <div class="muted">ds: ${escapeHtml(node.datasource || '-')} / mode: ${escapeHtml(node.resultMode || '-')}</div>
+              <div class="muted">outputs: ${escapeHtml(node.outputs || '无')}</div>
+              ${node.type === 'step' ? renderStepChildrenPreview(node) : ''}
+            </div>
+          `;
+          el.addEventListener('click', () => selectNode(node.id));
+          laneBody.appendChild(el);
+        });
+      });
+    }
+
+    function addNodeByType(nodeType) {
+      const def = NODE_DEFS.find((item) => item.type === nodeType);
+      if (!def) return;
+      if (FIXED_TYPES.has(nodeType) && state.nodes.some((item) => item.type === nodeType)) {
+        statusText.classList.add('status-warn');
+        statusText.innerHTML = `<strong>${escapeHtml(nodeType)}</strong> 顶层仅允许 1 个节点。`;
+        return;
+      }
+      const node = makeNode(def, 0, 0);
+      state.nodes.push(node);
+      if (node.type === 'step') {
+        applyStepVerticalLayout();
+      }
+      state.selectedId = node.id;
+      renderCanvas();
+      renderEditor();
+      saveLocal();
+      statusText.classList.remove('status-warn');
+      statusText.innerHTML = `<strong>已添加节点：</strong>${escapeHtml(def.label)}`;
+    }
+
+    function selectNode(nodeId) {
+      state.selectedId = nodeId;
+      renderCanvas();
+      renderEditor();
+    }
+
+    function renderEditor() {
+      const node = state.nodes.find((item) => item.id === state.selectedId);
+      if (!node) {
+        editorPanel.innerHTML = '<div class="muted">请先在画布中选择一个节点。</div>';
+        return;
+      }
+
+      editorPanel.innerHTML = `
+        <div class="field">
+          <label>节点标题</label>
+          <input id="f_title" value="${escapeAttr(node.title)}" />
+        </div>
+        <div class="field">
+          <label>类型（只读）</label>
+          <input value="${node.type}" disabled />
+        </div>
+        ${node.type === 'step' ? `
+        <div class="field">
+          <label>Step 顺序</label>
+          <input value="${node.stepOrder || '-'}" disabled />
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn-muted" id="btnStepUp">上移</button>
+            <button class="btn-muted" id="btnStepDown">下移</button>
+          </div>
+        </div>
+        ` : ''}
+        ${node.type === 'context' || node.type === 'precheck' || node.type === 'step' ? `
+        <div class="field">
+          <label>Datasource</label>
+          <input id="f_datasource" value="${escapeAttr(node.datasource || '')}" />
+        </div>
+        <div class="field">
+          <label>Result Mode</label>
+          <select id="f_result_mode">
+            <option value="record" ${(node.resultMode || '') === 'record' ? 'selected' : ''}>record</option>
+            <option value="records" ${(node.resultMode || '') === 'records' ? 'selected' : ''}>records</option>
+          </select>
+        </div>
+        <div class="field field-autocomplete">
+          <label>SQL</label>
+          <textarea id="f_sql" data-ref-autocomplete="true">${escapeHtml(node.sql)}</textarea>
+          <div class="field-note">输入 <code>$</code> 可联想运行时变量路径（例如 <code>$steps.xx.yy</code>）。</div>
+          <div class="autocomplete-panel" id="ac_sql"></div>
+        </div>
+        <div class="field">
+          <label>SQL 变量（key/value）</label>
+          <div id="f_sql_params_rows"></div>
+          <button class="btn-muted" id="btnAddSqlParam" type="button">+ 新增变量</button>
+        </div>
+        ` : ''}
+        <div class="field">
+          <label>Decision（用于 precheck/on_fail/variable）</label>
+          <input id="f_decision" data-ref-autocomplete="true" value="${escapeAttr(node.decision || '')}" />
+        </div>
+        ${node.type === 'variable' ? `
+        <div class="field">
+          <label>命中条件后的赋值（value）</label>
+          <input id="f_variable_value" data-ref-autocomplete="true" value="${escapeAttr(node.variableValue || '')}" placeholder="例如 1000 或 \"PASS\"" />
+        </div>
+        <div class="field">
+          <label>默认值（default）</label>
+          <input id="f_variable_default" data-ref-autocomplete="true" value="${escapeAttr(node.variableDefault || '')}" placeholder="例如 500" />
+        </div>
+        ` : ''}
+        ${node.type === 'precheck' || node.type === 'on_fail' ? `
+        <div class="field">
+          <label>Fail Mode</label>
+          <select id="f_fail_mode">
+            <option value="single" ${(node.failMode || '') === 'single' ? 'selected' : ''}>single</option>
+            <option value="sub_repeat" ${(node.failMode || '') === 'sub_repeat' ? 'selected' : ''}>sub_repeat</option>
+            <option value="full_repeat" ${(node.failMode || '') === 'full_repeat' ? 'selected' : ''}>full_repeat</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Message CN</label>
+          <textarea id="f_message_cn" data-ref-autocomplete="true">${escapeHtml(node.messageCn || '')}</textarea>
+        </div>
+        <div class="field">
+          <label>Message EN</label>
+          <textarea id="f_message_en" data-ref-autocomplete="true">${escapeHtml(node.messageEn || '')}</textarea>
+        </div>
+        <div class="field">
+          <label>Divider（sub_repeat 时使用）</label>
+          <input id="f_divider" value="${escapeAttr(node.divider || '')}" />
+        </div>
+        ` : ''}
+        <div class="field">
+          <label>Outputs（逗号分隔）</label>
+          <input id="f_outputs" value="${escapeAttr(node.outputs)}" />
+        </div>
+        <div class="field field-autocomplete">
+          <label>Consumes（逗号分隔 step name，可写 step_name:alias）</label>
+          <input id="f_consumes" value="${escapeAttr(node.consumes)}" />
+          <div class="field-note">输入时会联想已有 step 节点 name。</div>
+          <div class="autocomplete-panel" id="ac_consumes"></div>
+        </div>
+        <div class="field">
+          <label>备注</label>
+          <textarea id="f_note">${escapeHtml(node.note)}</textarea>
+        </div>
+        ${node.type === 'step' ? `
+        <div class="field">
+          <label>Step 块内节点</label>
+          <div id="f_step_children"></div>
+          <button class="btn-muted" id="btnAddStepChild" type="button">+ 添加块内节点</button>
+        </div>
+        ` : ''}
+        <div style="display:flex; gap:8px; flex-wrap: wrap;">
+          <button class="btn-primary" id="btnSaveNode">保存节点</button>
+          <button class="btn-danger" id="btnDeleteNode">删除节点</button>
+        </div>
+      `;
+
+      if (node.type === 'context' || node.type === 'precheck' || node.type === 'step') {
+        renderSqlParamRows(node);
+      }
+      if (node.type === 'step') {
+        renderStepChildrenEditor(node);
+      }
+
+      document.getElementById('btnSaveNode').addEventListener('click', () => {
+        node.title = document.getElementById('f_title').value.trim();
+        node.decision = document.getElementById('f_decision').value.trim();
+        if (node.type === 'variable') {
+          node.variableValue = document.getElementById('f_variable_value').value.trim();
+          node.variableDefault = document.getElementById('f_variable_default').value.trim();
+        }
+        if (node.type === 'context' || node.type === 'precheck' || node.type === 'step') {
+          node.sql = document.getElementById('f_sql').value;
+          node.sqlParams = readSqlParamRows();
+          node.sqlParamsText = JSON.stringify(sqlParamsRowsToObject(node.sqlParams));
+          node.datasource = document.getElementById('f_datasource').value.trim();
+          node.resultMode = document.getElementById('f_result_mode').value;
+        }
+        if (node.type === 'precheck' || node.type === 'on_fail') {
+          node.failMode = document.getElementById('f_fail_mode').value;
+          node.messageCn = document.getElementById('f_message_cn').value;
+          node.messageEn = document.getElementById('f_message_en').value;
+          node.divider = document.getElementById('f_divider').value.trim();
+        }
+        node.outputs = document.getElementById('f_outputs').value.trim();
+        node.consumes = document.getElementById('f_consumes').value.trim();
+        node.note = document.getElementById('f_note').value;
+        if (node.type === 'step') {
+          node.stepChildren = readStepChildrenRows();
+        }
+        renderCanvas();
+        saveLocal();
+        statusText.innerHTML = `<strong>已保存：</strong>${escapeHtml(node.title || node.id)}`;
+      });
+
+      document.getElementById('btnDeleteNode').addEventListener('click', () => {
+        state.nodes = state.nodes.filter((item) => item.id !== node.id);
+        applyStepVerticalLayout();
+        state.selectedId = null;
+        renderCanvas();
+        renderEditor();
+        saveLocal();
+        statusText.innerHTML = '已删除节点。';
+      });
+
+      if (node.type === 'step') {
+        document.getElementById('btnStepUp').addEventListener('click', () => {
+          moveStepOrder(node.id, -1);
+        });
+        document.getElementById('btnStepDown').addEventListener('click', () => {
+          moveStepOrder(node.id, 1);
+        });
+      }
+
+      bindAutocompletes(node);
+    }
+
+    function getNextStepOrder() {
+      const stepOrders = state.nodes
+        .filter((item) => item.type === 'step' && Number.isFinite(item.stepOrder))
+        .map((item) => item.stepOrder);
+      if (!stepOrders.length) return 1;
+      return Math.max(...stepOrders) + 1;
+    }
+
+    function renderStepChildrenPreview(node) {
+      const children = Array.isArray(node.stepChildren) ? node.stepChildren.filter(Boolean) : [];
+      if (!children.length) {
+        return '<div class="step-block"><div class="muted">块内暂无节点</div></div>';
+      }
+      return `
+        <div class="step-block">
+          <div class="muted">块内节点</div>
+          <div class="step-sub-list">
+            ${children.map((child) => `<span class="step-sub-item">${escapeHtml(child)}</span>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSqlParamRows(node) {
+      const rowsContainer = document.getElementById('f_sql_params_rows');
+      const addButton = document.getElementById('btnAddSqlParam');
+      if (!rowsContainer || !addButton) return;
+      const rows = Array.isArray(node.sqlParams) && node.sqlParams.length ? node.sqlParams : [{ key: '', value: '' }];
+      const drawRows = () => {
+        rowsContainer.innerHTML = rows.map((row, index) => `
+          <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
+            <input data-sql-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="变量名，如 user_id" />
+            <input data-sql-value="${index}" value="${escapeAttr(row.value || '')}" placeholder="值，如 $input.user_id 或 100" />
+            <button class="btn-danger" type="button" data-sql-remove="${index}">删</button>
+          </div>
+        `).join('');
+        rowsContainer.querySelectorAll('[data-sql-remove]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const removeIndex = Number(button.getAttribute('data-sql-remove'));
+            rows.splice(removeIndex, 1);
+            if (!rows.length) rows.push({ key: '', value: '' });
+            drawRows();
+          });
+        });
+      };
+      drawRows();
+      addButton.addEventListener('click', () => {
+        rows.push({ key: '', value: '' });
+        drawRows();
+      });
+    }
+
+    function readSqlParamRows() {
+      const keyInputs = Array.from(document.querySelectorAll('[data-sql-key]'));
+      const valueInputs = Array.from(document.querySelectorAll('[data-sql-value]'));
+      return keyInputs.map((input, index) => ({
+        key: input.value.trim(),
+        value: valueInputs[index] ? valueInputs[index].value.trim() : '',
+      }));
+    }
+
+    function sqlParamsRowsToObject(rows) {
+      const result = {};
+      rows.forEach((row) => {
+        if (!row.key) return;
+        result[row.key] = parseInputValue(row.value);
+      });
+      return result;
+    }
+
+    function objectToSqlParamsRows(rawObject) {
+      if (!rawObject || typeof rawObject !== 'object' || Array.isArray(rawObject)) {
+        return [{ key: '', value: '' }];
+      }
+      const entries = Object.entries(rawObject).map(([key, value]) => ({
+        key,
+        value: normalizeValueToInput(value),
+      }));
+      return entries.length ? entries : [{ key: '', value: '' }];
+    }
+
+    function renderStepChildrenEditor(node) {
+      const wrapper = document.getElementById('f_step_children');
+      const addButton = document.getElementById('btnAddStepChild');
+      if (!wrapper || !addButton) return;
+      const rows = Array.isArray(node.stepChildren) && node.stepChildren.length ? node.stepChildren : [''];
+      const drawRows = () => {
+        wrapper.innerHTML = rows.map((child, index) => `
+          <div style="display:grid; grid-template-columns:1fr auto; gap:6px; margin-bottom:6px;">
+            <input data-step-child="${index}" value="${escapeAttr(child || '')}" placeholder="例如 fetch_rate_sql" />
+            <button class="btn-danger" type="button" data-step-child-remove="${index}">删</button>
+          </div>
+        `).join('');
+        wrapper.querySelectorAll('[data-step-child-remove]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const removeIndex = Number(button.getAttribute('data-step-child-remove'));
+            rows.splice(removeIndex, 1);
+            if (!rows.length) rows.push('');
+            drawRows();
+          });
+        });
+      };
+      drawRows();
+      addButton.addEventListener('click', () => {
+        rows.push('');
+        drawRows();
+      });
+    }
+
+    function readStepChildrenRows() {
+      const rows = Array.from(document.querySelectorAll('[data-step-child]'));
+      return rows.map((item) => item.value.trim()).filter(Boolean);
+    }
+
+    function getSortedSteps() {
+      return state.nodes
+        .filter((item) => item.type === 'step')
+        .sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
+    }
+
+    function moveStepOrder(nodeId, offset) {
+      const steps = getSortedSteps();
+      const currentIndex = steps.findIndex((item) => item.id === nodeId);
+      if (currentIndex < 0) return;
+      const targetIndex = currentIndex + offset;
+      if (targetIndex < 0 || targetIndex >= steps.length) return;
+      const currentStep = steps[currentIndex];
+      const targetStep = steps[targetIndex];
+      const temp = currentStep.stepOrder;
+      currentStep.stepOrder = targetStep.stepOrder;
+      targetStep.stepOrder = temp;
+      applyStepVerticalLayout();
+      renderCanvas();
+      renderEditor();
+      saveLocal();
+      statusText.classList.remove('status-warn');
+      statusText.innerHTML = `<strong>已调整 Step 顺序：</strong>${escapeHtml(currentStep.title || currentStep.id)}`;
+    }
+
+    function applyStepVerticalLayout() {
+      const steps = getSortedSteps();
+      steps.forEach((stepNode, index) => {
+        stepNode.stepOrder = index + 1;
+      });
+    }
+
+    function bindAutocompletes(node) {
+      const sqlTextarea = document.getElementById('f_sql');
+      const sqlPanel = document.getElementById('ac_sql');
+      const consumesInput = document.getElementById('f_consumes');
+      const consumesPanel = document.getElementById('ac_consumes');
+
+      if (sqlTextarea && sqlPanel) {
+        createAutocomplete({
+          inputEl: sqlTextarea,
+          panelEl: sqlPanel,
+          getKeyword: () => {
+            const cursor = sqlTextarea.selectionStart || 0;
+            const beforeCursor = sqlTextarea.value.slice(0, cursor);
+            const matched = beforeCursor.match(/[$][a-zA-Z0-9_.]*$/);
+            return matched ? matched[0] : '';
+          },
+          buildOptions: (keyword) => {
+            const suggestionPool = getRuntimePathSuggestions(node);
+            if (!keyword) return [];
+            return suggestionPool.filter((item) => item.toLowerCase().includes(keyword.toLowerCase()));
+          },
+          applySuggestion: (value) => {
+            const cursor = sqlTextarea.selectionStart || 0;
+            const beforeCursor = sqlTextarea.value.slice(0, cursor);
+            const afterCursor = sqlTextarea.value.slice(cursor);
+            const matched = beforeCursor.match(/[$][a-zA-Z0-9_.]*$/);
+            if (!matched) return;
+            const start = cursor - matched[0].length;
+            sqlTextarea.value = `${beforeCursor.slice(0, start)}${value}${afterCursor}`;
+            const nextCursor = start + value.length;
+            sqlTextarea.selectionStart = nextCursor;
+            sqlTextarea.selectionEnd = nextCursor;
+            sqlTextarea.focus();
+          },
+        });
+      }
+
+      if (consumesInput && consumesPanel) {
+        createAutocomplete({
+          inputEl: consumesInput,
+          panelEl: consumesPanel,
+          getKeyword: () => {
+            const cursor = consumesInput.selectionStart || 0;
+            const beforeCursor = consumesInput.value.slice(0, cursor);
+            const token = beforeCursor.split(',').pop() || '';
+            return token.trim();
+          },
+          buildOptions: (keyword) => {
+            const stepIds = getStepIdSuggestions(node.id);
+            return stepIds.filter((item) => item.toLowerCase().includes(keyword.toLowerCase()));
+          },
+          applySuggestion: (value) => {
+            const cursor = consumesInput.selectionStart || 0;
+            const beforeCursor = consumesInput.value.slice(0, cursor);
+            const afterCursor = consumesInput.value.slice(cursor);
+            const parts = beforeCursor.split(',');
+            parts[parts.length - 1] = ` ${value}`;
+            const nextBefore = parts.join(',').replace(/^ /, '');
+            consumesInput.value = `${nextBefore}${afterCursor}`;
+            const nextCursor = nextBefore.length;
+            consumesInput.selectionStart = nextCursor;
+            consumesInput.selectionEnd = nextCursor;
+            consumesInput.focus();
+          },
+        });
+      }
+      bindRuntimeAutocomplete(node);
+    }
+
+    const runtimeAutocompleteEl = document.createElement('div');
+    runtimeAutocompleteEl.className = 'autocomplete-panel';
+    runtimeAutocompleteEl.style.position = 'fixed';
+    runtimeAutocompleteEl.style.left = '0';
+    runtimeAutocompleteEl.style.top = '0';
+    runtimeAutocompleteEl.style.width = 'min(420px, 80vw)';
+    runtimeAutocompleteEl.style.display = 'none';
+    runtimeAutocompleteEl.style.zIndex = '60';
+    document.body.appendChild(runtimeAutocompleteEl);
+    const runtimeAutocompleteState = {
+      target: null,
+      matches: [],
+      activeIndex: 0,
+      range: null,
+    };
+
+    function getReferenceRange(target) {
+      const start = target.selectionStart || 0;
+      const end = target.selectionEnd || 0;
+      if (start !== end) return null;
+      const value = target.value || '';
+      let tokenStart = start;
+      while (tokenStart > 0 && /[\$.\w]/.test(value[tokenStart - 1])) {
+        tokenStart -= 1;
+      }
+      let tokenEnd = start;
+      while (tokenEnd < value.length && /[\$.\w]/.test(value[tokenEnd])) {
+        tokenEnd += 1;
+      }
+      const token = value.slice(tokenStart, tokenEnd);
+      if (!token.startsWith('$')) return null;
+      return { start: tokenStart, end: tokenEnd, token };
+    }
+
+    function hideRuntimeAutocomplete() {
+      runtimeAutocompleteState.target = null;
+      runtimeAutocompleteState.matches = [];
+      runtimeAutocompleteState.activeIndex = 0;
+      runtimeAutocompleteState.range = null;
+      runtimeAutocompleteEl.style.display = 'none';
+      runtimeAutocompleteEl.innerHTML = '';
+    }
+
+    function renderRuntimeAutocomplete() {
+      runtimeAutocompleteEl.innerHTML = runtimeAutocompleteState.matches
+        .map((item, index) => `
+          <button type="button" class="autocomplete-item${index === runtimeAutocompleteState.activeIndex ? ' active' : ''}" data-ac-index="${index}">
+            ${escapeHtml(item)}
+          </button>
+        `)
+        .join('');
+      runtimeAutocompleteEl.style.display = runtimeAutocompleteState.matches.length ? 'grid' : 'none';
+      runtimeAutocompleteEl.querySelectorAll('[data-ac-index]').forEach((button) => {
+        button.addEventListener('mousedown', (event) => {
+          event.preventDefault();
+          const index = Number(button.getAttribute('data-ac-index'));
+          applyRuntimeAutocomplete(index);
+        });
+      });
+    }
+
+    function applyRuntimeAutocomplete(index) {
+      const match = runtimeAutocompleteState.matches[index];
+      const target = runtimeAutocompleteState.target;
+      const range = runtimeAutocompleteState.range;
+      if (!match || !target || !range) {
+        hideRuntimeAutocomplete();
+        return;
+      }
+      const value = target.value || '';
+      target.value = `${value.slice(0, range.start)}${match}${value.slice(range.end)}`;
+      const nextCaret = range.start + match.length;
+      target.focus();
+      target.setSelectionRange(nextCaret, nextCaret);
+      hideRuntimeAutocomplete();
+    }
+
+    function positionRuntimeAutocomplete(target) {
+      const rect = target.getBoundingClientRect();
+      runtimeAutocompleteEl.style.left = `${Math.max(12, rect.left)}px`;
+      runtimeAutocompleteEl.style.top = `${Math.min(window.innerHeight - 20, rect.bottom + 8)}px`;
+    }
+
+    function bindRuntimeAutocomplete(currentNode) {
+      const updateAutocomplete = (target) => {
+        if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
+          hideRuntimeAutocomplete();
+          return;
+        }
+        if (target.dataset.refAutocomplete !== 'true') {
+          hideRuntimeAutocomplete();
+          return;
+        }
+        const range = getReferenceRange(target);
+        if (!range) {
+          hideRuntimeAutocomplete();
+          return;
+        }
+        const token = range.token.toLowerCase();
+        const matches = getRuntimePathSuggestions(currentNode)
+          .filter((item) => item.toLowerCase().startsWith(token))
+          .slice(0, 12);
+        if (!matches.length) {
+          hideRuntimeAutocomplete();
+          return;
+        }
+        runtimeAutocompleteState.target = target;
+        runtimeAutocompleteState.matches = matches;
+        runtimeAutocompleteState.activeIndex = 0;
+        runtimeAutocompleteState.range = range;
+        positionRuntimeAutocomplete(target);
+        renderRuntimeAutocomplete();
+      };
+
+      editorPanel.querySelectorAll('[data-ref-autocomplete="true"]').forEach((inputEl) => {
+        inputEl.addEventListener('focus', () => updateAutocomplete(inputEl));
+        inputEl.addEventListener('input', () => updateAutocomplete(inputEl));
+        inputEl.addEventListener('click', () => updateAutocomplete(inputEl));
+        inputEl.addEventListener('blur', () => {
+          window.setTimeout(hideRuntimeAutocomplete, 120);
+        });
+        inputEl.addEventListener('keydown', (event) => {
+          if (!runtimeAutocompleteState.matches.length || runtimeAutocompleteState.target !== inputEl) return;
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            runtimeAutocompleteState.activeIndex = (runtimeAutocompleteState.activeIndex + 1) % runtimeAutocompleteState.matches.length;
+            renderRuntimeAutocomplete();
+            return;
+          }
+          if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            runtimeAutocompleteState.activeIndex = (runtimeAutocompleteState.activeIndex - 1 + runtimeAutocompleteState.matches.length) % runtimeAutocompleteState.matches.length;
+            renderRuntimeAutocomplete();
+            return;
+          }
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            applyRuntimeAutocomplete(runtimeAutocompleteState.activeIndex);
+            return;
+          }
+          if (event.key === 'Escape') {
+            hideRuntimeAutocomplete();
+          }
+        });
+      });
+    }
+
+    function createAutocomplete(config) {
+      const {
+        inputEl,
+        panelEl,
+        getKeyword,
+        buildOptions,
+        applySuggestion,
+      } = config;
+      let activeIndex = -1;
+      let currentOptions = [];
+      let waitTimer = 0;
+
+      const hidePanel = () => {
+        panelEl.classList.remove('show');
+        panelEl.innerHTML = '';
+        activeIndex = -1;
+        currentOptions = [];
+      };
+
+      const renderWaiting = () => {
+        panelEl.classList.add('show');
+        panelEl.innerHTML = '<div class="autocomplete-waiting">联想中...</div>';
+      };
+
+      const renderOptions = (options) => {
+        currentOptions = options;
+        activeIndex = options.length ? 0 : -1;
+        if (!options.length) {
+          panelEl.classList.remove('show');
+          panelEl.innerHTML = '';
+          return;
+        }
+        panelEl.classList.add('show');
+        panelEl.innerHTML = options
+          .map((item, index) => `
+            <button type="button" class="autocomplete-item${index === activeIndex ? ' active' : ''}" data-value="${escapeAttr(item)}">${escapeHtml(item)}</button>
+          `)
+          .join('');
+        panelEl.querySelectorAll('.autocomplete-item').forEach((button, index) => {
+          button.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+            applySuggestion(options[index]);
+            hidePanel();
+          });
+        });
+      };
+
+      const updateActiveVisual = () => {
+        panelEl.querySelectorAll('.autocomplete-item').forEach((button, index) => {
+          button.classList.toggle('active', index === activeIndex);
+        });
+      };
+
+      const requestSuggestions = () => {
+        const keyword = getKeyword();
+        if (!keyword) {
+          hidePanel();
+          return;
+        }
+        renderWaiting();
+        clearTimeout(waitTimer);
+        waitTimer = window.setTimeout(() => {
+          const options = buildOptions(keyword).slice(0, 10);
+          renderOptions(options);
+        }, 220);
+      };
+
+      inputEl.addEventListener('focus', requestSuggestions);
+      inputEl.addEventListener('input', requestSuggestions);
+      inputEl.addEventListener('blur', () => {
+        window.setTimeout(hidePanel, 120);
+      });
+      inputEl.addEventListener('keydown', (event) => {
+        if (!panelEl.classList.contains('show') || !currentOptions.length) return;
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          activeIndex = (activeIndex + 1) % currentOptions.length;
+          updateActiveVisual();
+          return;
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          activeIndex = (activeIndex - 1 + currentOptions.length) % currentOptions.length;
+          updateActiveVisual();
+          return;
+        }
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          if (activeIndex >= 0 && activeIndex < currentOptions.length) {
+            applySuggestion(currentOptions[activeIndex]);
+            hidePanel();
+          }
+          return;
+        }
+        if (event.key === 'Escape') {
+          hidePanel();
+        }
+      });
+    }
+
+    function getStepIdSuggestions(currentNodeId) {
+      return state.nodes
+        .filter((item) => item.type === 'step' && item.id !== currentNodeId)
+        .map((item, index) => normalizeNodeKey(item, index + 1));
+    }
+
+    function getRuntimePathSuggestions(currentNode) {
+      const basics = [
+        '$input',
+        '$context',
+        '$variables',
+        '$steps',
+      ];
+      const runtimePaths = [];
+
+      state.nodes.forEach((item, index) => {
+        const nodeKey = normalizeNodeKey(item, index + 1);
+        const outputFields = (item.outputs || '')
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean);
+        if (item.type === 'context') {
+          runtimePaths.push(`$context.${nodeKey}`);
+          outputFields.forEach((field) => runtimePaths.push(`$context.${nodeKey}.${field}`));
+        }
+        if (item.type === 'variable') {
+          runtimePaths.push(`$variables.${nodeKey}`);
+        }
+        if (item.type === 'step') {
+          runtimePaths.push(`$steps.${nodeKey}`);
+          outputFields.forEach((field) => runtimePaths.push(`$steps.${nodeKey}.${field}`));
+        }
+      });
+
+      if (currentNode.type !== 'step') {
+        basics.push('$steps.<step_id>.<output>');
+      }
+      return [...new Set([...basics, ...runtimePaths])];
+    }
+
+    function normalizeNodeKey(node, fallbackIndex) {
+      const rawKey = (node.title || `${node.type}_${fallbackIndex}`).trim();
+      return rawKey
+        .replaceAll(/\s+/g, '_')
+        .replaceAll(/[^a-zA-Z0-9_]/g, '_');
+    }
+
+    function toDslObject() {
+      let context = null;
+      const variables = {};
+      const prechecks = [];
+      const steps = [];
+      let onFail = null;
+
+      state.nodes.forEach((node, index) => {
+        const key = normalizeNodeKey(node, index + 1);
+        const outputs = node.outputs
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const sqlParams = Array.isArray(node.sqlParams)
+          ? sqlParamsRowsToObject(node.sqlParams)
+          : parseJsonObjectOrEmpty(node.sqlParamsText || '{}');
+
+        if (node.type === 'context') {
+          context = {
+            type: 'sql',
+            datasource: node.datasource || 'saas_db',
+            result_mode: node.resultMode || 'record',
+            sql_template: node.sql,
+            sql_params: sqlParams,
+            outputs,
+          };
+        }
+
+        if (node.type === 'variable') {
+          const variableValue = parseInputValue(node.variableValue);
+          const variableDefault = parseInputValue(node.variableDefault);
+          variables[key] = {
+            when: node.decision ? [{ condition: node.decision, value: variableValue }] : [],
+            default: variableDefault,
+          };
+        }
+
+        if (node.type === 'precheck') {
+          prechecks.push({
+            name: key,
+            type: 'sql',
+            datasource: node.datasource || 'saas_db',
+            result_mode: node.resultMode || 'records',
+            sql_template: node.sql,
+            sql_params: sqlParams,
+            on_fail: {
+              decision: node.decision || 'exists',
+              mode: node.failMode || 'single',
+              message_cn: node.messageCn || `${key} 未通过`,
+              message_en: node.messageEn || `${key} failed`,
+              ...(node.divider ? { divider: node.divider } : {}),
+            },
+            outputs,
+          });
+        }
+
+        if (node.type === 'step') {
+          steps.push({
+            name: key,
+            type: 'sql',
+            datasource: node.datasource || 'saas_db',
+            result_mode: node.resultMode || 'records',
+            sql_template: node.sql,
+            sql_params: sqlParams,
+            consumes: parseConsumesText(node.consumes),
+            outputs,
+            nodes: Array.isArray(node.stepChildren) ? node.stepChildren.filter(Boolean) : [],
+            _step_order: node.stepOrder || 0,
+          });
+        }
+
+        if (node.type === 'on_fail') {
+          onFail = {
+            decision: node.decision || 'exists($steps.some_step.some_output)',
+            mode: node.failMode || 'single',
+            message_cn: node.messageCn || `${key} 命中失败条件`,
+            message_en: node.messageEn || `${key} failure condition matched`,
+            ...(node.divider ? { divider: node.divider } : {}),
+          };
+        }
+      });
+
+      const sortedSteps = steps
+        .sort((left, right) => left._step_order - right._step_order)
+        .map((item) => {
+          const { _step_order, ...stepPayload } = item;
+          return stepPayload;
+        });
+
+      const result = {
+        variables,
+        prechecks,
+        steps: sortedSteps,
+        on_fail: onFail || {
+          decision: 'exists($steps.some_step.some_output)',
+          mode: 'single',
+          message_cn: '默认失败',
+          message_en: 'default failure',
+        },
+      };
+      if (context) {
+        result.context = context;
+      }
+      return result;
+    }
+
+    function renderDslPreview() {
+      const payload = toDslObject();
+      dslPreview.textContent = JSON.stringify(payload, null, 2);
+    }
+
+    function openDslPreview() {
+      renderDslPreview();
+      if (typeof jsonPreviewDialog.showModal === 'function') {
+        jsonPreviewDialog.showModal();
+      } else {
+        jsonPreviewDialog.setAttribute('open', 'open');
+      }
+    }
+
+    function closeDslPreview() {
+      if (typeof jsonPreviewDialog.close === 'function' && jsonPreviewDialog.hasAttribute('open')) {
+        jsonPreviewDialog.close();
+      } else {
+        jsonPreviewDialog.removeAttribute('open');
+      }
+    }
+
+    function fromDslObject(payload) {
+      const normalizedPayload = normalizeDslPayload(payload);
+      validateDslPayload(normalizedPayload);
+      const nextNodes = [];
+      const pushNode = (nodeType, title, extra) => {
+        nextNodes.push({
+          id: makeNodeId(),
+          type: nodeType,
+          title: title || `${nodeType}_${nextNodes.length + 1}`,
+          x: 0,
+          y: 0,
+          sql: extra.sql || 'SELECT 1 AS ok;',
+          sqlParamsText: extra.sqlParamsText || '{}',
+          sqlParams: Array.isArray(extra.sqlParams) ? extra.sqlParams : objectToSqlParamsRows(parseJsonObjectOrEmpty(extra.sqlParamsText || '{}')),
+          datasource: extra.datasource || 'saas_db',
+          resultMode: extra.resultMode || (nodeType === 'context' ? 'record' : 'records'),
+          decision: extra.decision || 'exists',
+          variableValue: extra.variableValue || '',
+          variableDefault: extra.variableDefault || '',
+          failMode: extra.failMode || 'single',
+          messageCn: extra.messageCn || '',
+          messageEn: extra.messageEn || '',
+          divider: extra.divider || '',
+          outputs: extra.outputs || '',
+          consumes: extra.consumes || '',
+          note: extra.note || '',
+          stepChildren: Array.isArray(extra.stepChildren) ? extra.stepChildren : (nodeType === 'step' ? ['sql_node_1'] : []),
+          stepOrder: Object.prototype.hasOwnProperty.call(extra, 'stepOrder')
+            ? extra.stepOrder
+            : (nodeType === 'step' ? nextNodes.filter((node) => node.type === 'step').length + 1 : null),
+        });
+      };
+
+      const contextValue = normalizedPayload.context || null;
+      if (contextValue) {
+        pushNode('context', 'context', {
+          sql: contextValue.sql_template || '',
+          outputs: Array.isArray(contextValue.outputs) ? contextValue.outputs.join(', ') : '',
+          datasource: contextValue.datasource || 'saas_db',
+          resultMode: contextValue.result_mode || 'record',
+          sqlParamsText: JSON.stringify(contextValue.sql_params || {}, null, 2),
+          sqlParams: objectToSqlParamsRows(contextValue.sql_params || {}),
+        });
+      }
+
+      const variableMap = normalizedPayload.variables || {};
+      Object.entries(variableMap).forEach(([key, value]) => {
+        const whenItems = Array.isArray(value.when) ? value.when : [];
+        const decisionText = whenItems.length ? String(whenItems[0].condition || '') : '';
+        const variableValue = whenItems.length ? normalizeValueToInput(whenItems[0].value) : '';
+        const variableDefault = normalizeValueToInput(value.default);
+        pushNode('variable', key, {
+          decision: decisionText,
+          variableValue,
+          variableDefault,
+        });
+      });
+
+      (normalizedPayload.prechecks || []).forEach((item) => {
+        pushNode('precheck', item.name || '', {
+          sql: item.sql_template || '',
+          decision: item.on_fail && item.on_fail.decision ? item.on_fail.decision : 'exists',
+          failMode: item.on_fail && item.on_fail.mode ? item.on_fail.mode : 'single',
+          messageCn: item.on_fail && item.on_fail.message_cn ? item.on_fail.message_cn : '',
+          messageEn: item.on_fail && item.on_fail.message_en ? item.on_fail.message_en : '',
+          divider: item.on_fail && item.on_fail.divider ? item.on_fail.divider : '',
+          datasource: item.datasource || 'saas_db',
+          resultMode: item.result_mode || 'records',
+          sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
+          sqlParams: objectToSqlParamsRows(item.sql_params || {}),
+          outputs: Array.isArray(item.outputs) ? item.outputs.join(', ') : '',
+        });
+      });
+
+      (normalizedPayload.steps || []).forEach((item) => {
+        pushNode('step', item.name || '', {
+          sql: item.sql_template || '',
+          outputs: Array.isArray(item.outputs) ? item.outputs.join(', ') : '',
+          consumes: formatConsumesText(item.consumes),
+          datasource: item.datasource || 'saas_db',
+          resultMode: item.result_mode || 'records',
+          sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
+          sqlParams: objectToSqlParamsRows(item.sql_params || {}),
+          stepChildren: Array.isArray(item.nodes) ? item.nodes.map((child) => String(child || '').trim()).filter(Boolean) : ['sql_node_1'],
+          stepOrder: nextNodes.filter((node) => node.type === 'step').length + 1,
+        });
+      });
+
+      if (normalizedPayload.on_fail) {
+        pushNode('on_fail', 'on_fail', {
+          decision: normalizedPayload.on_fail.decision || 'exists($steps.some_step.some_output)',
+          failMode: normalizedPayload.on_fail.mode || 'single',
+          messageCn: normalizedPayload.on_fail.message_cn || '',
+          messageEn: normalizedPayload.on_fail.message_en || '',
+          divider: normalizedPayload.on_fail.divider || '',
+        });
+      }
+
+      return applyHorizontalLayout(nextNodes);
+    }
+
+    function createDatasourceCard(data) {
+      const card = document.createElement('div');
+      card.style.border = '1px solid #e5e7eb';
+      card.style.borderRadius = '10px';
+      card.style.padding = '10px';
+      card.style.display = 'grid';
+      card.style.gap = '8px';
+      card.innerHTML = `
+        <div style="display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap:8px; align-items:center;">
+          <input data-role="name" placeholder="datasource 名称，例如 saas_db" style="width:100%; border:1px solid #e5e7eb; border-radius:8px; padding:7px 9px;" />
+          <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" style="width:100%; border:1px solid #e5e7eb; border-radius:8px; padding:7px 9px;" />
+          <button class="btn-danger" type="button" data-role="remove">删除</button>
+        </div>
+      `;
+      card.querySelector('[data-role="name"]').value = data && data.name ? data.name : '';
+      card.querySelector('[data-role="db_url"]').value = data && data.db_url ? data.db_url : '';
+      card.querySelector('[data-role="remove"]').addEventListener('click', () => card.remove());
+      return card;
+    }
+
+    function readDatasourceConfig() {
+      return Array.from(datasourceList.children).map((card) => ({
+        name: card.querySelector('[data-role="name"]').value.trim(),
+        db_url: card.querySelector('[data-role="db_url"]').value.trim(),
+      }));
+    }
+
+    function openRuntimeDialog() {
+      if (!datasourceList.children.length) {
+        datasourceList.appendChild(createDatasourceCard({ name: 'saas_db', db_url: 'postgresql+psycopg2://user:password@127.0.0.1:5432/saas_db' }));
+        datasourceList.appendChild(createDatasourceCard({ name: 'data_db', db_url: 'postgresql+psycopg2://user:password@127.0.0.1:5432/data_db' }));
+      }
+      runtimeStatus.textContent = '请确认数据源连接串后执行。';
+      runtimeResult.textContent = '{}';
+      if (typeof runtimeDialog.showModal === 'function') {
+        runtimeDialog.showModal();
+      } else {
+        runtimeDialog.setAttribute('open', 'open');
+      }
+    }
+
+    function closeRuntimeDialog() {
+      if (typeof runtimeDialog.close === 'function' && runtimeDialog.hasAttribute('open')) {
+        runtimeDialog.close();
+      } else {
+        runtimeDialog.removeAttribute('open');
+      }
+    }
+
+    async function runDslNow() {
+      const dslPayload = toDslObject();
+      let inputPayload = {};
+      try {
+        inputPayload = runtimeInputJson.value.trim() ? JSON.parse(runtimeInputJson.value) : {};
+      } catch (error) {
+        runtimeStatus.textContent = `input_data 解析失败: ${error.message || '不是合法 JSON'}`;
+        return;
+      }
+      const datasourcePayload = readDatasourceConfig();
+      if (!datasourcePayload.length) {
+        runtimeStatus.textContent = '请至少配置一个 PostgreSQL 数据源。';
+        return;
+      }
+      runtimeStatus.textContent = '执行中...';
+      runtimeResult.textContent = '{}';
+      try {
+        const response = await fetch('/api/run-dsl', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dsl_text: JSON.stringify(dslPayload, null, 2),
+            input_data: inputPayload,
+            datasources: datasourcePayload,
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          runtimeStatus.textContent = `执行失败: ${payload.error || '未知错误'}`;
+          runtimeResult.textContent = JSON.stringify(payload, null, 2);
+          return;
+        }
+        runtimeStatus.textContent = '执行成功。';
+        runtimeResult.textContent = JSON.stringify(payload.result, null, 2);
+      } catch (error) {
+        runtimeStatus.textContent = `请求失败: ${error.message || '网络错误'}`;
+      }
+    }
+
+    function saveLocal() {
+      localStorage.setItem('execdsl_flow_designer_state_v1', JSON.stringify(state.nodes));
+    }
+
+    function normalizeStateNodes() {
+      let stepCursor = 1;
+      state.nodes = state.nodes.map((node) => {
+        const safeStepOrder = node.type === 'step'
+          ? (Number.isFinite(node.stepOrder) ? node.stepOrder : stepCursor)
+          : null;
+        const normalized = {
+          ...node,
+          sqlParamsText: typeof node.sqlParamsText === 'string' ? node.sqlParamsText : '{}',
+          sqlParams: Array.isArray(node.sqlParams) ? node.sqlParams : objectToSqlParamsRows(parseJsonObjectOrEmpty(typeof node.sqlParamsText === 'string' ? node.sqlParamsText : '{}')),
+          datasource: typeof node.datasource === 'string' ? node.datasource : 'saas_db',
+          resultMode: typeof node.resultMode === 'string' ? node.resultMode : (node.type === 'context' ? 'record' : 'records'),
+          failMode: typeof node.failMode === 'string' ? node.failMode : 'single',
+          messageCn: typeof node.messageCn === 'string' ? node.messageCn : '',
+          messageEn: typeof node.messageEn === 'string' ? node.messageEn : '',
+          divider: typeof node.divider === 'string' ? node.divider : '',
+          variableValue: typeof node.variableValue === 'string' ? node.variableValue : '',
+          variableDefault: typeof node.variableDefault === 'string' ? node.variableDefault : '',
+          stepChildren: Array.isArray(node.stepChildren) ? node.stepChildren : (node.type === 'step' ? ['sql_node_1'] : []),
+          stepOrder: safeStepOrder,
+        };
+        if (node.type === 'step') {
+          stepCursor += 1;
+        }
+        return normalized;
+      });
+      const sortedSteps = getSortedSteps();
+      sortedSteps.forEach((item, index) => {
+        item.stepOrder = index + 1;
+      });
+      applyStepVerticalLayout();
+    }
+
+    function parseJsonObjectOrEmpty(rawText) {
+      if (!rawText || !rawText.trim()) return {};
+      const parsed = JSON.parse(rawText);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('sql_params 必须是 JSON 对象。');
+      }
+      return parsed;
+    }
+
+    function parseConsumesText(rawText) {
+      if (!rawText || !rawText.trim()) return [];
+      return rawText
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((token) => {
+          const [rawName, rawAlias] = token.split(':').map((part) => part.trim());
+          const fromPath = rawName.startsWith('$') ? rawName : `$steps.${rawName}`;
+          const fallbackAlias = rawName.replace(/^\$steps\./, '').replace(/[^a-zA-Z0-9_]/g, '_');
+          return {
+            from: fromPath,
+            alias: rawAlias || fallbackAlias || 'cte_alias',
+          };
+        });
+    }
+
+    function formatConsumesText(consumes) {
+      if (!Array.isArray(consumes)) return '';
+      return consumes
+        .map((consume) => {
+          const fromPath = consume && typeof consume.from === 'string' ? consume.from : '';
+          const alias = consume && typeof consume.alias === 'string' ? consume.alias : '';
+          const compactFrom = fromPath.replace(/^\$steps\./, '');
+          if (!compactFrom) return '';
+          if (alias && alias !== compactFrom) {
+            return `${compactFrom}:${alias}`;
+          }
+          return compactFrom;
+        })
+        .filter(Boolean)
+        .join(', ');
+    }
+
+    function normalizeDslPayload(payload) {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('DSL 顶层必须是对象。');
+      }
+      const normalized = { ...payload };
+      const context = normalized.context;
+      if (context && typeof context === 'object' && !Array.isArray(context) && !Object.prototype.hasOwnProperty.call(context, 'sql_template')) {
+        const contextValues = Object.values(context);
+        if (contextValues.length && contextValues[0] && typeof contextValues[0] === 'object') {
+          normalized.context = contextValues[0];
+        }
+      }
+      if (normalized.context && typeof normalized.context === 'object' && !Array.isArray(normalized.context)) {
+        normalized.context = {
+          ...normalized.context,
+          sql_template: normalized.context.sql_template || normalized.context.sql || '',
+          sql_params: normalized.context.sql_params || {},
+        };
+      }
+      normalized.variables = normalizeVariables(normalized.variables || {});
+      normalized.prechecks = normalizePrechecks(normalized.prechecks || []);
+      normalized.steps = normalizeSteps(normalized.steps || []);
+      normalized.on_fail = normalizeFailPolicy(normalized.on_fail || {});
+      return normalized;
+    }
+
+    function normalizeVariables(rawVariables) {
+      const normalized = {};
+      Object.entries(rawVariables || {}).forEach(([name, value]) => {
+        if (!value || typeof value !== 'object') return;
+        if (Array.isArray(value.when) || Object.prototype.hasOwnProperty.call(value, 'default')) {
+          normalized[name] = value;
+          return;
+        }
+        const assign = value.assign_by_condition || {};
+        normalized[name] = {
+          when: assign.decision ? [{ condition: assign.decision, value: assign.value }] : [],
+          default: Object.prototype.hasOwnProperty.call(assign, 'value') ? assign.value : null,
+        };
+      });
+      return normalized;
+    }
+
+    function normalizeFailPolicy(rawPolicy) {
+      const safePolicy = rawPolicy && typeof rawPolicy === 'object' && !Array.isArray(rawPolicy) ? rawPolicy : {};
+      const message = safePolicy.message && typeof safePolicy.message === 'object' ? safePolicy.message : {};
+      const normalized = {
+        ...safePolicy,
+        mode: safePolicy.mode || 'single',
+        message_cn: safePolicy.message_cn || message.zh || '',
+        message_en: safePolicy.message_en || message.en || '',
+      };
+      delete normalized.message;
+      return normalized;
+    }
+
+    function normalizePrechecks(rawPrechecks) {
+      if (!Array.isArray(rawPrechecks)) return [];
+      return rawPrechecks.map((item) => ({
+        ...item,
+        name: item.name || item.id || '',
+        sql_template: item.sql_template || item.sql || '',
+        sql_params: item.sql_params || {},
+        on_fail: normalizeFailPolicy(item.on_fail || {}),
+      }));
+    }
+
+    function normalizeSteps(rawSteps) {
+      if (!Array.isArray(rawSteps)) return [];
+      return rawSteps.map((item) => ({
+        ...item,
+        name: item.name || item.id || '',
+        sql_template: item.sql_template || item.sql || '',
+        sql_params: item.sql_params || {},
+        consumes: normalizeConsumes(item.consumes),
+      }));
+    }
+
+    function normalizeConsumes(rawConsumes) {
+      if (!Array.isArray(rawConsumes)) return [];
+      return rawConsumes.map((consume) => {
+        if (consume && typeof consume === 'object' && !Array.isArray(consume)) {
+          return {
+            from: consume.from || '',
+            alias: consume.alias || 'cte_alias',
+          };
+        }
+        if (typeof consume === 'string') {
+          const compact = consume.replace(/^\$steps\./, '');
+          return {
+            from: consume.startsWith('$') ? consume : `$steps.${compact}`,
+            alias: compact.replace(/[^a-zA-Z0-9_]/g, '_') || 'cte_alias',
+          };
+        }
+        return { from: '', alias: 'cte_alias' };
+      });
+    }
+
+    function normalizeValueToInput(value) {
+      if (value === null || typeof value === 'undefined') {
+        return '';
+      }
+      if (typeof value === 'string') {
+        return value;
+      }
+      return JSON.stringify(value);
+    }
+
+    function parseInputValue(rawText) {
+      if (!rawText || !rawText.trim()) {
+        return '';
+      }
+      const trimmed = rawText.trim();
+      try {
+        return JSON.parse(trimmed);
+      } catch (_error) {
+        return trimmed;
+      }
+    }
+
+    function applyHorizontalLayout(nodes) {
+      const placedNodes = [...nodes];
+      const stepNodes = placedNodes
+        .filter((item) => item.type === 'step')
+        .sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
+      stepNodes.forEach((stepNode, index) => {
+        stepNode.stepOrder = index + 1;
+      });
+      return placedNodes;
+    }
+
+    function validateDslPayload(payload) {
+      const allowedTopFields = ['context', 'variables', 'prechecks', 'steps', 'on_fail'];
+      const unknownTopFields = Object.keys(payload).filter((key) => !allowedTopFields.includes(key));
+      if (unknownTopFields.length) {
+        throw new Error(`存在未知顶层字段: ${unknownTopFields.join(', ')}`);
+      }
+      if (!Array.isArray(payload.steps)) {
+        throw new Error('steps 必须是数组。');
+      }
+      if (!payload.on_fail || typeof payload.on_fail !== 'object' || Array.isArray(payload.on_fail)) {
+        throw new Error('on_fail 必须是对象。');
+      }
+      if (payload.context && (!payload.context.type || !payload.context.datasource || !payload.context.result_mode || !payload.context.sql_template)) {
+        throw new Error('context 缺少必要字段（type/datasource/result_mode/sql_template）。');
+      }
+    }
+
+    function loadLocal() {
+      const raw = localStorage.getItem('execdsl_flow_designer_state_v1');
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          state.nodes = parsed;
+          normalizeStateNodes();
+        }
+      } catch (_error) {
+        console.warn('加载本地缓存失败，已忽略。');
+      }
+    }
+
+    function escapeHtml(value) {
+      return (value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replaceAll('\n', '&#10;');
+    }
+
+    document.getElementById('btnReset').addEventListener('click', () => {
+      state.nodes = [];
+      state.selectedId = null;
+      renderCanvas();
+      renderEditor();
+      saveLocal();
+      statusText.textContent = '画布已清空。';
+    });
+
+    document.getElementById('btnArrange').addEventListener('click', () => {
+      state.nodes = applyHorizontalLayout(state.nodes);
+      renderCanvas();
+      saveLocal();
+      statusText.textContent = '已按执行阶段重排节点顺序。';
+    });
+
+    document.getElementById('btnImport').addEventListener('click', () => {
+      document.getElementById('fileImportJson').click();
+    });
+
+    document.getElementById('fileImportJson').addEventListener('change', async (event) => {
+      const target = event.target;
+      const selectedFile = target.files && target.files[0] ? target.files[0] : null;
+      target.value = '';
+      if (!selectedFile) return;
+      try {
+        const rawText = await selectedFile.text();
+        const payload = JSON.parse(rawText);
+        state.nodes = fromDslObject(payload);
+        state.selectedId = state.nodes.length ? state.nodes[0].id : null;
+        renderCanvas();
+        renderEditor();
+        saveLocal();
+        statusText.innerHTML = `<strong>导入成功：</strong>${escapeHtml(selectedFile.name)}`;
+      } catch (error) {
+        statusText.classList.add('status-warn');
+        statusText.innerHTML = `<strong>导入失败：</strong>${escapeHtml(error.message || 'JSON 格式不正确或结构无法解析。')}`;
+      }
+    });
+
+    document.getElementById('btnPreview').addEventListener('click', () => {
+      try {
+        validateDslPayload(toDslObject());
+        openDslPreview();
+        statusText.classList.remove('status-warn');
+        statusText.textContent = '已打开 JSON 预览（通过基础结构校验）。';
+      } catch (error) {
+        statusText.classList.add('status-warn');
+        statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(error.message || '结构不合法')}`;
+      }
+    });
+
+    document.getElementById('btnClosePreview').addEventListener('click', () => {
+      closeDslPreview();
+    });
+
+    document.getElementById('btnExport').addEventListener('click', () => {
+      const json = JSON.stringify(toDslObject(), null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'execdsl_flow_design.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      statusText.textContent = '已下载 DSL JSON。';
+    });
+
+    document.getElementById('btnRun').addEventListener('click', () => {
+      try {
+        validateDslPayload(toDslObject());
+        openRuntimeDialog();
+      } catch (error) {
+        statusText.classList.add('status-warn');
+        statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(error.message || '结构不合法')}`;
+      }
+    });
+
+    document.getElementById('btnCloseRuntime').addEventListener('click', () => {
+      closeRuntimeDialog();
+    });
+
+    document.getElementById('btnAddDatasource').addEventListener('click', () => {
+      datasourceList.appendChild(createDatasourceCard({ name: '', db_url: '' }));
+    });
+
+    document.getElementById('btnRunNow').addEventListener('click', () => {
+      runDslNow();
+    });
+
+    loadLocal();
+    renderToolbox();
+    renderCanvas();
+    renderEditor();
+    closeDslPreview();
+  </script>
+</body>
+</html>
