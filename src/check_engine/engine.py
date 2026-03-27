@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
 from functools import partial
 from typing import Any, Optional, Protocol, TypeVar
 
-from .compiler import CompileCacheLike, HashedLruCompileCache, NoopCompileCache
+from .compiler import CompiledDsl, CompileCacheLike, DslCompiler, HashedLruCompileCache, NoopCompileCache
 from .dsl import DslDocument, EXISTS_DECISION, FailPolicy, PrecheckNode, SqlNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
 from .exceptions import DSLExecutionError
@@ -16,7 +15,7 @@ from .parser import JsonDslParser
 from .renderer import MessageRenderer
 from .runtime import ExecutionResult, ExecutionState, NodeExecutionResult
 from .sql import DatasourceRegistry, SqlExecutor
-from .validator import DslCompileValidator, DslValidator
+from .validator import DslValidator
 
 RuntimeValueT = TypeVar("RuntimeValueT")
 
@@ -48,20 +47,6 @@ class MessageRendererLike(Protocol):
         ...
 
 
-@dataclass(frozen=True)
-class CompiledDsl:
-    """已完成解析、校验与表达式预编译的 DSL。
-
-    该对象及其 `document` 默认可被 compile cache 共享复用；
-    调用方不得在其上写入任何运行时状态。
-    """
-
-    document: DslDocument
-    variable_conditions: dict[str, tuple[CompiledExpression, ...]]
-    precheck_decisions: dict[str, Optional[CompiledExpression]]
-    on_fail_decision: CompiledExpression
-
-
 class DslEngine:
     """统一入口：编译、校验并执行 DSL。"""
 
@@ -69,7 +54,7 @@ class DslEngine:
         self,
         parser: Optional[JsonDslParser] = None,
         validator: Optional[DslValidator] = None,
-        compile_validator: Optional[DslCompileValidator] = None,
+        compiler: Optional[DslCompiler] = None,
         expression_evaluator: Optional[ExpressionEvaluator] = None,
         sql_executor: Optional[SqlExecutorLike] = None,
         message_renderer: Optional[MessageRendererLike] = None,
@@ -83,8 +68,7 @@ class DslEngine:
         self.validator = validator or DslValidator()
         self.expression_evaluator = expression_evaluator or ExpressionEvaluator()
         self.logger = logger or logging.getLogger(__name__)
-        self.compile_validator = compile_validator or DslCompileValidator(
-            dsl_validator=self.validator,
+        self.compiler = compiler or DslCompiler(
             expression_evaluator=self.expression_evaluator,
             logger=self.logger,
         )
@@ -100,7 +84,7 @@ class DslEngine:
         if not isinstance(dsl_text, str):
             raise TypeError("dsl_text must be a string.")
         document = self.parser.parse(dsl_text)
-        self.compile_validator.validate(document)
+        self.validator.validate(document)
 
     def execute(
         self,
@@ -326,15 +310,7 @@ class DslEngine:
         return self._compile_document(document)
 
     def _compile_document(self, document: DslDocument) -> CompiledDsl:
-        variable_conditions, precheck_decisions, on_fail_decision = self.compile_validator.compile(
-            document=document,
-        )
-        return CompiledDsl(
-            document=document,
-            variable_conditions=variable_conditions,
-            precheck_decisions=precheck_decisions,
-            on_fail_decision=on_fail_decision,
-        )
+        return self.compiler.compile(document=document)
 
     def _evaluate_variable(
         self,
