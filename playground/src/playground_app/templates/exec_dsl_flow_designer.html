@@ -404,6 +404,10 @@
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
+      padding: 4px;
+      border: 1px solid #d9e0e8;
+      border-radius: 12px;
+      background: #f7f9fc;
     }
     .tab-btn {
       border-radius: 10px;
@@ -423,6 +427,9 @@
       display: none;
       gap: 10px;
       align-content: start;
+      min-height: 0;
+      overflow: auto;
+      padding-right: 2px;
     }
     .tab-panel.active {
       display: grid;
@@ -454,6 +461,12 @@
     .inline-status {
       font-size: 0.8rem;
       color: var(--muted);
+    }
+    .kv-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+      gap: 6px;
+      margin-bottom: 6px;
     }
     .btn-loading {
       position: relative;
@@ -517,10 +530,11 @@
         </section>
         <section class="tab-panel active" data-tab-panel="input">
           <div class="field">
-            <label for="runtimeInputJson">input_data(JSON)</label>
-            <textarea id="runtimeInputJson" style="width:100%; min-height:160px; border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; font:inherit;">{"source_object_id": "DEMO_1"}</textarea>
+            <label>input_data（key/value）</label>
+            <div id="runtimeInputRows"></div>
+            <button type="button" class="btn-muted icon-btn" id="btnAddInputParam" title="新增输入参数" aria-label="新增输入参数"><span class="material-symbols-rounded">add</span></button>
           </div>
-          <div class="inline-status">运行 DSL 时将使用这里的 input_data。</div>
+          <div class="inline-status">运行 DSL 时将使用这里的 input_data；默认包含 <code>source_object_id</code>。</div>
         </section>
       </div>
     </aside>
@@ -587,7 +601,8 @@
     const dslPreview = document.getElementById('dslPreview');
     const jsonPreviewDialog = document.getElementById('jsonPreviewDialog');
     const runtimeDialog = document.getElementById('runtimeDialog');
-    const runtimeInputJson = document.getElementById('runtimeInputJson');
+    const runtimeInputRowsEl = document.getElementById('runtimeInputRows');
+    const addInputParamButton = document.getElementById('btnAddInputParam');
     const runtimeStatus = document.getElementById('runtimeStatus');
     const runtimeResult = document.getElementById('runtimeResult');
     const statusText = document.getElementById('statusText');
@@ -600,6 +615,7 @@
       selectedId: null,
     };
     let datasourceNameOptions = [];
+    let runtimeInputRows = [{ key: 'source_object_id', value: 'DEMO_1' }];
 
     const FIXED_TYPES = new Set(['context', 'on_fail']);
     const SQL_NODE_TYPES = new Set(['context', 'precheck', 'step']);
@@ -1189,6 +1205,93 @@
       return entries.length ? entries : [{ key: '', value: '' }];
     }
 
+    function normalizeInputRows(rows) {
+      if (!Array.isArray(rows)) {
+        return [{ key: 'source_object_id', value: 'DEMO_1' }];
+      }
+      const normalized = rows
+        .map((row) => ({
+          key: row && typeof row.key === 'string' ? row.key.trim() : '',
+          value: row && typeof row.value === 'string' ? row.value : normalizeValueToInput(row && Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : ''),
+        }))
+        .filter((row) => row.key || row.value);
+      const hasSourceObjectId = normalized.some((row) => row.key === 'source_object_id');
+      if (!hasSourceObjectId) {
+        normalized.unshift({ key: 'source_object_id', value: 'DEMO_1' });
+      }
+      return normalized.length ? normalized : [{ key: 'source_object_id', value: 'DEMO_1' }];
+    }
+
+    function renderRuntimeInputRows() {
+      if (!runtimeInputRowsEl) return;
+      runtimeInputRows = normalizeInputRows(runtimeInputRows);
+      runtimeInputRowsEl.innerHTML = runtimeInputRows.map((row, index) => `
+        <div class="kv-row">
+          <input data-input-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="参数名，如 source_object_id" />
+          <input data-input-value="${index}" value="${escapeAttr(row.value || '')}" placeholder="参数值，如 DEMO_1、100 或 true" />
+          <button class="btn-danger icon-btn" type="button" data-input-remove="${index}" title="删除输入参数" aria-label="删除输入参数"><span class="material-symbols-rounded">delete</span></button>
+        </div>
+      `).join('');
+      runtimeInputRowsEl.querySelectorAll('[data-input-remove]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const removeIndex = Number(button.getAttribute('data-input-remove'));
+          runtimeInputRows.splice(removeIndex, 1);
+          runtimeInputRows = normalizeInputRows(runtimeInputRows);
+          renderRuntimeInputRows();
+          saveInputConfigLocal();
+          renderEditor();
+        });
+      });
+      runtimeInputRowsEl.querySelectorAll('[data-input-key], [data-input-value]').forEach((inputEl) => {
+        inputEl.addEventListener('change', () => {
+          runtimeInputRows = readRuntimeInputRows();
+          saveInputConfigLocal();
+          renderEditor();
+        });
+      });
+    }
+
+    function readRuntimeInputRows() {
+      if (!runtimeInputRowsEl) return normalizeInputRows(runtimeInputRows);
+      const keyInputs = Array.from(runtimeInputRowsEl.querySelectorAll('[data-input-key]'));
+      const valueInputs = Array.from(runtimeInputRowsEl.querySelectorAll('[data-input-value]'));
+      const rows = keyInputs.map((keyInput, index) => ({
+        key: keyInput.value.trim(),
+        value: valueInputs[index] ? valueInputs[index].value : '',
+      }));
+      return normalizeInputRows(rows);
+    }
+
+    function readRuntimeInputPayload() {
+      const rows = readRuntimeInputRows();
+      const payload = {};
+      rows.forEach((row) => {
+        if (!row.key) return;
+        payload[row.key] = parseInputValue(row.value);
+      });
+      return payload;
+    }
+
+    function saveInputConfigLocal() {
+      const currentRows = readRuntimeInputRows();
+      runtimeInputRows = currentRows;
+      localStorage.setItem('execdsl_flow_designer_input_v1', JSON.stringify(currentRows));
+    }
+
+    function loadInputConfigLocal() {
+      const raw = localStorage.getItem('execdsl_flow_designer_input_v1');
+      if (!raw) {
+        runtimeInputRows = normalizeInputRows(runtimeInputRows);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        runtimeInputRows = normalizeInputRows(parsed);
+      } catch (_error) {
+        runtimeInputRows = normalizeInputRows(runtimeInputRows);
+      }
+    }
+
     function getSortedSteps() {
       return state.nodes
         .filter((item) => item.type === 'step')
@@ -1519,11 +1622,17 @@
     function getRuntimePathSuggestions(currentNode) {
       const basics = [
         '$input',
-        '$input.source_object_id',
         '$context',
         '$variables',
         '$steps',
       ];
+      const inputPayload = readRuntimeInputPayload();
+      Object.keys(inputPayload).forEach((key) => {
+        basics.push(`$input.${key}`);
+      });
+      if (!Object.prototype.hasOwnProperty.call(inputPayload, 'source_object_id')) {
+        basics.push('$input.source_object_id');
+      }
       const runtimePaths = [];
 
       state.nodes.forEach((item, index) => {
@@ -1647,20 +1756,19 @@
           return stepPayload;
         });
 
-      const result = {
-        variables,
-        prechecks,
-        steps: sortedSteps,
-        on_fail: onFail || {
-          decision: 'exists($steps.some_step.some_output)',
-          mode: 'single',
-          message_cn: '默认失败',
-          message_en: 'default failure',
-        },
-      };
+      const result = {};
       if (context) {
         result.context = context;
       }
+      result.variables = variables;
+      result.prechecks = prechecks;
+      result.steps = sortedSteps;
+      result.on_fail = onFail || {
+        decision: 'exists($steps.some_step.some_output)',
+        mode: 'single',
+        message_cn: '默认失败',
+        message_en: 'default failure',
+      };
       return result;
     }
 
@@ -1958,14 +2066,7 @@
         statusText.textContent = '运行失败：请先在“数据源配置”页签中维护至少一个数据源。';
         return;
       }
-      let inputPayload = {};
-      try {
-        inputPayload = runtimeInputJson.value.trim() ? JSON.parse(runtimeInputJson.value) : {};
-      } catch (error) {
-        statusText.classList.add('status-warn');
-        statusText.textContent = `input_data 解析失败: ${error.message || '不是合法 JSON'}`;
-        return;
-      }
+      const inputPayload = readRuntimeInputPayload();
       setRunButtonLoading(true);
       openRuntimeDialog();
       runtimeStatus.textContent = '执行中...';
@@ -2399,7 +2500,18 @@
       saveDatasourceConfigToServer();
     });
 
+    if (addInputParamButton) {
+      addInputParamButton.addEventListener('click', () => {
+        runtimeInputRows = readRuntimeInputRows();
+        runtimeInputRows.push({ key: '', value: '' });
+        renderRuntimeInputRows();
+        saveInputConfigLocal();
+      });
+    }
+
     loadLocal();
+    loadInputConfigLocal();
+    renderRuntimeInputRows();
     renderCanvas();
     renderEditor();
     loadDatasourceConfigFromServer();
