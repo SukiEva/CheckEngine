@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -28,9 +27,6 @@ class DatasourceConfig:
     db_url: str
 
 
-_SQLITE_FILE = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "data", "playground.db")
-)
 PGDialect_psycopg2._get_server_version_info = lambda *args: (9, 2)
 
 
@@ -55,10 +51,6 @@ def create_app() -> FastAPI:
     app = FastAPI(title="ExecDSL Playground")
     dsl_engine = DslEngine()
     templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
-
-    @app.on_event("startup")
-    def init_datasource_storage() -> None:
-        _init_datasource_table()
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request) -> Any:
@@ -98,34 +90,6 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         finally:
             _dispose_engines(created_engines)
-
-    @app.get("/api/datasource-configs")
-    def list_datasource_configs() -> dict[str, list[dict[str, str]]]:
-        return {"datasources": _load_datasource_configs()}
-
-    @app.put("/api/datasource-configs")
-    async def save_datasource_configs(request: Request) -> dict[str, Any]:
-        try:
-            payload = await request.json()
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail="请求体必须是 JSON 对象。") from exc
-        if not isinstance(payload, dict):
-            raise HTTPException(status_code=400, detail="请求体必须是 JSON 对象。")
-        raw_datasources = payload.get("datasources")
-        if not isinstance(raw_datasources, list):
-            raise HTTPException(status_code=400, detail="datasources 必须是数组。")
-        try:
-            datasource_configs = _parse_datasource_configs(raw_datasources)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        _save_datasource_configs(datasource_configs)
-        return {
-            "saved": len(datasource_configs),
-            "datasources": [
-                {"name": item.name, "db_url": item.db_url}
-                for item in datasource_configs
-            ],
-        }
 
     return app
 
@@ -188,56 +152,6 @@ def _dispose_engines(engines: Optional[list[Engine]]) -> None:
         return
     for sql_engine in engines:
         sql_engine.dispose()
-
-
-def _init_datasource_table() -> None:
-    os.makedirs(os.path.dirname(_SQLITE_FILE), exist_ok=True)
-    with sqlite3.connect(_SQLITE_FILE) as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS datasource_configs (
-              name TEXT PRIMARY KEY,
-              db_url TEXT NOT NULL,
-              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        connection.commit()
-
-
-def _load_datasource_configs() -> list[dict[str, str]]:
-    _init_datasource_table()
-    with sqlite3.connect(_SQLITE_FILE) as connection:
-        cursor = connection.execute(
-            "SELECT name, db_url FROM datasource_configs ORDER BY name ASC"
-        )
-        rows = cursor.fetchall()
-    if not rows:
-        return [
-            {
-                "name": "saas_db",
-                "db_url": "postgresql+psycopg2://user:password@127.0.0.1:5432/saas_db",
-            },
-            {
-                "name": "data_db",
-                "db_url": "postgresql+psycopg2://user:password@127.0.0.1:5432/data_db",
-            },
-        ]
-    return [{"name": row[0], "db_url": row[1]} for row in rows]
-
-
-def _save_datasource_configs(configs: list[DatasourceConfig]) -> None:
-    _init_datasource_table()
-    with sqlite3.connect(_SQLITE_FILE) as connection:
-        connection.execute("DELETE FROM datasource_configs")
-        connection.executemany(
-            """
-            INSERT INTO datasource_configs (name, db_url, updated_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-            """,
-            [(item.name, item.db_url) for item in configs],
-        )
-        connection.commit()
 
 
 def main() -> None:
