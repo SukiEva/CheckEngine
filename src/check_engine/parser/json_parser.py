@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Mapping, Optional, Sequence
 
 from ..dsl import ContextNode, DslDocument, TopLevelField
@@ -18,7 +19,8 @@ class JsonDslParser:
         TopLevelField.ON_FAIL,
     )
 
-    def __init__(self) -> None:
+    def __init__(self, logger: Optional[logging.Logger] = None) -> None:
+        self.logger = logger or logging.getLogger(__name__)
         self.node_parser = JsonNodeParser(
             helpers=ParserHelpers(
                 expect_dict=self._expect_dict,
@@ -36,6 +38,7 @@ class JsonDslParser:
         try:
             data = json.loads(dsl_text)
         except json.JSONDecodeError as exc:
+            self.logger.exception("Failed to decode DSL JSON text.")
             raise DSLParseError(f"Failed to parse DSL JSON: {exc.msg}") from exc
 
         if not isinstance(data, dict):

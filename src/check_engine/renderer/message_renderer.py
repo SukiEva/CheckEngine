@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Sequence
 from typing import Any, Mapping, Optional
@@ -19,7 +20,8 @@ class MessageRenderer(MessageRenderHelpers):
     FORMAT_PLACEHOLDER_PATTERN = re.compile(r"f\{([^{}]+)\}")
     IMPLICIT_PATH_PATTERN = re.compile(r"^(input|context|variables|steps)\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$")
 
-    def __init__(self) -> None:
+    def __init__(self, logger: Optional[logging.Logger] = None) -> None:
+        self.logger = logger or logging.getLogger(__name__)
         self.mode_renderers: dict[str, ModeRenderer] = {
             FAIL_MODE_SINGLE: SingleModeRenderer(),
             FAIL_MODE_FULL_REPEAT: FullRepeatModeRenderer(),
@@ -167,8 +169,10 @@ class MessageRenderer(MessageRenderHelpers):
             value = self._resolve_token_value(token, state, row, overrides, local_data)
             return format(value, format_spec)
         except DSLExecutionError:
+            self.logger.exception("Failed to resolve placeholder value: %s", match.group(0))
             raise
         except Exception as exc:  # noqa: BLE001
+            self.logger.exception("Failed to format placeholder: %s", match.group(0))
             raise DSLExecutionError(
                 f"Failed to format placeholder: {match.group(0)}",
             ) from exc

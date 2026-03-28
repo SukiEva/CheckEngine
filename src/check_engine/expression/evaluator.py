@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import logging
 import re
 from collections.abc import Collection
 from dataclasses import dataclass
@@ -69,6 +70,9 @@ class ExpressionEvaluator:
     REF_PATTERN = re.compile(r"\$(?:\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
     NULL_PATTERN = re.compile(r"\bnull\b")
 
+    def __init__(self, logger: Optional[logging.Logger] = None) -> None:
+        self.logger = logger or logging.getLogger(__name__)
+
     def compile(self, expression: str) -> CompiledExpression:
         if expression == "exists":
             raise DSLExecutionError("Keyword 'exists' is only valid for precheck failure decision and must not be evaluated directly.")
@@ -91,6 +95,7 @@ class ExpressionEvaluator:
         try:
             tree = ast.parse(python_expr, mode="eval")
         except SyntaxError as exc:
+            self.logger.exception("Failed to parse expression syntax: %s", expression)
             raise DSLExecutionError(f"Expression syntax error: {expression}") from exc
 
         _SafeExpressionValidator().visit(tree)
@@ -119,6 +124,7 @@ class ExpressionEvaluator:
         try:
             return eval(expression.code, {"__builtins__": {}}, {**ref_env, "exists": self._exists})
         except Exception as exc:  # noqa: BLE001
+            self.logger.exception("Failed to evaluate expression: %s", expression.source)
             raise DSLExecutionError(
                 f"Expression evaluation failed: {expression.source}",
             ) from exc

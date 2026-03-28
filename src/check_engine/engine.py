@@ -31,16 +31,16 @@ class DslEngine:
         if compile_cache_size < 0:
             raise ValueError("compile_cache_size must be greater than or equal to 0.")
 
-        self.parser: JsonDslParser = JsonDslParser()
-        self.validator: DslValidator = DslValidator()
         self.logger = logger or logging.getLogger(__name__)
-        self.expression_evaluator: ExpressionEvaluator = ExpressionEvaluator()
+        self.parser: JsonDslParser = JsonDslParser(logger=self.logger)
+        self.validator: DslValidator = DslValidator()
+        self.expression_evaluator: ExpressionEvaluator = ExpressionEvaluator(logger=self.logger)
         self.compiler: DslCompiler = DslCompiler(
             expression_evaluator=self.expression_evaluator,
             logger=self.logger,
         )
-        self.sql_executor: SqlExecutor = SqlExecutor()
-        self.message_renderer: MessageRenderer = MessageRenderer()
+        self.sql_executor: SqlExecutor = SqlExecutor(logger=self.logger)
+        self.message_renderer: MessageRenderer = MessageRenderer(logger=self.logger)
         self.compile_cache_size = compile_cache_size
         self._compile_cache_backend: CompileCacheLike[CompiledDsl] = (
             HashedLruCompileCache(compile_cache_size) if compile_cache_size > 0 else NoopCompileCache()
