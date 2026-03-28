@@ -10,7 +10,6 @@ from typing import Any, Optional
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
 from sqlalchemy.dialects.postgresql.psycopg2 import PGDialect_psycopg2
@@ -53,7 +52,10 @@ def create_app() -> FastAPI:
     dsl_engine = DslEngine()
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    if os.path.isdir(static_dir):
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request) -> Any:
