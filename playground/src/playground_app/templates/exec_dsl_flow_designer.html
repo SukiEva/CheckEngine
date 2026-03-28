@@ -991,9 +991,9 @@
           <div class="autocomplete-panel" id="ac_sql"></div>
         </div>
         <div class="field">
-          <label>SQL 变量（key/value）</label>
+          <label>SQL 变量（自动提取 :param）</label>
           <div id="f_sql_params_rows"></div>
-          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddSqlParam" type="button" title="新增 SQL 变量" aria-label="新增 SQL 变量"><span class="ep-icon">add</span></button>
+          <div class="field-note">变量名从 SQL 中自动提取并只读，仅需输入变量值。</div>
         </div>
         ` : ''}
         ${node.type === 'precheck' ? `
@@ -1085,11 +1085,18 @@
           node.variableDefault = document.getElementById('f_variable_default').value.trim();
         }
         if (isSqlNode(node.type)) {
+          const previousSqlParamKeys = Array.isArray(node.sqlParams)
+            ? node.sqlParams.map((row) => row.key)
+            : [];
           node.sql = document.getElementById('f_sql').value;
           node.sqlParams = readSqlParamRows();
           node.sqlParamsText = JSON.stringify(sqlParamsRowsToObject(node.sqlParams));
           node.datasource = document.getElementById('f_datasource').value.trim();
           node.resultMode = document.getElementById('f_result_mode').value;
+          const latestSqlParamKeys = node.sqlParams.map((row) => row.key);
+          if (JSON.stringify(previousSqlParamKeys) !== JSON.stringify(latestSqlParamKeys)) {
+            renderSqlParamRows(node, persistEditorNode);
+          }
         }
         if (node.type === 'precheck' || node.type === 'on_fail') {
           const previousFailMode = node.failMode;
@@ -1198,28 +1205,23 @@
 
     function renderSqlParamRows(node, onChanged) {
       const rowsContainer = document.getElementById('f_sql_params_rows');
-      const addButton = document.getElementById('btnAddSqlParam');
-      if (!rowsContainer || !addButton) return;
-      const rows = Array.isArray(node.sqlParams) && node.sqlParams.length ? node.sqlParams : [{ key: '', value: '' }];
+      if (!rowsContainer) return;
+      const rows = getSqlParamsFromTemplate(node.sql || '', node.sqlParams);
       const drawRows = () => {
+        if (!rows.length) {
+          rowsContainer.innerHTML = '<div class="muted">未检测到 SQL 命名变量（例如 <code>:user_id</code>）。</div>';
+          bindRuntimeAutocomplete(node);
+          return;
+        }
         rowsContainer.innerHTML = rows.map((row, index) => `
           <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px; align-items:center;">
-            <input data-sql-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="变量名，如 user_id" />
+            <input data-sql-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="变量名，如 user_id" disabled class="editor-readonly-input" />
             <input data-sql-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.value || '')}" placeholder="值，如 $input.user_id 或 100" />
-            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-sql-remove="${index}" title="删除 SQL 变量" aria-label="删除 SQL 变量"><span class="ep-icon">delete</span></button>
+            <span class="muted" style="font-size:0.78rem; text-align:center;">自动</span>
           </div>
         `).join('');
         renderMaterialIcons(rowsContainer);
-        rowsContainer.querySelectorAll('[data-sql-remove]').forEach((button) => {
-          button.addEventListener('click', () => {
-            const removeIndex = Number(button.getAttribute('data-sql-remove'));
-            rows.splice(removeIndex, 1);
-            if (!rows.length) rows.push({ key: '', value: '' });
-            drawRows();
-            if (typeof onChanged === 'function') onChanged();
-          });
-        });
-        rowsContainer.querySelectorAll('[data-sql-key], [data-sql-value]').forEach((input) => {
+        rowsContainer.querySelectorAll('[data-sql-value]').forEach((input) => {
           input.addEventListener('change', () => {
             if (typeof onChanged === 'function') onChanged();
           });
@@ -1227,11 +1229,46 @@
         bindRuntimeAutocomplete(node);
       };
       drawRows();
-      addButton.addEventListener('click', () => {
-        rows.push({ key: '', value: '' });
-        drawRows();
-        if (typeof onChanged === 'function') onChanged();
-      });
+    }
+
+    function extractSqlParamKeys(sqlTemplate) {
+      if (typeof sqlTemplate !== 'string' || !sqlTemplate.trim()) return [];
+      const withoutSingleQuote = sqlTemplate.replace(/'(?:''|[^'])*'/g, ' ');
+      const withoutDoubleQuote = withoutSingleQuote.replace(/"(?:[^"\\]|\\.)*"/g, ' ');
+      const withoutLineComment = withoutDoubleQuote.replace(/--.*$/gm, ' ');
+      const cleanedSql = withoutLineComment.replace(/\/\*[\s\S]*?\*\//g, ' ');
+      const regex = /(^|[^:]):([a-zA-Z_][a-zA-Z0-9_]*)/g;
+      const keys = [];
+      const seen = new Set();
+      let matched = regex.exec(cleanedSql);
+      while (matched) {
+        const key = matched[2];
+        if (!seen.has(key)) {
+          seen.add(key);
+          keys.push(key);
+        }
+        matched = regex.exec(cleanedSql);
+      }
+      return keys;
+    }
+
+    function getSqlParamsFromTemplate(sqlTemplate, existingRows) {
+      const extractedKeys = extractSqlParamKeys(sqlTemplate);
+      const existingValueMap = {};
+      if (Array.isArray(existingRows)) {
+        existingRows.forEach((row) => {
+          if (!row || typeof row.key !== 'string') return;
+          existingValueMap[row.key] = typeof row.value === 'string'
+            ? row.value
+            : normalizeValueToInput(row.value);
+        });
+      }
+      return extractedKeys.map((key) => ({
+        key,
+        value: Object.prototype.hasOwnProperty.call(existingValueMap, key)
+          ? existingValueMap[key]
+          : '',
+      }));
     }
 
     function renderVariableWhenRows(node, onChanged) {
@@ -1325,10 +1362,13 @@
     }
 
     function readSqlParamRows() {
-      const keyInputs = Array.from(document.querySelectorAll('[data-sql-key]'));
+      const sqlInput = document.getElementById('f_sql');
+      const sqlTemplate = sqlInput ? sqlInput.value : '';
+      const extractedKeys = extractSqlParamKeys(sqlTemplate);
+      if (!extractedKeys.length) return [];
       const valueInputs = Array.from(document.querySelectorAll('[data-sql-value]'));
-      return keyInputs.map((input, index) => ({
-        key: input.value.trim(),
+      return extractedKeys.map((key, index) => ({
+        key,
         value: valueInputs[index] ? valueInputs[index].value.trim() : '',
       }));
     }
@@ -1376,13 +1416,13 @@
 
     function objectToSqlParamsRows(rawObject) {
       if (!rawObject || typeof rawObject !== 'object' || Array.isArray(rawObject)) {
-        return [{ key: '', value: '' }];
+        return [];
       }
       const entries = Object.entries(rawObject).map(([key, value]) => ({
         key,
         value: normalizeValueToInput(value),
       }));
-      return entries.length ? entries : [{ key: '', value: '' }];
+      return entries;
     }
 
     function normalizeInputRows(rows) {
