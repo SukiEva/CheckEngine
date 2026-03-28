@@ -44,22 +44,28 @@ class CteBuilder:
             raise DSLExecutionError(f"CTE {alias} cannot infer column names; please configure outputs explicitly.")
 
         params: dict[str, Any] = {}
-        column_sql = ", ".join(fields)
+        quoted_alias = self._quote_identifier(alias)
+        quoted_fields = [self._quote_identifier(field) for field in fields]
+        column_sql = ", ".join(quoted_fields)
 
         if not rows:
-            null_columns = ", ".join(["NULL AS {0}".format(field) for field in fields])
-            return "{0}({1}) AS (SELECT {2} WHERE 1=0)".format(alias, column_sql, null_columns), params
+            null_columns = ", ".join(["NULL AS {0}".format(field) for field in quoted_fields])
+            return "{0}({1}) AS (SELECT {2} WHERE 1=0)".format(quoted_alias, column_sql, null_columns), params
 
         value_rows = []
         for row_index, row in enumerate(rows):
             placeholders = []
             for field in fields:
-                param_name = "__cte_{0}_{1}_{2}".format(alias, row_index, field)
+                param_name = "__cte_{0}_{1}_{2}".format(
+                    self._sanitize_param_key(alias),
+                    row_index,
+                    self._sanitize_param_key(field),
+                )
                 params[param_name] = self._preserve_parameter_value(row.get(field))
                 placeholders.append(":{0}".format(param_name))
             value_rows.append("(" + ", ".join(placeholders) + ")")
 
-        sql = "{0}({1}) AS (VALUES {2})".format(alias, column_sql, ", ".join(value_rows))
+        sql = "{0}({1}) AS (VALUES {2})".format(quoted_alias, column_sql, ", ".join(value_rows))
         return sql, params
 
     @staticmethod
@@ -67,3 +73,13 @@ class CteBuilder:
         """保留参数原始对象，避免提前字符串化导致精度或格式变化。"""
 
         return value
+
+    @staticmethod
+    def _quote_identifier(identifier: str) -> str:
+        escaped = identifier.replace('"', '""')
+        return '"{0}"'.format(escaped)
+
+    @staticmethod
+    def _sanitize_param_key(identifier: str) -> str:
+        sanitized = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in identifier)
+        return sanitized or "field"

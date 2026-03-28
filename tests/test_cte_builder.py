@@ -28,6 +28,25 @@ class CteBuilderTestCase(unittest.TestCase):
         self.assertIsInstance(params["__cte_am_0_amount"], Decimal)
         self.assertIsInstance(params["__cte_am_1_amount"], Decimal)
 
+    def test_build_single_cte_quotes_identifiers_and_sanitizes_param_names(self) -> None:
+        builder = CteBuilder()
+        rows = [{"Total Amount": Decimal("100.01"), "select": "usd"}]
+
+        sql, params = builder._build_single_cte("source-data", rows, ["Total Amount", "select"])
+
+        self.assertIn('"source-data"("Total Amount", "select") AS (VALUES', sql)
+        self.assertIn(":__cte_source_data_0_Total_Amount", sql)
+        self.assertIn(":__cte_source_data_0_select", sql)
+        self.assertEqual(params["__cte_source_data_0_Total_Amount"], Decimal("100.01"))
+        self.assertEqual(params["__cte_source_data_0_select"], "usd")
+
+    def test_build_single_cte_for_empty_rows_still_quotes_identifiers(self) -> None:
+        builder = CteBuilder()
+        sql, params = builder._build_single_cte("am", [], ["Total Amount"])
+
+        self.assertEqual(sql, '"am"("Total Amount") AS (SELECT NULL AS "Total Amount" WHERE 1=0)')
+        self.assertEqual(params, {})
+
 
 if __name__ == "__main__":
     unittest.main()

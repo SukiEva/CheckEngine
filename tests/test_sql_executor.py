@@ -120,6 +120,29 @@ class SqlExecutorTestCase(unittest.TestCase):
 
         self.assertTrue(merged.startswith("/* leading comment */\nWITH RECURSIVE ctx(amount) AS (VALUES (:v)), base AS"))
 
+    def test_render_executed_sql_replaces_named_parameters(self) -> None:
+        executor = SqlExecutor()
+
+        rendered = executor._render_executed_sql(
+            "SELECT * FROM t WHERE id = :id AND code = :code AND flag = :flag AND deleted_at IS :deleted_at",
+            {"id": 100, "code": "A'1", "flag": True, "deleted_at": None},
+        )
+
+        self.assertEqual(
+            rendered,
+            "SELECT * FROM t WHERE id = 100 AND code = 'A''1' AND flag = TRUE AND deleted_at IS NULL",
+        )
+
+    def test_render_executed_sql_skips_postgres_cast_placeholder_pattern(self) -> None:
+        executor = SqlExecutor()
+
+        rendered = executor._render_executed_sql(
+            "SELECT :amount::numeric AS amount, :name AS name",
+            {"amount": "12.30", "name": "usd"},
+        )
+
+        self.assertEqual(rendered, "SELECT '12.30'::numeric AS amount, 'usd' AS name")
+
 
 class SqlExecutorRuntimeErrorTestCase(unittest.TestCase):
     def setUp(self) -> None:

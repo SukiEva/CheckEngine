@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any, Optional, Protocol, cast
@@ -49,6 +50,7 @@ class SqlExecutor:
         cte_sql, cte_params = self.cte_builder.build(consumes, state)
         final_sql = self._merge_with_clause(cte_sql, node.sql_template)
         final_params = {**cte_params, **resolved_params}
+        rendered_sql = self._render_executed_sql(final_sql, final_params)
 
         try:
             datasource = datasource_registry.get(node.datasource)
@@ -66,7 +68,7 @@ class SqlExecutor:
             raw_rows=rows,
             exported_data=exported_data,
             exported_fields=exported_fields,
-            executed_sql=final_sql,
+            executed_sql=rendered_sql,
         )
 
     @staticmethod
@@ -90,6 +92,38 @@ class SqlExecutor:
             remainder = stripped[4:].lstrip()
             return f"{leading_prefix}WITH {cte_definitions}, {remainder}"
         return cte_sql + " " + sql_template
+
+    def _render_executed_sql(self, sql: str, params: Mapping[str, Any]) -> str:
+        if not params:
+            return sql
+
+        pattern = re.compile(r":([A-Za-z_][A-Za-z0-9_]*)")
+        rendered_parts: list[str] = []
+        cursor = 0
+        for match in pattern.finditer(sql):
+            start, end = match.span()
+            if start > 0 and sql[start - 1] == ":":
+                continue
+            rendered_parts.append(sql[cursor:start])
+            key = match.group(1)
+            if key not in params:
+                rendered_parts.append(match.group(0))
+            else:
+                rendered_parts.append(self._format_sql_literal(params[key]))
+            cursor = end
+        rendered_parts.append(sql[cursor:])
+        return "".join(rendered_parts)
+
+    @staticmethod
+    def _format_sql_literal(value: Any) -> str:
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, (int, float)):
+            return str(value)
+        escaped = str(value).replace("'", "''")
+        return "'{0}'".format(escaped)
 
     @staticmethod
     def _split_leading_comments(sql: str) -> tuple[str, str]:
