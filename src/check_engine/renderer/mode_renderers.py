@@ -21,6 +21,7 @@ class MessageRenderHelpers(ABC):
         template: str,
         state: ExecutionState,
         row: Optional[Mapping[str, Any]],
+        local_data: Optional[Any] = None,
     ) -> str:
         """渲染单条模板。"""
 
@@ -30,6 +31,7 @@ class MessageRenderHelpers(ABC):
         segment: str,
         state: ExecutionState,
         rows: Sequence[Mapping[str, Any]],
+        local_data: Optional[Any] = None,
     ) -> list[str]:
         """渲染 sub_repeat 重复片段。"""
 
@@ -54,6 +56,7 @@ class ModeRenderer(ABC):
         locale: str,
         state: ExecutionState,
         rows: Sequence[Mapping[str, Any]],
+        local_data: Optional[Any],
         helpers: MessageRenderHelpers,
     ) -> str:
         """按模式渲染消息。"""
@@ -71,6 +74,7 @@ class SingleModeRenderer(ModeRenderer):
         locale: str,
         state: ExecutionState,
         rows: Sequence[Mapping[str, Any]],
+        local_data: Optional[Any],
         helpers: MessageRenderHelpers,
     ) -> str:
         del policy, locale
@@ -79,7 +83,7 @@ class SingleModeRenderer(ModeRenderer):
                 "single mode requires at most one result row.",
             )
         row = rows[0] if rows else None
-        return helpers.render_once(template, state, row)
+        return helpers.render_once(template, state, row, local_data=local_data)
 
 
 @dataclass(frozen=True)
@@ -94,13 +98,14 @@ class FullRepeatModeRenderer(ModeRenderer):
         locale: str,
         state: ExecutionState,
         rows: Sequence[Mapping[str, Any]],
+        local_data: Optional[Any],
         helpers: MessageRenderHelpers,
     ) -> str:
         if not rows:
-            return helpers.render_once(template, state, None)
+            return helpers.render_once(template, state, None, local_data=local_data)
 
         divider = helpers.resolve_full_repeat_divider(policy, locale)
-        return divider.join(helpers.render_once(template, state, row) for row in rows)
+        return divider.join(helpers.render_once(template, state, row, local_data=local_data) for row in rows)
 
 
 @dataclass(frozen=True)
@@ -115,6 +120,7 @@ class SubRepeatModeRenderer(ModeRenderer):
         locale: str,
         state: ExecutionState,
         rows: Sequence[Mapping[str, Any]],
+        local_data: Optional[Any],
         helpers: MessageRenderHelpers,
     ) -> str:
         left = template.index("[")
@@ -123,10 +129,10 @@ class SubRepeatModeRenderer(ModeRenderer):
         segment = template[left + 1 : right]
         suffix = template[right + 1 :]
         divider = helpers.resolve_sub_repeat_divider(policy, locale)
-        repeated = divider.join(helpers.render_sub_repeat_segments(segment, state, rows))
+        repeated = divider.join(helpers.render_sub_repeat_segments(segment, state, rows, local_data=local_data))
 
         return "{0}{1}{2}".format(
-            helpers.render_once(prefix, state, None),
+            helpers.render_once(prefix, state, None, local_data=local_data),
             repeated,
-            helpers.render_once(suffix, state, None),
+            helpers.render_once(suffix, state, None, local_data=local_data),
         )

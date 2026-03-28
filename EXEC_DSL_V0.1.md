@@ -83,12 +83,15 @@
 - `$variables.threshold`
 - `$steps.exchange_rate.final_amount`
 - `$prechecks.check_rate_null.func`
+- `$.func`（仅在支持“当前节点局部作用域”的位置生效）
 
 约束：
 
 - 不支持扁平引用，例如 `$steps.final_amount`
 - 步骤输出必须通过 `$steps.<step_name>.<field>` 访问
 - 所有路径引用必须能在校验阶段静态解析，禁止悬空引用
+- `$.<field>` 表示“当前节点 `outputs` 下的 `<field>`”，用于减少在节点内部重复书写完整命名空间路径
+- `$.<field>` 仅允许在 `prechecks[].on_fail` 内使用；顶层 `on_fail`、`steps[].sql_params` 等位置禁止使用
 
 命名硬规则：
 
@@ -579,8 +582,8 @@ FROM am
 | `variables.when[].condition` | `$input`、`$context`、已完成求值的 `$variables` |
 | `variables.when[].value` / `variables.default` | JSON 标量、数组、对象字面量；若实现支持路径引用，则仅允许 `$input`、`$context`、已完成求值的 `$variables` |
 | `prechecks[].sql_params` | `$input`、`$context`、`$variables` |
-| `prechecks[].on_fail.decision` | `$input`、`$context`、`$variables`、当前 `precheck.outputs` 上的 `$prechecks.<name>.<field>`，以及基于这些路径的 `exists($path)` |
-| `prechecks[].on_fail.message_*` | 当前 `precheck` 行级字段、`$input`、`$context`、`$variables` |
+| `prechecks[].on_fail.decision` | `$input`、`$context`、`$variables`、当前 `precheck.outputs` 上的 `$prechecks.<name>.<field>` 或 `$.<field>`，以及基于这些路径的 `exists($path)` |
+| `prechecks[].on_fail.message_*` | 当前 `precheck` 行级字段、`$input`、`$context`、`$variables`、当前 `precheck.outputs` 上的 `$.<field>` |
 | `steps[].sql_params` | `$input`、`$context`、`$variables`、前序 `steps.outputs` |
 | `steps[].consumes[].from` | `$context`、前序 `steps` |
 | 顶层 `on_fail.decision` | `$input`、`$context`、`$variables`、全部 `steps.outputs` |
@@ -590,6 +593,7 @@ FROM am
 
 - `variables` 按声明顺序求值；后声明变量可以引用先声明变量，反之不允许
 - `prechecks` 之间不建立运行时结果作用域；`prechecks[].on_fail.decision` 仅允许引用当前 precheck 的 `$prechecks.<name>.<field>`
+- 在 `prechecks[].on_fail` 内，`$.<field>` 与 `$prechecks.<name>.<field>` 语义等价；二者都必须命中当前 `precheck.outputs` 白名单
 - `steps` 之间的字段引用必须通过显式命名空间路径完成；若当前步骤需要在 SQL 中使用前序步骤结果，优先通过 `consumes` 声明数据依赖
 - 顶层 `on_fail` 不允许直接引用 `prechecks` 的结果
 - 顶层 `on_fail.message_*` 若使用 `single`，则不得引用来自 `result_mode = records` 的数组输出；若需要渲染数组结果，应改用 `sub_repeat` 或 `full_repeat`

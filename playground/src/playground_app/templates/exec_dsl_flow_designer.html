@@ -1001,6 +1001,12 @@
           <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddSqlParam" type="button" title="新增 SQL 变量" aria-label="新增 SQL 变量"><span class="ep-icon">add</span></button>
         </div>
         ` : ''}
+        ${node.type === 'precheck' ? `
+        <div class="field">
+          <label>Outputs（逗号分隔）</label>
+          <input id="f_outputs" value="${escapeAttr(node.outputs)}" />
+        </div>
+        ` : ''}
         ${isDecisionNode(node.type) ? `
         <div class="field">
           <label>Decision（用于 precheck/on_fail/variable）</label>
@@ -1050,7 +1056,7 @@
         </div>
         ` : ''}
         ` : ''}
-        ${hasOutputs(node.type) ? `
+        ${hasOutputs(node.type) && node.type !== 'precheck' ? `
         <div class="field">
           <label>Outputs（逗号分隔）</label>
           <input id="f_outputs" value="${escapeAttr(node.outputs)}" />

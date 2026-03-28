@@ -339,6 +339,21 @@ class ValidatorTestCase(unittest.TestCase):
 
         self.reference_validator.validate(document)
 
+    def test_precheck_decision_can_reference_local_output(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0]["on_fail"]["decision"] = "exists($.func)"
+        document = self.parser.parse(json.dumps(data))
+
+        self.reference_validator.validate(document)
+
+    def test_top_level_on_fail_cannot_reference_local_output(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["on_fail"]["decision"] = "exists($.final_amount)"
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.reference_validator.validate(document)
+
     def test_precheck_decision_reference_without_outputs_raises(self) -> None:
         data = {
             "prechecks": [

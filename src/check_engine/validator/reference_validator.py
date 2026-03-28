@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from typing import NoReturn
+from typing import NoReturn, Optional
 
 from ..dsl import (
     ContextNode,
@@ -22,7 +22,7 @@ from ..exceptions import DSLValidationError
 class ReferenceValidator:
     """校验 DSL 中的作用域引用是否合法。"""
 
-    PATH_PATTERN = re.compile(r"\$[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
+    PATH_PATTERN = re.compile(r"\$(?:\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
 
     def validate(self, document: DslDocument) -> None:
         step_names = tuple(step.name for step in document.steps)
@@ -51,6 +51,7 @@ class ReferenceValidator:
                 step_map=step_map,
                 precheck_map=precheck_map,
                 available_prechecks={precheck.name},
+                local_outputs=set(precheck.outputs),
             )
 
         available_steps: set[str] = set()
@@ -74,6 +75,7 @@ class ReferenceValidator:
             step_map=step_map,
             precheck_map=precheck_map,
             available_prechecks=set(),
+            local_outputs=None,
         )
 
     def _validate_context(self, context: ContextNode, document: DslDocument, step_map: dict[str, StepNode]) -> None:
@@ -105,6 +107,7 @@ class ReferenceValidator:
                     step_map=step_map,
                     precheck_map={},
                     available_prechecks=set(),
+                    local_outputs=None,
                 )
 
     def _validate_sql_params(
@@ -127,6 +130,7 @@ class ReferenceValidator:
                     step_map=step_map,
                     precheck_map={},
                     available_prechecks=set(),
+                    local_outputs=None,
                 )
 
     def _validate_consumes(self, step: StepNode, available_steps: set[str], document: DslDocument, step_map: dict[str, StepNode]) -> None:
@@ -157,6 +161,7 @@ class ReferenceValidator:
         step_map: dict[str, StepNode],
         precheck_map: dict[str, PrecheckNode],
         available_prechecks: set[str],
+        local_outputs: Optional[set[str]],
     ) -> None:
         for reference in self._extract_references(policy.decision):
             self._validate_reference(
@@ -168,6 +173,7 @@ class ReferenceValidator:
                 step_map=step_map,
                 precheck_map=precheck_map,
                 available_prechecks=available_prechecks,
+                local_outputs=local_outputs,
             )
 
         for field_name, template in (
@@ -184,6 +190,7 @@ class ReferenceValidator:
                     step_map=step_map,
                     precheck_map=precheck_map,
                     available_prechecks=available_prechecks,
+                    local_outputs=local_outputs,
                 )
                 if path == "on_fail" and policy.mode == FAIL_MODE_SINGLE:
                     self._validate_single_mode_message_reference(reference, step_map, f"{path}.{field_name}")
@@ -198,10 +205,15 @@ class ReferenceValidator:
         step_map: dict[str, StepNode],
         precheck_map: dict[str, PrecheckNode],
         available_prechecks: set[str],
+        local_outputs: Optional[set[str]],
     ) -> None:
         parts = self._split_reference(reference)
         if not parts:
             self._raise(f"{path} contains invalid reference: {reference}")
+
+        if parts[0] == "":
+            self._validate_local_reference(reference, parts, path, local_outputs)
+            return
 
         root = parts[0]
         if root == "input":
@@ -252,6 +264,21 @@ class ReferenceValidator:
             return
 
         self._raise(f"{path} contains unknown scope: {reference}")
+
+    def _validate_local_reference(
+        self,
+        reference: str,
+        parts: list[str],
+        path: str,
+        local_outputs: Optional[set[str]],
+    ) -> None:
+        if local_outputs is None:
+            self._raise(f"{path} cannot use local scope reference: {reference}")
+        if len(parts) < 2:
+            self._raise(f"{path} local reference must include a field: {reference}")
+        field_name = parts[1]
+        if field_name not in local_outputs:
+            self._raise(f"{path} references a non-exported local field: {reference}")
 
     def _validate_single_mode_message_reference(self, reference: str, step_map: dict[str, StepNode], path: str) -> None:
         parts = self._split_reference(reference)

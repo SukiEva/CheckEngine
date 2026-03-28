@@ -75,6 +75,12 @@ class ExpressionEvaluatorTestCase(unittest.TestCase):
             ("$steps.exchange_rate.final_amount", "$variables.threshold"),
         )
 
+    def test_evaluate_local_scope_reference(self) -> None:
+        expression = "exists($.func)"
+        local_data = {"func": ["USD", "CNY"]}
+
+        self.assertTrue(self.evaluator.evaluate(expression, self.state, local_data=local_data))
+
 
 if __name__ == "__main__":
     unittest.main()
