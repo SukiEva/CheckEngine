@@ -14,19 +14,19 @@ from unittest.mock import Mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine.engine import DslEngine
-from check_engine.sql import DatasourceRegistry
-from check_engine.engine import MessageRendererLike, SqlExecutorLike
+from check_engine.sql import DatasourceRegistry, SqlExecutor
+from check_engine.renderer import MessageRenderer
 from check_engine.exceptions import DSLExecutionError, DSLValidationError
 from check_engine.runtime.state import ExecutionResult, NodeExecutionResult
 
 
-class _FailingSqlExecutor(SqlExecutorLike):
+class _FailingSqlExecutor:
     def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
         del node, state, datasource_registry, node_name
         raise DSLExecutionError("SQL node execution failed: step_a")
 
 
-class _PassingSqlExecutor(SqlExecutorLike):
+class _PassingSqlExecutor:
     def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
         del node, state, datasource_registry, node_name
         return NodeExecutionResult(
@@ -36,7 +36,7 @@ class _PassingSqlExecutor(SqlExecutorLike):
         )
 
 
-class _FailingMessageRenderer(MessageRendererLike):
+class _FailingMessageRenderer:
     def render(self, policy: Any, state: Any, rows: Optional[Any] = None) -> tuple[str, str]:
         raise DSLExecutionError("Message render failed")
 
@@ -72,7 +72,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
     def test_execute_returns_runtime_failure_result_with_message(self) -> None:
         logger_mock = Mock(spec=logging.Logger)
-        engine = DslEngine(sql_executor=_FailingSqlExecutor(), logger=cast(logging.Logger, logger_mock))
+        engine = DslEngine(logger=cast(logging.Logger, logger_mock))
+        engine.sql_executor = cast(SqlExecutor, _FailingSqlExecutor())
         registry = cast(DatasourceRegistry, _UnusedRegistry())
 
         result = engine.execute(self.dsl_text, {}, datasource_registry=registry)
@@ -85,10 +86,9 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         logger_mock.exception.assert_called_once_with("Runtime execution failed at node %s", "step_a")
 
     def test_execute_returns_runtime_failure_result_with_on_fail_node(self) -> None:
-        engine = DslEngine(
-            sql_executor=_PassingSqlExecutor(),
-            message_renderer=_FailingMessageRenderer(),
-        )
+        engine = DslEngine()
+        engine.sql_executor = cast(SqlExecutor, _PassingSqlExecutor())
+        engine.message_renderer = cast(MessageRenderer, _FailingMessageRenderer())
         registry = cast(DatasourceRegistry, _UnusedRegistry())
         dsl_text = json.dumps(
             {
@@ -156,7 +156,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(state.resolve_reference("$context.v"), 2)
 
     def test_execute_pass_result_has_empty_runtime_error_fields(self) -> None:
-        engine = DslEngine(sql_executor=_PassingSqlExecutor())
+        engine = DslEngine()
+        engine.sql_executor = cast(SqlExecutor, _PassingSqlExecutor())
         registry = cast(DatasourceRegistry, _UnusedRegistry())
 
         result = engine.execute(self.dsl_text, {}, datasource_registry=registry)
@@ -165,7 +166,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "pass")
 
     def test_execute_multiple_times_without_state_leak(self) -> None:
-        class _InputDrivenSqlExecutor(SqlExecutorLike):
+        class _InputDrivenSqlExecutor:
             def execute_node(
                 self,
                 node: Any,
@@ -181,7 +182,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                     exported_fields=["v"],
                 )
 
-        engine = DslEngine(sql_executor=_InputDrivenSqlExecutor(), compile_cache_size=2)
+        engine = DslEngine(compile_cache_size=2)
+        engine.sql_executor = cast(SqlExecutor, _InputDrivenSqlExecutor())
         registry = cast(DatasourceRegistry, _UnusedRegistry())
 
         first = engine.execute(self.dsl_text, {"amount": 5}, datasource_registry=registry)
@@ -301,7 +303,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
 
     def test_execute_result_records_executed_nodes_trace(self) -> None:
-        engine = DslEngine(sql_executor=_PassingSqlExecutor())
+        engine = DslEngine()
+        engine.sql_executor = cast(SqlExecutor, _PassingSqlExecutor())
         registry = cast(DatasourceRegistry, _UnusedRegistry())
 
         result = engine.execute(self.dsl_text, {}, datasource_registry=registry)

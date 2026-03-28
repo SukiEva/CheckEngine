@@ -5,17 +5,17 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine import DslEngine, DSLValidationError
 from check_engine.dsl import DslDocument
+from check_engine.sql import SqlExecutor
 from check_engine.parser import JsonDslParser
 from check_engine.runtime import NodeExecutionResult
 from check_engine.validator import DslValidator
-from check_engine.engine import SqlExecutorLike
 
 
 class _CountingParser(JsonDslParser):
@@ -38,7 +38,7 @@ class _CountingValidator(DslValidator):
         super().validate(document)
 
 
-class _PassingSqlExecutor(SqlExecutorLike):
+class _PassingSqlExecutor:
     def execute_node(
         self,
         node: Any,
@@ -63,7 +63,9 @@ class EngineCompileCacheTestCase(unittest.TestCase):
     def test_validate_only_runs_parse_and_rule_validation(self) -> None:
         parser = _CountingParser()
         validator = _CountingValidator()
-        engine = DslEngine(parser=parser, validator=validator, compile_cache_size=2)
+        engine = DslEngine(compile_cache_size=2)
+        engine.parser = parser
+        engine.validator = validator
 
         first = engine.validate(self.dsl_text)
         second = engine.validate(self.dsl_text)
@@ -98,11 +100,11 @@ class EngineCompileCacheTestCase(unittest.TestCase):
             }
         )
         engine = DslEngine(
-            parser=parser,
-            validator=validator,
             compile_cache_size=2,
-            sql_executor=_PassingSqlExecutor(),
         )
+        engine.parser = parser
+        engine.validator = validator
+        engine.sql_executor = cast(SqlExecutor, _PassingSqlExecutor())
         registry = _UnusedRegistry()
 
         first = engine.execute(dsl_text, {}, datasource_registry=registry)
@@ -117,11 +119,11 @@ class EngineCompileCacheTestCase(unittest.TestCase):
         parser = _CountingParser()
         validator = _CountingValidator()
         engine = DslEngine(
-            parser=parser,
-            validator=validator,
             compile_cache_size=0,
-            sql_executor=_PassingSqlExecutor(),
         )
+        engine.parser = parser
+        engine.validator = validator
+        engine.sql_executor = cast(SqlExecutor, _PassingSqlExecutor())
         registry = _UnusedRegistry()
 
         engine.execute(self.dsl_text, {}, datasource_registry=registry)
@@ -134,11 +136,11 @@ class EngineCompileCacheTestCase(unittest.TestCase):
         parser = _CountingParser()
         validator = _CountingValidator()
         engine = DslEngine(
-            parser=parser,
-            validator=validator,
             compile_cache_size=1,
-            sql_executor=_PassingSqlExecutor(),
         )
+        engine.parser = parser
+        engine.validator = validator
+        engine.sql_executor = cast(SqlExecutor, _PassingSqlExecutor())
         registry = _UnusedRegistry()
         other = json.loads(self.dsl_text)
         other["on_fail"]["decision"] = "$variables.threshold > 999999"

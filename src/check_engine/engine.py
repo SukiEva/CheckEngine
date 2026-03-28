@@ -5,10 +5,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from functools import partial
-from typing import Any, Optional, Protocol, TypeVar
+from typing import Any, Optional, TypeVar
 
 from .compiler import CompiledDsl, CompileCacheLike, DslCompiler, HashedLruCompileCache, NoopCompileCache
-from .dsl import DslDocument, EXISTS_DECISION, FailPolicy, PrecheckNode, SqlNode, VariableDefinition
+from .dsl import DslDocument, EXISTS_DECISION, PrecheckNode, SqlNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
 from .exceptions import DSLExecutionError
 from .parser import JsonDslParser
@@ -20,60 +20,27 @@ from .validator import DslValidator
 RuntimeValueT = TypeVar("RuntimeValueT")
 
 
-class SqlExecutorLike(Protocol):
-    """引擎依赖的最小 SQL 执行器协议。"""
-
-    def execute_node(
-        self,
-        node: SqlNode,
-        state: ExecutionState,
-        datasource_registry: DatasourceRegistry,
-        node_name: str,
-    ) -> NodeExecutionResult:
-        """执行单个 SQL 节点并返回导出结果。"""
-        ...
-
-
-class MessageRendererLike(Protocol):
-    """引擎依赖的最小消息渲染器协议。"""
-
-    def render(
-        self,
-        policy: FailPolicy,
-        state: ExecutionState,
-        rows: Optional[Sequence[Mapping[str, Any]]] = None,
-    ) -> tuple[str, str]:
-        """渲染失败消息。"""
-        ...
-
-
 class DslEngine:
     """统一入口：编译、校验并执行 DSL。"""
 
     def __init__(
         self,
-        parser: Optional[JsonDslParser] = None,
-        validator: Optional[DslValidator] = None,
-        compiler: Optional[DslCompiler] = None,
-        expression_evaluator: Optional[ExpressionEvaluator] = None,
-        sql_executor: Optional[SqlExecutorLike] = None,
-        message_renderer: Optional[MessageRendererLike] = None,
         compile_cache_size: int = 128,
         logger: Optional[logging.Logger] = None,
     ) -> None:
         if compile_cache_size < 0:
             raise ValueError("compile_cache_size must be greater than or equal to 0.")
 
-        self.parser = parser or JsonDslParser()
-        self.validator = validator or DslValidator()
-        self.expression_evaluator = expression_evaluator or ExpressionEvaluator()
+        self.parser: JsonDslParser = JsonDslParser()
+        self.validator: DslValidator = DslValidator()
         self.logger = logger or logging.getLogger(__name__)
-        self.compiler = compiler or DslCompiler(
+        self.expression_evaluator: ExpressionEvaluator = ExpressionEvaluator()
+        self.compiler: DslCompiler = DslCompiler(
             expression_evaluator=self.expression_evaluator,
             logger=self.logger,
         )
-        self.sql_executor = sql_executor or SqlExecutor()
-        self.message_renderer = message_renderer or MessageRenderer()
+        self.sql_executor: SqlExecutor = SqlExecutor()
+        self.message_renderer: MessageRenderer = MessageRenderer()
         self.compile_cache_size = compile_cache_size
         self._compile_cache_backend: CompileCacheLike[CompiledDsl] = (
             HashedLruCompileCache(compile_cache_size) if compile_cache_size > 0 else NoopCompileCache()
@@ -103,7 +70,8 @@ class DslEngine:
         if cached is not None:
             return cached
 
-        compiled = self._compile_uncached(dsl_text)
+        document = self.parser.parse(dsl_text)
+        compiled = self.compiler.compile(document=document)
         self._compile_cache_backend.put(dsl_text, compiled)
         return compiled
 
@@ -304,13 +272,6 @@ class DslEngine:
             row_count=len(result.raw_rows),
         )
         return result
-
-    def _compile_uncached(self, dsl_text: str) -> CompiledDsl:
-        document = self.parser.parse(dsl_text)
-        return self._compile_document(document)
-
-    def _compile_document(self, document: DslDocument) -> CompiledDsl:
-        return self.compiler.compile(document=document)
 
     def _evaluate_variable(
         self,
