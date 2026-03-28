@@ -63,9 +63,19 @@ class StructureValidator:
             raw_definition = raw_variables.get(name)
             if not isinstance(raw_definition, Mapping) or VariableField.DEFAULT not in raw_definition:
                 self._raise(f"variables.{name}.default is required.")
+            raw_when = raw_definition.get(VariableField.WHEN, [])
+            if not isinstance(raw_when, Sequence):
+                self._raise(f"variables.{name}.when must be a list.")
             for index, item in enumerate(definition.when):
                 if not item.condition.strip():
                     self._raise(f"variables.{name}.when[{index}].condition must not be empty.")
+                if (
+                    not isinstance(raw_when, Sequence)
+                    or index >= len(raw_when)
+                    or not isinstance(raw_when[index], Mapping)
+                    or VariableField.VALUE not in raw_when[index]
+                ):
+                    self._raise(f"variables.{name}.when[{index}].value is required.")
 
     def _validate_prechecks(self, prechecks: Sequence[PrecheckNode]) -> None:
         names = set()
@@ -75,11 +85,11 @@ class StructureValidator:
             names.add(node.name)
             self._validate_node_name(node.name, f"prechecks[{index}].name")
             self._validate_sql_node(node, f"prechecks[{index}]")
+            if not node.outputs:
+                self._raise(f"prechecks[{index}].outputs must not be empty.")
             if node.on_fail is None:
                 self._raise(f"prechecks[{index}].on_fail must not be empty.")
             self._validate_fail_policy(node.on_fail, f"prechecks[{index}].on_fail")
-            if node.on_fail.decision != EXISTS_DECISION and not self.EXISTS_CALL_PATTERN.fullmatch(node.on_fail.decision.strip()):
-                self._raise(f"prechecks[{index}].on_fail.decision only supports 'exists' or 'exists($path)'.")
 
     def _validate_steps(self, steps: Sequence[StepNode]) -> None:
         names = set()
@@ -126,8 +136,8 @@ class StructureValidator:
         decision = policy.decision.strip()
         if not decision:
             self._raise(f"{path}.decision must not be empty.")
-        if decision == EXISTS_DECISION and path == TopLevelField.ON_FAIL:
-            self._raise("on_fail.decision does not support bare 'exists'; use exists($path) instead.")
+        if decision == EXISTS_DECISION:
+            self._raise(f"{path}.decision does not support bare 'exists'; use exists($path) instead.")
         if decision != EXISTS_DECISION and decision.startswith(EXISTS_DECISION) and not self.EXISTS_CALL_PATTERN.fullmatch(decision):
             self._raise(f"{path}.decision exists syntax is invalid: {policy.decision}")
         if not policy.message_cn.strip():

@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from ..dsl import DslDocument, EXISTS_DECISION
+from ..dsl import DslDocument
 from ..exceptions import DSLExecutionError, DSLValidationError
 from ..expression import CompiledExpression, ExpressionEvaluator
 
@@ -17,7 +17,7 @@ class CompiledDsl:
 
     document: DslDocument
     variable_conditions: dict[str, tuple[CompiledExpression, ...]]
-    precheck_decisions: dict[str, Optional[CompiledExpression]]
+    precheck_decisions: dict[str, CompiledExpression]
     on_fail_decision: CompiledExpression
 
 
@@ -40,16 +40,15 @@ class DslCompiler:
             )
             for variable_name, definition in document.variables.items()
         }
-        precheck_decisions: dict[str, Optional[CompiledExpression]] = {}
+        precheck_decisions: dict[str, CompiledExpression] = {}
         for precheck in document.prechecks:
             if precheck.on_fail is None:
                 raise DSLValidationError(
                     f"prechecks.{precheck.name}.on_fail must be provided.",
                 )
-            precheck_decisions[precheck.name] = (
-                None
-                if precheck.on_fail.decision == EXISTS_DECISION
-                else self._compile_expression(precheck.on_fail.decision, f"prechecks.{precheck.name}.on_fail.decision")
+            precheck_decisions[precheck.name] = self._compile_expression(
+                precheck.on_fail.decision,
+                f"prechecks.{precheck.name}.on_fail.decision",
             )
         on_fail_decision = self._compile_expression(document.on_fail.decision, "on_fail.decision")
         return CompiledDsl(

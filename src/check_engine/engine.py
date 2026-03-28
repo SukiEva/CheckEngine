@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from functools import partial
 from typing import Any, Optional, TypeVar
 
 from .compiler import CompiledDsl, CompileCacheLike, DslCompiler, HashedLruCompileCache, NoopCompileCache
-from .dsl import DslDocument, EXISTS_DECISION, PrecheckNode, SqlNode, VariableDefinition
+from .dsl import DslDocument, PrecheckNode, SqlNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
 from .exceptions import DSLExecutionError
 from .parser import JsonDslParser
@@ -167,11 +167,11 @@ class DslEngine:
                 return runtime_failure
             if result is None:
                 raise RuntimeError("precheck execution result is unexpectedly None.")
+            state.set_precheck_result(precheck.name, result)
             if self._should_fail_precheck(
                 precheck,
-                result.raw_rows,
                 state,
-                compiled_dsl.precheck_decisions.get(precheck.name),
+                compiled_dsl.precheck_decisions[precheck.name],
             ):
                 if precheck.on_fail is None:
                     raise RuntimeError("precheck.on_fail is unexpectedly None.")
@@ -279,16 +279,11 @@ class DslEngine:
     def _should_fail_precheck(
         self,
         precheck: PrecheckNode,
-        rows: Sequence[Mapping[str, Any]],
         state: ExecutionState,
-        compiled_expression: Optional[CompiledExpression],
+        compiled_expression: CompiledExpression,
     ) -> bool:
         if precheck.on_fail is None:
             raise ValueError("precheck.on_fail must not be None.")
-        if precheck.on_fail.decision == EXISTS_DECISION:
-            return len(rows) > 0
-        if compiled_expression is None:
-            raise ValueError("compiled_expression must not be None when precheck decision is not bare exists.")
         return self._should_fail_by_expression(compiled_expression, state)
 
     def _should_fail_by_expression(self, expression: CompiledExpression, state: ExecutionState) -> bool:

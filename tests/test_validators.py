@@ -174,6 +174,14 @@ class ValidatorTestCase(unittest.TestCase):
         with self.assertRaises(DSLValidationError):
             self.structure_validator.validate(document)
 
+    def test_validate_precheck_on_fail_bare_exists_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0]["on_fail"]["decision"] = "exists"
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.structure_validator.validate(document)
+
     def test_validate_on_fail_invalid_exists_syntax_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["on_fail"]["decision"] = "exists($steps.exchange_rate.final_amount, $variables.threshold)"
@@ -280,6 +288,98 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError):
             self.structure_validator.validate(document)
+
+    def test_variable_when_value_is_required(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["variables"]["threshold"]["when"][0].pop("value")
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            self.structure_validator.validate(document)
+        self.assertIn("when[0].value is required", str(ctx.exception))
+
+    def test_precheck_decision_can_reference_named_precheck_output(self) -> None:
+        data = {
+            "prechecks": [
+                {
+                    "name": "check_lines",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "records",
+                    "sql_template": "select 1 as line_no",
+                    "sql_params": {},
+                    "outputs": ["line_no"],
+                    "on_fail": {
+                        "decision": "exists($prechecks.check_lines.line_no)",
+                        "mode": "single",
+                        "message_cn": "存在数据",
+                        "message_en": "Has rows",
+                    },
+                }
+            ],
+            "steps": [
+                {
+                    "name": "s1",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "false",
+                "mode": "single",
+                "message_cn": "ok",
+                "message_en": "ok",
+            },
+        }
+        document = self.parser.parse(json.dumps(data))
+
+        self.reference_validator.validate(document)
+
+    def test_precheck_decision_reference_without_outputs_raises(self) -> None:
+        data = {
+            "prechecks": [
+                {
+                    "name": "check_lines",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "records",
+                    "sql_template": "select 1 as line_no",
+                    "sql_params": {},
+                    "on_fail": {
+                        "decision": "exists($prechecks.check_lines.line_no)",
+                        "mode": "single",
+                        "message_cn": "存在数据",
+                        "message_en": "Has rows",
+                    },
+                }
+            ],
+            "steps": [
+                {
+                    "name": "s1",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "false",
+                "mode": "single",
+                "message_cn": "ok",
+                "message_en": "ok",
+            },
+        }
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            self.reference_validator.validate(document)
+        self.assertIn("non-exported precheck field", str(ctx.exception))
 
     def test_variable_cannot_reference_later_variable(self) -> None:
         data = {

@@ -9,8 +9,8 @@ from typing import NoReturn
 from ..dsl import (
     ContextNode,
     DslDocument,
-    EXISTS_DECISION,
     FAIL_MODE_SINGLE,
+    PrecheckNode,
     RESULT_MODE_RECORDS,
     FailPolicy,
     StepNode,
@@ -27,6 +27,7 @@ class ReferenceValidator:
     def validate(self, document: DslDocument) -> None:
         step_names = tuple(step.name for step in document.steps)
         step_map = {step.name: step for step in document.steps}
+        precheck_map = {precheck.name: precheck for precheck in document.prechecks}
         available_variables: set[str] = set()
         all_variables = set(document.variables.keys())
 
@@ -41,7 +42,16 @@ class ReferenceValidator:
             if precheck.on_fail is None:
                 self._raise(f"prechecks[{index}].on_fail must be provided.")
             self._validate_sql_params(precheck.sql_params, document, available_steps=set(), available_variables=all_variables, step_map=step_map)
-            self._validate_fail_policy(precheck.on_fail, document, available_steps=set(), available_variables=all_variables, path=f"prechecks[{index}].on_fail", step_map=step_map)
+            self._validate_fail_policy(
+                precheck.on_fail,
+                document,
+                available_steps=set(),
+                available_variables=all_variables,
+                path=f"prechecks[{index}].on_fail",
+                step_map=step_map,
+                precheck_map=precheck_map,
+                available_prechecks={precheck.name},
+            )
 
         available_steps: set[str] = set()
         for index, step in enumerate(document.steps):
@@ -62,6 +72,8 @@ class ReferenceValidator:
             available_variables=all_variables,
             path="on_fail",
             step_map=step_map,
+            precheck_map=precheck_map,
+            available_prechecks=set(),
         )
 
     def _validate_context(self, context: ContextNode, document: DslDocument, step_map: dict[str, StepNode]) -> None:
@@ -91,6 +103,8 @@ class ReferenceValidator:
                     available_variables=available_variables,
                     path=f"variables.{variable_name}.when[{index}].condition",
                     step_map=step_map,
+                    precheck_map={},
+                    available_prechecks=set(),
                 )
 
     def _validate_sql_params(
@@ -111,6 +125,8 @@ class ReferenceValidator:
                     available_variables=available_variables,
                     path=f"{path_prefix}.{key}",
                     step_map=step_map,
+                    precheck_map={},
+                    available_prechecks=set(),
                 )
 
     def _validate_consumes(self, step: StepNode, available_steps: set[str], document: DslDocument, step_map: dict[str, StepNode]) -> None:
@@ -139,17 +155,20 @@ class ReferenceValidator:
         available_variables: set[str],
         path: str,
         step_map: dict[str, StepNode],
+        precheck_map: dict[str, PrecheckNode],
+        available_prechecks: set[str],
     ) -> None:
-        if policy.decision != EXISTS_DECISION:
-            for reference in self._extract_references(policy.decision):
-                self._validate_reference(
-                    reference,
-                    document,
-                    available_steps,
-                    available_variables=available_variables,
-                    path=f"{path}.decision",
-                    step_map=step_map,
-                )
+        for reference in self._extract_references(policy.decision):
+            self._validate_reference(
+                reference,
+                document,
+                available_steps,
+                available_variables=available_variables,
+                path=f"{path}.decision",
+                step_map=step_map,
+                precheck_map=precheck_map,
+                available_prechecks=available_prechecks,
+            )
 
         for field_name, template in (
             ("message_cn", policy.message_cn),
@@ -163,6 +182,8 @@ class ReferenceValidator:
                     available_variables=available_variables,
                     path=f"{path}.{field_name}",
                     step_map=step_map,
+                    precheck_map=precheck_map,
+                    available_prechecks=available_prechecks,
                 )
                 if path == "on_fail" and policy.mode == FAIL_MODE_SINGLE:
                     self._validate_single_mode_message_reference(reference, step_map, f"{path}.{field_name}")
@@ -175,6 +196,8 @@ class ReferenceValidator:
         available_variables: set[str],
         path: str,
         step_map: dict[str, StepNode],
+        precheck_map: dict[str, PrecheckNode],
+        available_prechecks: set[str],
     ) -> None:
         parts = self._split_reference(reference)
         if not parts:
@@ -216,6 +239,18 @@ class ReferenceValidator:
                 self._raise(f"{path} references a non-exported step field: {reference}")
             return
 
+        if root == "prechecks":
+            if len(parts) != 3:
+                self._raise(f"{path} prechecks reference has invalid depth: {reference}")
+            precheck_name = parts[1]
+            field_name = parts[2]
+            if precheck_name not in available_prechecks:
+                self._raise(f"{path} references a precheck not available at this point: {reference}")
+            precheck = self._find_precheck(precheck_map, precheck_name)
+            if field_name not in precheck.outputs:
+                self._raise(f"{path} references a non-exported precheck field: {reference}")
+            return
+
         self._raise(f"{path} contains unknown scope: {reference}")
 
     def _validate_single_mode_message_reference(self, reference: str, step_map: dict[str, StepNode], path: str) -> None:
@@ -236,6 +271,12 @@ class ReferenceValidator:
         if step_name in step_map:
             return step_map[step_name]
         self._raise(f"Step not found: {step_name}")
+        raise AssertionError("unreachable")
+
+    def _find_precheck(self, precheck_map: dict[str, PrecheckNode], precheck_name: str) -> PrecheckNode:
+        if precheck_name in precheck_map:
+            return precheck_map[precheck_name]
+        self._raise(f"Precheck not found: {precheck_name}")
         raise AssertionError("unreachable")
 
     @staticmethod
