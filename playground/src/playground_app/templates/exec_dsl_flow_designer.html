@@ -4,11 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ExecDSL 流程图式设计器（实验版）</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css" />
+  <link rel="stylesheet" href="/static/vendor/element-plus/index.css" />
+  <link rel="stylesheet" href="/static/vendor/highlightjs/github-dark.min.css" />
   <style>
     :root {
       --bg: #f5f7fa;
@@ -32,7 +29,7 @@
 
     body {
       margin: 0;
-      font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
       color: var(--text);
       background: var(--bg);
     }
@@ -142,7 +139,7 @@
     .el-button.is-circle {
       border-radius: 50%;
     }
-    .el-button .material-symbols-rounded {
+    .el-button .ep-icon {
       font-size: 17px;
       display: inline-flex;
       align-items: center;
@@ -321,7 +318,7 @@
       background: #ffebee;
       color: #b71c1c;
     }
-    .node-action-btn .material-symbols-rounded {
+    .node-action-btn .ep-icon {
       font-size: 13px;
       line-height: 1;
     }
@@ -434,10 +431,13 @@
       line-height: 1.45;
     }
 
-    .material-symbols-rounded {
-      font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 20;
+    .ep-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       font-size: 18px;
       line-height: 1;
+      font-style: normal;
     }
     .status {
       font-size: 0.82rem;
@@ -584,14 +584,14 @@
           </div>
           <div class="field-note">仅支持 PostgreSQL：<code>postgresql://</code> 或 <code>postgresql+psycopg2://</code>。</div>
           <div class="datasource-list" id="datasourceList"></div>
-          <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnDsAdd" title="新增数据源" aria-label="新增数据源"><span class="material-symbols-rounded">add</span></button>
+          <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnDsAdd" title="新增数据源" aria-label="新增数据源"><span class="ep-icon">add</span></button>
           <div class="inline-status" id="datasourceStatus">尚未加载数据源配置。</div>
         </section>
         <section class="tab-panel active" data-tab-panel="input">
           <div class="field">
             <label>input_data（key/value）</label>
             <div id="runtimeInputRows"></div>
-            <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddInputParam" title="新增输入参数" aria-label="新增输入参数"><span class="material-symbols-rounded">add</span></button>
+            <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddInputParam" title="新增输入参数" aria-label="新增输入参数"><span class="ep-icon">add</span></button>
           </div>
           <div class="inline-status">运行 DSL 时将使用这里的 input_data；默认包含 <code>source_object_id</code>。</div>
         </section>
@@ -600,11 +600,11 @@
 
     <main class="panel canvas-wrap">
       <div class="canvas-toolbar">
-        <button class="el-button el-button--primary" id="btnReset"><span class="material-symbols-rounded">delete_sweep</span>清空画布</button>
-        <button class="el-button el-button--default is-plain" id="btnImport"><span class="material-symbols-rounded">upload_file</span>导入 JSON</button>
-        <button class="el-button el-button--default is-plain" id="btnPreview"><span class="material-symbols-rounded">visibility</span>预览 JSON</button>
-        <button class="el-button el-button--success is-plain" id="btnRun"><span class="material-symbols-rounded">play_circle</span>运行 DSL</button>
-        <button class="el-button el-button--default is-plain" id="btnExport"><span class="material-symbols-rounded">download</span>下载 JSON</button>
+        <button class="el-button el-button--primary" id="btnReset"><span class="ep-icon">delete_sweep</span>清空画布</button>
+        <button class="el-button el-button--default is-plain" id="btnImport"><span class="ep-icon">upload_file</span>导入 JSON</button>
+        <button class="el-button el-button--default is-plain" id="btnPreview"><span class="ep-icon">visibility</span>预览 JSON</button>
+        <button class="el-button el-button--success is-plain" id="btnRun"><span class="ep-icon">play_circle</span>运行 DSL</button>
+        <button class="el-button el-button--default is-plain" id="btnExport"><span class="ep-icon">download</span>下载 JSON</button>
         <input type="file" id="fileImportJson" accept="application/json" style="display:none;" />
       </div>
       <section id="canvas">
@@ -627,7 +627,7 @@
   <dialog id="jsonPreviewDialog" class="ep-dialog">
     <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
       <strong style="font-size:0.95rem;">ExecDSL JSON 预览</strong>
-      <button class="el-button el-button--default is-plain" id="btnClosePreview" style="padding:6px 10px;"><span class="material-symbols-rounded">close</span>关闭</button>
+      <button class="el-button el-button--default is-plain" id="btnClosePreview" style="padding:6px 10px;"><span class="ep-icon">close</span>关闭</button>
     </div>
     <div style="padding:12px;">
       <pre id="dslPreview" style="max-height:60vh;"><code id="dslPreviewCode" class="language-json"></code></pre>
@@ -637,7 +637,7 @@
   <dialog id="runtimeDialog" class="ep-dialog ep-dialog-wide">
     <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
       <strong style="font-size:0.95rem;">DSL 运行结果</strong>
-      <button class="el-button el-button--default is-plain" id="btnCloseRuntime" style="padding:6px 10px;"><span class="material-symbols-rounded">close</span>关闭</button>
+      <button class="el-button el-button--default is-plain" id="btnCloseRuntime" style="padding:6px 10px;"><span class="ep-icon">close</span>关闭</button>
     </div>
     <div style="padding:12px; display:grid; gap:12px;">
       <div id="runtimeStatus" style="font-size:0.82rem; color:#6b7280;">尚未执行。</div>
@@ -645,8 +645,33 @@
     </div>
   </dialog>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+  <script src="/static/vendor/highlightjs/highlight.min.js"></script>
   <script>
+    const EP_ICON_TEXT_MAP = {
+      add: '+',
+      delete: '×',
+      delete_sweep: '🧹',
+      upload_file: '⇪',
+      visibility: '👁',
+      play_circle: '▶',
+      download: '⇩',
+      close: '✕',
+      arrow_upward: '↑',
+      arrow_downward: '↓',
+      hourglass_top: '⌛',
+    };
+
+    function renderElementPlusIcons(root = document) {
+      const iconElements = root.querySelectorAll('.ep-icon');
+      iconElements.forEach((iconElement) => {
+        const rawName = (iconElement.dataset.iconName || iconElement.textContent || '').trim();
+        if (!rawName) return;
+        iconElement.dataset.iconName = rawName;
+        iconElement.textContent = EP_ICON_TEXT_MAP[rawName] || rawName;
+        iconElement.setAttribute('aria-hidden', 'true');
+      });
+    }
+
     const NODE_DEF_MAP = {
       context: { type: 'context', label: 'Context 节点', defaultTitle: '加载上下文' },
       variable: { type: 'variable', label: 'Variable 节点', defaultTitle: '计算变量' },
@@ -763,7 +788,7 @@
         const laneHasFixedNode = FIXED_TYPES.has(lane.type) && state.nodes.some((item) => item.type === lane.type);
         const addButtonHtml = laneHasFixedNode
           ? ''
-          : `<button class="el-button el-button--primary is-plain is-circle el-button--small" data-add-type="${lane.type}" type="button" title="新增 ${lane.type} 节点" aria-label="新增 ${lane.type} 节点"><span class="material-symbols-rounded">add</span></button>`;
+          : `<button class="el-button el-button--primary is-plain is-circle el-button--small" data-add-type="${lane.type}" type="button" title="新增 ${lane.type} 节点" aria-label="新增 ${lane.type} 节点"><span class="ep-icon">add</span></button>`;
         const laneEl = document.createElement('section');
         laneEl.className = 'flow-lane';
         laneEl.innerHTML = `
@@ -794,8 +819,8 @@
           return '';
         }
         return `
-          <button class="node-action-btn" type="button" data-node-action="move-up" title="上移节点" aria-label="上移节点"><span class="material-symbols-rounded">arrow_upward</span></button>
-          <button class="node-action-btn" type="button" data-node-action="move-down" title="下移节点" aria-label="下移节点"><span class="material-symbols-rounded">arrow_downward</span></button>
+          <button class="node-action-btn" type="button" data-node-action="move-up" title="上移节点" aria-label="上移节点"><span class="ep-icon">arrow_upward</span></button>
+          <button class="node-action-btn" type="button" data-node-action="move-down" title="下移节点" aria-label="下移节点"><span class="ep-icon">arrow_downward</span></button>
         `;
       },
       renderNodeCard(node, index) {
@@ -812,7 +837,7 @@
             <span class="node-head-actions">
               <span class="node-rank-chip">${nodeRank}</span>
               ${CanvasComponents.buildActionButtons(node)}
-              <button class="node-action-btn node-action-danger" type="button" data-node-action="delete" title="删除节点" aria-label="删除节点"><span class="material-symbols-rounded">delete</span></button>
+              <button class="node-action-btn node-action-danger" type="button" data-node-action="delete" title="删除节点" aria-label="删除节点"><span class="ep-icon">delete</span></button>
             </span>
           </div>
           <div class="node-body">
@@ -869,6 +894,7 @@
           laneBody.appendChild(nodeEl);
         });
       });
+      renderElementPlusIcons(dropZone);
     }
 
     function addNodeByType(nodeType) {
@@ -946,7 +972,7 @@
         <div class="field">
           <label>SQL 变量（key/value）</label>
           <div id="f_sql_params_rows"></div>
-          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddSqlParam" type="button" title="新增 SQL 变量" aria-label="新增 SQL 变量"><span class="material-symbols-rounded">add</span></button>
+          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddSqlParam" type="button" title="新增 SQL 变量" aria-label="新增 SQL 变量"><span class="ep-icon">add</span></button>
         </div>
         ` : ''}
         ${isDecisionNode(node.type) ? `
@@ -959,7 +985,7 @@
         <div class="field">
           <label>When 条件与赋值（condition/value）</label>
           <div id="f_variable_when_rows"></div>
-          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddVariableWhen" type="button" title="新增 when 条件" aria-label="新增 when 条件"><span class="material-symbols-rounded">add</span></button>
+          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddVariableWhen" type="button" title="新增 when 条件" aria-label="新增 when 条件"><span class="ep-icon">add</span></button>
         </div>
         <div class="field">
           <label>默认值（default）</label>
@@ -1008,7 +1034,7 @@
         <div class="field">
           <label>Consumes（step_name + alias）</label>
           <div id="f_consumes_rows"></div>
-          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddConsumeRow" type="button" title="新增 consume" aria-label="新增 consume"><span class="material-symbols-rounded">add</span></button>
+          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddConsumeRow" type="button" title="新增 consume" aria-label="新增 consume"><span class="ep-icon">add</span></button>
           <div class="field-note">step_name 支持选择已有 step 名，也支持输入 <code>$</code> 触发运行时变量联想。</div>
           <datalist id="consumeStepOptions"></datalist>
         </div>
@@ -1019,7 +1045,8 @@
           <input id="f_description" value="${escapeAttr(node.description || '')}" placeholder="可选：用于 precheck/step 的说明" />
         </div>
         ` : ''}
-      `;
+        `;
+      renderElementPlusIcons(editorPanel);
 
       const persistEditorNode = () => {
         if (showNodeTitleField) {
@@ -1158,7 +1185,7 @@
           <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px; align-items:center;">
             <input data-sql-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="变量名，如 user_id" />
             <input data-sql-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.value || '')}" placeholder="值，如 $input.user_id 或 100" />
-            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-sql-remove="${index}" title="删除 SQL 变量" aria-label="删除 SQL 变量"><span class="material-symbols-rounded">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-sql-remove="${index}" title="删除 SQL 变量" aria-label="删除 SQL 变量"><span class="ep-icon">delete</span></button>
           </div>
         `).join('');
         rowsContainer.querySelectorAll('[data-sql-remove]').forEach((button) => {
@@ -1197,7 +1224,7 @@
           <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
             <input data-variable-condition="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.condition || '')}" placeholder="条件，如 $input.amount > 1000" />
             <input data-variable-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.value || '')}" placeholder="赋值，如 1000 或 \"PASS\"" />
-            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="material-symbols-rounded">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="ep-icon">delete</span></button>
           </div>
         `).join('');
         rowsContainer.querySelectorAll('[data-variable-remove]').forEach((button) => {
@@ -1246,7 +1273,7 @@
           <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:6px; margin-bottom:6px;">
             <input data-consume-step="${index}" data-ref-autocomplete="true" list="consumeStepOptions" value="${escapeAttr(row.stepName || '')}" placeholder="step_name 或 $steps.xxx" />
             <input data-consume-alias="${index}" value="${escapeAttr(row.alias || '')}" placeholder="alias（可选）" />
-            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="material-symbols-rounded">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="ep-icon">delete</span></button>
           </div>
         `).join('');
         rowsContainer.querySelectorAll('[data-consume-remove]').forEach((button) => {
@@ -1357,7 +1384,7 @@
         <div class="kv-row">
           <input data-input-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="参数名，如 source_object_id" />
           <input data-input-value="${index}" value="${escapeAttr(row.value || '')}" placeholder="参数值，如 DEMO_1、100 或 true" />
-          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-input-remove="${index}" title="删除输入参数" aria-label="删除输入参数"><span class="material-symbols-rounded">delete</span></button>
+          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-input-remove="${index}" title="删除输入参数" aria-label="删除输入参数"><span class="ep-icon">delete</span></button>
         </div>
       `).join('');
       runtimeInputRowsEl.querySelectorAll('[data-input-remove]').forEach((button) => {
@@ -2120,7 +2147,7 @@
         <div class="kv-row">
           <input data-role="name" placeholder="datasource 名称，例如 saas_db" />
           <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" />
-          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="material-symbols-rounded">delete</span></button>
+          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="ep-icon">delete</span></button>
         </div>
       `;
       card.querySelector('[data-role="name"]').value = data && data.name ? data.name : '';
@@ -2233,12 +2260,14 @@
       if (isLoading) {
         runButton.classList.add('btn-loading', 'is-loading');
         runButton.disabled = true;
-        runButton.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span>运行中';
+        runButton.innerHTML = '<span class="ep-icon">hourglass_top</span>运行中';
+        renderElementPlusIcons(runButton);
         return;
       }
       runButton.classList.remove('btn-loading', 'is-loading');
       runButton.disabled = false;
-      runButton.innerHTML = '<span class="material-symbols-rounded">play_circle</span>运行 DSL';
+      runButton.innerHTML = '<span class="ep-icon">play_circle</span>运行 DSL';
+      renderElementPlusIcons(runButton);
     }
 
     async function runDslNow() {
@@ -2685,6 +2714,7 @@
     loadDatasourceConfigLocal();
     closeDslPreview();
     setRunButtonLoading(false);
+    renderElementPlusIcons();
   </script>
 </body>
 </html>
