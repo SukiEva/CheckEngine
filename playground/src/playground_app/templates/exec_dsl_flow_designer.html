@@ -6,7 +6,6 @@
   <title>ExecDSL 流程图式设计器（实验版）</title>
   <link rel="stylesheet" href="/static/vendor/element-plus/index.css" />
   <link rel="stylesheet" href="/static/vendor/prism/prism.min.css" />
-  <link rel="stylesheet" href="/static/vendor/prism/prism-line-numbers.min.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" />
   <style>
     :root {
@@ -425,7 +424,8 @@
       max-height: 42vh;
       overflow: auto;
     }
-    #dslPreview {
+    #dslPreview,
+    #runtimeResult {
       margin: 0;
       max-height: 60vh;
       border: 1px solid #dbe4ee;
@@ -433,18 +433,12 @@
       overflow: auto;
       background: #f8fafc;
     }
-    #dslPreview code {
+    #dslPreview code,
+    #runtimeResult code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       font-size: 0.8rem;
       line-height: 1.45;
       text-shadow: none;
-    }
-    #dslPreview.line-numbers {
-      padding-left: 3.8em;
-    }
-    #dslPreview.line-numbers .line-numbers-rows {
-      border-right: 1px solid #dbe4ee;
-      background: #eef3f8;
     }
 
     .ep-icon {
@@ -659,7 +653,7 @@
       <button class="el-button el-button--default is-plain" id="btnClosePreview" style="padding:6px 10px;"><span class="ep-icon">close</span>关闭</button>
     </div>
     <div style="padding:12px;">
-      <pre id="dslPreview" class="line-numbers"><code id="dslPreviewCode" class="language-json"></code></pre>
+      <pre id="dslPreview"><code id="dslPreviewCode" class="language-json"></code></pre>
     </div>
   </dialog>
 
@@ -670,7 +664,7 @@
     </div>
     <div style="padding:12px; display:grid; gap:12px;">
       <div id="runtimeStatus" style="font-size:0.82rem; color:#6b7280;">尚未执行。</div>
-      <pre id="runtimeResult" class="line-numbers" style="max-height:38vh;"><code id="runtimeResultCode" class="language-json">{}</code></pre>
+      <pre id="runtimeResult"><code id="runtimeResultCode" class="language-json">{}</code></pre>
     </div>
   </dialog>
 
@@ -678,7 +672,6 @@
   <script src="/static/vendor/prism/prism-clike.min.js"></script>
   <script src="/static/vendor/prism/prism-javascript.min.js"></script>
   <script src="/static/vendor/prism/prism-json.min.js"></script>
-  <script src="/static/vendor/prism/prism-line-numbers.min.js"></script>
   <script>
     function renderMaterialIcons(root = document) {
       const iconElements = root.querySelectorAll('.ep-icon');
