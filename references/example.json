@@ -38,8 +38,14 @@
       "sql_params": {
         "source_object_id": "$input.source_object_id"
       },
+      "outputs": [
+        "func",
+        "txn",
+        "rate_type",
+        "rate_date"
+      ],
       "on_fail": {
-        "decision": "exists",
+        "decision": "exists($prechecks.check_rate_null.func)",
         "mode": "sub_repeat",
         "divider": ",",
         "message_cn": "存在汇率为空的记录: [记录{func}-{txn}-{rate_date}]",
@@ -56,8 +62,11 @@
       "sql_params": {
         "source_object_id": "$input.source_object_id"
       },
+      "outputs": [
+        "rate_type"
+      ],
       "on_fail": {
-        "decision": "exists",
+        "decision": "exists($prechecks.check_rate_wrong.rate_type)",
         "mode": "full_repeat",
         "message_cn": "汇率类型{rate_type}错误",
         "message_en": "Exchange rate type {rate_type} is incorrect."

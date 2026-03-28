@@ -152,6 +152,7 @@ class ExecutionState:
     context_result: Optional[NodeExecutionResult] = None
     context_data: MutableMapping[str, Any] = field(default_factory=dict)
     variables_data: MutableMapping[str, Any] = field(default_factory=dict)
+    prechecks_data: MutableMapping[str, Any] = field(default_factory=dict)
     step_results: MutableMapping[str, NodeExecutionResult] = field(default_factory=dict)
     step_data: MutableMapping[str, Any] = field(default_factory=dict)
     executed_nodes: list[ExecutedNodeTrace] = field(default_factory=list)
@@ -162,6 +163,7 @@ class ExecutionState:
             input_data=self.input_data,
             context_data=self.context_data,
             variables_data=self.variables_data,
+            prechecks_data=self.prechecks_data,
             step_data=self.step_data,
         )
 
@@ -178,6 +180,9 @@ class ExecutionState:
     def set_step_result(self, step_name: str, result: NodeExecutionResult) -> None:
         self.step_results[step_name] = result
         self.step_data[step_name] = result.exported_data
+
+    def set_precheck_result(self, precheck_name: str, result: NodeExecutionResult) -> None:
+        self.prechecks_data[precheck_name] = result.exported_data
 
     def record_node_execution(
         self,
@@ -203,6 +208,7 @@ class ExecutionState:
             input_data=self.input_data,
             context_data=self.context_data,
             variables_data=self.variables_data,
+            prechecks_data=self.prechecks_data,
             step_data=self.step_data,
         )
         return self.reference_resolver.resolve_reference(reference)

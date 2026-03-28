@@ -74,6 +74,7 @@
 - `$context`
 - `$variables`
 - `$steps`
+- `$prechecks`（仅用于 `prechecks[].on_fail.decision` 引用当前 precheck 的输出）
 
 标准引用形式：
 
@@ -81,6 +82,7 @@
 - `$context.flow`
 - `$variables.threshold`
 - `$steps.exchange_rate.final_amount`
+- `$prechecks.check_rate_null.func`
 
 约束：
 
@@ -113,7 +115,7 @@
 - 若声明了 `context`，则必须声明 `outputs`
 - 被 `consumes` 引用的节点必须声明 `outputs`
 - 被表达式、`sql_params`、消息模板引用的字段，必须在对应节点的 `outputs` 白名单中
-- `outputs` 必须为非空数组
+- 节点若被跨块引用或被 `consumes` 消费，则其 `outputs` 必须为非空数组
 - `outputs` 中的字段名不得重复
 
 ## 5. consumes 语义
@@ -256,8 +258,9 @@ FROM am
   "sql_params": {
     "source_object_id": "$input.source_object_id"
   },
+  "outputs": ["func", "txn", "rate_type", "rate_date"],
   "on_fail": {
-    "decision": "exists",
+    "decision": "exists($prechecks.check_rate_null.func)",
     "mode": "sub_repeat",
     "divider": ",",
     "message_cn": "存在汇率为空的记录: [记录{func}-{txn}-{rate_date}]",
@@ -271,11 +274,12 @@ FROM am
 - 每个 `precheck` 顺序执行
 - 若 `on_fail.decision` 命中，则立即失败返回
 - 不再继续执行后续 `prechecks`、`steps`、顶层 `on_fail`
+- `precheck.outputs` 用于声明该 SQL 节点可被表达式引用的输出字段
 
 硬规则：
 
-- 每个 `precheck` 必须声明 `name`、`type`、`datasource`、`result_mode`、`sql_template`、`sql_params`、`on_fail`
-- `prechecks[].on_fail.decision` 只允许 `exists` 或 `exists($path)`，不允许其它函数调用
+- 每个 `precheck` 必须声明 `name`、`type`、`datasource`、`result_mode`、`sql_template`、`sql_params`、`outputs`、`on_fail`
+- `prechecks[].on_fail.decision` 只允许受限表达式与 `exists($path)`，不允许裸 `exists` 与其它函数调用
 - `prechecks[].on_fail.mode` 必须是 `single`、`sub_repeat`、`full_repeat` 之一
 
 ### 6.4 steps[]
@@ -354,9 +358,8 @@ FROM am
 
 特例：
 
-- `prechecks[].on_fail.decision` 支持关键字 `exists`（兼容语义：当前 SQL 有结果即失败）
 - `prechecks[].on_fail.decision` 与顶层 `on_fail.decision` 都支持 `exists($path)`
-- 顶层 `on_fail.decision` **不支持** 裸 `exists`，必须写成 `exists($path)`
+- `prechecks[].on_fail.decision` 与顶层 `on_fail.decision` 都**不支持** 裸 `exists`，必须写成 `exists($path)`
 
 建议约束：
 
@@ -500,8 +503,6 @@ FROM am
   "passed": true,
   "phase": "pass",
   "failed_node": null,
-  "error_code": null,
-  "error_detail": null,
   "message_cn": null,
   "message_en": null
 }
@@ -514,8 +515,6 @@ FROM am
   "passed": false,
   "phase": "precheck",
   "failed_node": "check_rate_null",
-  "error_code": null,
-  "error_detail": null,
   "message_cn": "存在汇率为空的记录: ...",
   "message_en": "There are records with null exchange rates: ..."
 }
@@ -528,8 +527,6 @@ FROM am
   "passed": false,
   "phase": "final",
   "failed_node": "on_fail",
-  "error_code": null,
-  "error_detail": null,
   "message_cn": "金额1000超过阈值800",
   "message_en": "The amount 1000 exceeds the threshold 800."
 }
@@ -542,8 +539,6 @@ FROM am
   "passed": false,
   "phase": "runtime",
   "failed_node": "exchange_rate",
-  "error_code": "E2007_SQL_EXECUTION_FAILED",
-  "error_detail": "SQL node execution failed: exchange_rate",
   "message_cn": "SQL node execution failed: exchange_rate",
   "message_en": "SQL node execution failed: exchange_rate"
 }
@@ -551,7 +546,6 @@ FROM am
 
 补充说明：
 
-- `pass` / `precheck` / `final` 三类结果中，`error_code` 与 `error_detail` 固定为 `null`
 - `runtime` 结果表示执行器、SQL、引用解析、消息渲染等执行期错误
 - `runtime.failed_node` 应尽量标识出错节点，例如：`context`、具体 `step.name`、具体 `precheck.name`、`variables.<name>`、`on_fail`
 
@@ -562,7 +556,7 @@ FROM am
 - 只支持只读 SQL
 - `context` 和 `steps` 当前只支持 `type: sql`
 - `variables` 当前只支持赋值语义：`when` 有条件分支；`when` 为空表示常量（取 `default`）
-- `prechecks.on_fail.decision` 支持兼容关键字 `exists`，并支持 `exists($path)`
+- `prechecks.on_fail.decision` 支持表达式与 `exists($path)`（不支持裸 `exists`）
 - 顶层 `on_fail.decision` 支持表达式与 `exists($path)`（不支持裸 `exists`）
 - 不支持循环、自定义脚本与除 `exists(...)` 外的函数调用
 - 不支持无作用域的字段引用
@@ -585,7 +579,7 @@ FROM am
 | `variables.when[].condition` | `$input`、`$context`、已完成求值的 `$variables` |
 | `variables.when[].value` / `variables.default` | JSON 标量、数组、对象字面量；若实现支持路径引用，则仅允许 `$input`、`$context`、已完成求值的 `$variables` |
 | `prechecks[].sql_params` | `$input`、`$context`、`$variables` |
-| `prechecks[].on_fail.decision` | 裸 `exists`；或 `$input`、`$context`、`$variables`、当前 `precheck` 结果路径上的 `exists($path)` |
+| `prechecks[].on_fail.decision` | `$input`、`$context`、`$variables`、当前 `precheck.outputs` 上的 `$prechecks.<name>.<field>`，以及基于这些路径的 `exists($path)` |
 | `prechecks[].on_fail.message_*` | 当前 `precheck` 行级字段、`$input`、`$context`、`$variables` |
 | `steps[].sql_params` | `$input`、`$context`、`$variables`、前序 `steps.outputs` |
 | `steps[].consumes[].from` | `$context`、前序 `steps` |
@@ -595,54 +589,10 @@ FROM am
 ### 12.2 补充硬规则
 
 - `variables` 按声明顺序求值；后声明变量可以引用先声明变量，反之不允许
-- `prechecks` 之间不建立运行时结果作用域；后续 `precheck` 不允许直接引用前一个 `precheck` 的 SQL 结果
+- `prechecks` 之间不建立运行时结果作用域；`prechecks[].on_fail.decision` 仅允许引用当前 precheck 的 `$prechecks.<name>.<field>`
 - `steps` 之间的字段引用必须通过显式命名空间路径完成；若当前步骤需要在 SQL 中使用前序步骤结果，优先通过 `consumes` 声明数据依赖
 - 顶层 `on_fail` 不允许直接引用 `prechecks` 的结果
 - 顶层 `on_fail.message_*` 若使用 `single`，则不得引用来自 `result_mode = records` 的数组输出；若需要渲染数组结果，应改用 `sub_repeat` 或 `full_repeat`
-
-## 13. 建议的错误码
-
-为提升执行结果可观测性，建议在 `v0.1` 内部实现中区分“校验错误码”和“运行时错误码”。以下错误码可作为推荐保留字。
-
-### 13.1 校验错误码（建议）
-
-| 错误码 | 含义 |
-| --- | --- |
-| `E1001_UNKNOWN_TOP_LEVEL_FIELD` | 出现未知顶层字段 |
-| `E1002_MISSING_REQUIRED_FIELD` | 缺少必填字段 |
-| `E1003_INVALID_FIELD_TYPE` | 字段类型非法 |
-| `E1004_DUPLICATE_NODE_NAME` | `precheck` 或 `step` 名称重复 |
-| `E1005_RESERVED_NODE_NAME` | 节点名称使用保留作用域名 |
-| `E1006_UNRESOLVED_PATH` | 路径无法静态解析 |
-| `E1007_MISSING_OUTPUTS` | 被引用或被消费节点未声明 `outputs` |
-| `E1008_INVALID_CONSUMES_REF` | `consumes` 引用了非法节点、前向节点或形成循环 |
-| `E1009_INVALID_CONSUMES_ALIAS` | `consumes.alias` 非法或重复 |
-| `E1010_INVALID_EXPRESSION` | 表达式使用了不支持的语法 |
-| `E1011_INVALID_MESSAGE_TEMPLATE` | 消息模板语法不合法 |
-| `E1012_INVALID_RESULT_MODE` | `result_mode` 非 `record` / `records` |
-| `E1013_NON_READONLY_SQL` | `sql_template` 不是只读 SQL |
-
-### 13.2 运行时错误码（建议）
-
-| 错误码 | 含义 |
-| --- | --- |
-| `E2001_CONTEXT_RESULT_MISMATCH` | `context` 返回结果与 `result_mode` 不匹配 |
-| `E2002_STEP_RESULT_MISMATCH` | `step` 返回结果与 `result_mode` 不匹配 |
-| `E2003_OUTPUT_COLUMN_MISMATCH` | 实际返回列与 `outputs` 不一致 |
-| `E2004_ARRAY_LENGTH_MISMATCH` | `records` 导出字段按列展开后数组长度不一致 |
-| `E2005_SINGLE_MODE_MULTI_ROWS` | `single` 模式下出现多行结果 |
-| `E2006_TEMPLATE_RENDER_FAILED` | 消息模板渲染失败 |
-| `E2007_SQL_EXECUTION_FAILED` | SQL 执行报错 |
-| `E2008_DATASOURCE_NOT_FOUND` | 数据源不存在或不可用 |
-
-### 13.3 错误结果建议字段
-
-若执行器要增强可观测性，建议在标准结果之外补充以下调试字段：
-
-- `error_code`
-- `error_detail`
-- `executed_nodes`
-- `decision_snapshot`
 
 ## 14. Validator 检查清单（建议实现顺序）
 

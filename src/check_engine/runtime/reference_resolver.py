@@ -99,7 +99,8 @@ class RuntimeReferenceResolver:
     input_data: Mapping[str, Any]
     context_data: Mapping[str, Any]
     variables_data: Mapping[str, Any]
-    step_data: MutableMapping[str, Any]
+    prechecks_data: MutableMapping[str, Any] = field(default_factory=dict)
+    step_data: MutableMapping[str, Any] = field(default_factory=dict)
     _resolvers: dict[str, ScopeResolver] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -111,12 +112,14 @@ class RuntimeReferenceResolver:
         input_data: Mapping[str, Any],
         context_data: Mapping[str, Any],
         variables_data: Mapping[str, Any],
+        prechecks_data: MutableMapping[str, Any],
         step_data: MutableMapping[str, Any],
     ) -> None:
         if (
             self.input_data is input_data
             and self.context_data is context_data
             and self.variables_data is variables_data
+            and self.prechecks_data is prechecks_data
             and self.step_data is step_data
         ):
             return
@@ -124,6 +127,7 @@ class RuntimeReferenceResolver:
         self.input_data = input_data
         self.context_data = context_data
         self.variables_data = variables_data
+        self.prechecks_data = prechecks_data
         self.step_data = step_data
         self._resolvers = self._build_resolvers()
 
@@ -132,6 +136,7 @@ class RuntimeReferenceResolver:
             "input": MappingScopeResolver(self.input_data),
             "context": MappingScopeResolver(self.context_data),
             "variables": MappingScopeResolver(self.variables_data),
+            "prechecks": StepScopeResolver(self.prechecks_data),
             "steps": StepScopeResolver(self.step_data),
         }
 
