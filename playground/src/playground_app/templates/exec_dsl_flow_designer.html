@@ -1470,7 +1470,7 @@
         <div class="kv-row">
           <input data-input-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="参数名，如 source_object_id" />
           <input data-input-value="${index}" value="${escapeAttr(row.value || '')}" placeholder="参数值，如 DEMO_1、100 或 true" />
-          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-input-remove="${index}" title="删除输入参数" aria-label="删除输入参数"><span class="ep-icon">delete</span></button>
+          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-input-remove="${index}" title="删除输入参数" aria-label="删除输入参数"><span aria-hidden="true">✕</span></button>
         </div>
       `).join('');
       runtimeInputRowsEl.querySelectorAll('[data-input-remove]').forEach((button) => {
@@ -2259,7 +2259,7 @@
         <div class="kv-row">
           <input data-role="name" placeholder="datasource 名称，例如 saas_db" />
           <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" />
-          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="ep-icon">delete</span></button>
+          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span aria-hidden="true">✕</span></button>
         </div>
       `;
       card.querySelector('[data-role="name"]').value = data && data.name ? data.name : '';
