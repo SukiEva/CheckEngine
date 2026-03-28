@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
-from typing import Optional
 
 from ..dsl import DslDocument
 from ..exceptions import DSLExecutionError, DSLValidationError
@@ -27,10 +25,8 @@ class DslCompiler:
     def __init__(
         self,
         expression_evaluator: ExpressionEvaluator,
-        logger: Optional[logging.Logger] = None,
     ) -> None:
         self.expression_evaluator = expression_evaluator
-        self.logger = logger or logging.getLogger(__name__)
 
     def compile(self, document: DslDocument) -> CompiledDsl:
         variable_conditions = {
@@ -62,7 +58,7 @@ class DslCompiler:
         try:
             return self.expression_evaluator.compile(expression)
         except DSLExecutionError as exc:
-            self.logger.exception("Failed to compile expression at %s: %s", path, expression)
             raise DSLValidationError(
                 f"{path} is invalid: {exc}",
+                original_exception=exc,
             ) from exc

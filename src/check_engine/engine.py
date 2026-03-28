@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import traceback
 from collections.abc import Callable, Mapping
 from functools import partial
 from typing import Any, Optional, TypeVar
@@ -32,15 +33,14 @@ class DslEngine:
             raise ValueError("compile_cache_size must be greater than or equal to 0.")
 
         self.logger = logger or logging.getLogger(__name__)
-        self.parser: JsonDslParser = JsonDslParser(logger=self.logger)
+        self.parser: JsonDslParser = JsonDslParser()
         self.validator: DslValidator = DslValidator()
-        self.expression_evaluator: ExpressionEvaluator = ExpressionEvaluator(logger=self.logger)
+        self.expression_evaluator: ExpressionEvaluator = ExpressionEvaluator()
         self.compiler: DslCompiler = DslCompiler(
             expression_evaluator=self.expression_evaluator,
-            logger=self.logger,
         )
-        self.sql_executor: SqlExecutor = SqlExecutor(logger=self.logger)
-        self.message_renderer: MessageRenderer = MessageRenderer(logger=self.logger)
+        self.sql_executor: SqlExecutor = SqlExecutor()
+        self.message_renderer: MessageRenderer = MessageRenderer()
         self.compile_cache_size = compile_cache_size
         self._compile_cache_backend: CompileCacheLike[CompiledDsl] = (
             HashedLruCompileCache(compile_cache_size) if compile_cache_size > 0 else NoopCompileCache()
@@ -50,8 +50,13 @@ class DslEngine:
         """显式校验 DSL（适合保存/更新规则时调用）。"""
         if not isinstance(dsl_text, str):
             raise TypeError("dsl_text must be a string.")
-        document = self.parser.parse(dsl_text)
-        self.validator.validate(document)
+        try:
+            document = self.parser.parse(dsl_text)
+            self.validator.validate(document)
+        except Exception as exc:  # noqa: BLE001
+            handled_error = self._ensure_dsl_error(exc)
+            self._log_dsl_error("validate", handled_error)
+            raise handled_error from exc
 
     def execute(
         self,
@@ -61,7 +66,12 @@ class DslEngine:
     ) -> ExecutionResult:
         if not isinstance(dsl_text, str):
             raise TypeError("dsl_text must be a string.")
-        compiled_dsl = self._compile(dsl_text)
+        try:
+            compiled_dsl = self._compile(dsl_text)
+        except Exception as exc:  # noqa: BLE001
+            handled_error = self._ensure_dsl_error(exc)
+            self._log_dsl_error("compile", handled_error)
+            raise handled_error from exc
         document = compiled_dsl.document
         state = ExecutionState.new(input_data=input_data)
 
@@ -267,6 +277,7 @@ class DslEngine:
             datasource=node.datasource,
             result_mode=node.result_mode,
             row_count=len(result.raw_rows),
+            executed_sql=result.executed_sql,
         )
         return result
 
@@ -310,5 +321,19 @@ class DslEngine:
         try:
             return action(), None
         except DSLExecutionError as exc:
-            self.logger.exception("Runtime execution failed at node %s", failed_node)
+            self._log_dsl_error(f"runtime:{failed_node}", exc)
             return None, ExecutionResult.build_runtime_failure(exc, state, failed_node=failed_node)
+
+    @staticmethod
+    def _ensure_dsl_error(exc: Exception) -> Exception:
+        from .exceptions import DSLParseError, DSLValidationError
+
+        if isinstance(exc, (DSLParseError, DSLValidationError, DSLExecutionError)):
+            return exc
+        return DSLExecutionError("Unexpected runtime error in DSL engine.", original_exception=exc)
+
+    def _log_dsl_error(self, phase: str, exc: Exception) -> None:
+        error_traceback = getattr(exc, "original_traceback", None)
+        if not isinstance(error_traceback, str) or not error_traceback:
+            error_traceback = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        self.logger.error("DslEngine %s failed: %s\n%s", phase, exc, error_traceback)

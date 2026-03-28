@@ -28,11 +28,12 @@ class _FailingSqlExecutor:
 
 class _PassingSqlExecutor:
     def execute_node(self, node: Any, state: Any, datasource_registry: Any, node_name: str) -> NodeExecutionResult:
-        del node, state, datasource_registry, node_name
+        del state, datasource_registry, node_name
         return NodeExecutionResult(
             raw_rows=[{"v": 1}],
             exported_data={"v": 1},
             exported_fields=["v"],
+            executed_sql=node.sql_template,
         )
 
 
@@ -81,9 +82,11 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "runtime")
         self.assertEqual(result.failed_node, "step_a")
-        self.assertEqual(result.message_cn, "SQL node execution failed: step_a")
-        self.assertEqual(result.message_en, "SQL node execution failed: step_a")
-        logger_mock.exception.assert_called_once_with("Runtime execution failed at node %s", "step_a")
+        self.assertIsNone(result.message_cn)
+        self.assertIsNone(result.message_en)
+        self.assertEqual(result.error_message, "SQL node execution failed: step_a")
+        self.assertTrue(result.runtime_exception)
+        logger_mock.error.assert_called_once()
 
     def test_execute_returns_runtime_failure_result_with_on_fail_node(self) -> None:
         engine = DslEngine()
@@ -117,8 +120,10 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "runtime")
         self.assertEqual(result.failed_node, "on_fail")
-        self.assertEqual(result.message_cn, "Message render failed")
-        self.assertEqual(result.message_en, "Message render failed")
+        self.assertIsNone(result.message_cn)
+        self.assertIsNone(result.message_en)
+        self.assertEqual(result.error_message, "Message render failed")
+        self.assertTrue(result.runtime_exception)
 
     def test_set_context_result_accepts_mapping_view(self) -> None:
         from check_engine.runtime.state import ExecutionState
@@ -164,6 +169,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
         self.assertTrue(result.passed)
         self.assertEqual(result.phase, "pass")
+        self.assertIsNone(result.error_message)
+        self.assertFalse(result.runtime_exception)
 
     def test_execute_multiple_times_without_state_leak(self) -> None:
         class _InputDrivenSqlExecutor:
@@ -223,13 +230,10 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         with self.assertRaisesRegex(DSLValidationError, "on_fail.decision"):
             engine.execute(invalid_dsl_text, {}, datasource_registry=registry)
 
-        self.assertEqual(logger_mock.exception.call_count, 2)
-        logger_mock.exception.assert_any_call("Failed to parse expression syntax: %s", "$steps.step_a.v >")
-        logger_mock.exception.assert_any_call(
-            "Failed to compile expression at %s: %s",
-            "on_fail.decision",
-            "$steps.step_a.v >",
-        )
+        logger_mock.error.assert_called_once()
+        logged_args = logger_mock.error.call_args[0]
+        self.assertEqual(logged_args[0], "DslEngine %s failed: %s\n%s")
+        self.assertEqual(logged_args[1], "compile")
 
     def test_execution_result_to_dict_normalizes_mapping_views(self) -> None:
         result = ExecutionResult(
@@ -238,6 +242,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             failed_node="on_fail",
             message_cn="x",
             message_en="y",
+            error_message=None,
+            runtime_exception=False,
             context=MappingProxyType({"flow": "f1"}),
             variables=MappingProxyType({"threshold": 1000}),
             steps=MappingProxyType({"step_a": MappingProxyType({"values": (1, 2)})}),
@@ -253,6 +259,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 "failed_node": "on_fail",
                 "message_cn": "x",
                 "message_en": "y",
+                "error_message": None,
+                "runtime_exception": False,
                 "context": {"flow": "f1"},
                 "variables": {"threshold": 1000},
                 "steps": {"step_a": {"values": [1, 2]}},
@@ -267,6 +275,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             failed_node=None,
             message_cn=None,
             message_en=None,
+            error_message=None,
+            runtime_exception=False,
             context=MappingProxyType({"flow": "f1"}),
             variables=MappingProxyType({"threshold": 1000}),
             steps=MappingProxyType({"step_a": MappingProxyType({"values": (1, 2)})}),
@@ -282,6 +292,8 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 "failed_node": None,
                 "message_cn": None,
                 "message_en": None,
+                "error_message": None,
+                "runtime_exception": False,
                 "context": {"flow": "f1"},
                 "variables": {"threshold": 1000},
                 "steps": {"step_a": {"values": [1, 2]}},
@@ -319,6 +331,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                     "datasource": item.datasource,
                     "result_mode": item.result_mode,
                     "row_count": item.row_count,
+                    "executed_sql": item.executed_sql,
                 }
                 for item in result.executed_nodes
             ],
@@ -329,6 +342,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                     "datasource": "db",
                     "result_mode": "record",
                     "row_count": 1,
+                    "executed_sql": "select 1 as v",
                 }
             ],
         )

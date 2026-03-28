@@ -35,6 +35,7 @@ class ExecutedNodeTrace:
     datasource: Optional[str]
     result_mode: Optional[str]
     row_count: Optional[int]
+    executed_sql: Optional[str]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -43,6 +44,7 @@ class ExecutedNodeTrace:
             "datasource": self.datasource,
             "result_mode": self.result_mode,
             "row_count": self.row_count,
+            "executed_sql": self.executed_sql,
         }
 
 
@@ -53,6 +55,7 @@ class NodeExecutionResult:
     raw_rows: Sequence[Mapping[str, Any]]
     exported_data: Any
     exported_fields: Sequence[str]
+    executed_sql: Optional[str] = None
 
     def __post_init__(self) -> None:
         frozen_rows = tuple(MappingProxyType(dict(row)) for row in self.raw_rows)
@@ -72,6 +75,8 @@ class ExecutionResult:
     failed_node: Optional[str]
     message_cn: Optional[str]
     message_en: Optional[str]
+    error_message: Optional[str]
+    runtime_exception: bool
     context: Mapping[str, Any]
     variables: Mapping[str, Any]
     steps: Mapping[str, Any]
@@ -85,6 +90,8 @@ class ExecutionResult:
             failed_node=None,
             message_cn=None,
             message_en=None,
+            error_message=None,
+            runtime_exception=False,
             **ExecutionResult._state_payload(state),
         )
 
@@ -102,6 +109,8 @@ class ExecutionResult:
             failed_node=failed_node,
             message_cn=message_cn,
             message_en=message_en,
+            error_message=None,
+            runtime_exception=False,
             **ExecutionResult._state_payload(state),
         )
 
@@ -116,8 +125,10 @@ class ExecutionResult:
             passed=False,
             phase="runtime",
             failed_node=failed_node,
-            message_cn=str(error),
-            message_en=str(error),
+            message_cn=None,
+            message_en=None,
+            error_message=str(error),
+            runtime_exception=True,
             **ExecutionResult._state_payload(state),
         )
 
@@ -128,6 +139,8 @@ class ExecutionResult:
             "failed_node": self.failed_node,
             "message_cn": self.message_cn,
             "message_en": self.message_en,
+            "error_message": self.error_message,
+            "runtime_exception": self.runtime_exception,
             "context": _to_plain_data(self.context),
             "variables": _to_plain_data(self.variables),
             "steps": _to_plain_data(self.steps),
@@ -192,6 +205,7 @@ class ExecutionState:
         datasource: Optional[str],
         result_mode: Optional[str],
         row_count: Optional[int],
+        executed_sql: Optional[str],
     ) -> None:
         self.executed_nodes.append(
             ExecutedNodeTrace(
@@ -200,6 +214,7 @@ class ExecutionState:
                 datasource=datasource,
                 result_mode=result_mode,
                 row_count=row_count,
+                executed_sql=executed_sql,
             )
         )
 

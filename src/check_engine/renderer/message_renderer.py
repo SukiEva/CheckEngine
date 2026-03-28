@@ -169,12 +169,11 @@ class MessageRenderer(MessageRenderHelpers):
             value = self._resolve_token_value(token, state, row, overrides, local_data)
             return format(value, format_spec)
         except DSLExecutionError:
-            self.logger.exception("Failed to resolve placeholder value: %s", match.group(0))
             raise
         except Exception as exc:  # noqa: BLE001
-            self.logger.exception("Failed to format placeholder: %s", match.group(0))
             raise DSLExecutionError(
                 f"Failed to format placeholder: {match.group(0)}",
+                original_exception=exc,
             ) from exc
 
     def _resolve_token_value(

@@ -38,8 +38,10 @@ class JsonDslParser:
         try:
             data = json.loads(dsl_text)
         except json.JSONDecodeError as exc:
-            self.logger.exception("Failed to decode DSL JSON text.")
-            raise DSLParseError(f"Failed to parse DSL JSON: {exc.msg}") from exc
+            raise DSLParseError(
+                f"Failed to parse DSL JSON: {exc.msg}",
+                original_exception=exc,
+            ) from exc
 
         if not isinstance(data, dict):
             raise DSLParseError("Top-level DSL must be a JSON object.")
