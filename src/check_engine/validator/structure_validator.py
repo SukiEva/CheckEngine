@@ -36,7 +36,7 @@ class StructureValidator:
     VALID_FAIL_MODES = {FAIL_MODE_SUB_REPEAT, FAIL_MODE_FULL_REPEAT, FAIL_MODE_SINGLE}
     RESERVED_NODE_NAMES = {field for field in ReservedNodeName}
     ALIAS_PATTERN = re.compile(r"^[A-Za-z_]\w*$")
-    EXISTS_CALL_PATTERN = re.compile(r"^exists\(\s*\$[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*\)$")
+    EXISTS_CALL_PATTERN = re.compile(r"^exists\(\s*\$(?:\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\)$")
 
     def validate(self, document: DslDocument) -> None:
         self._validate_top_level_fields(document.raw)
