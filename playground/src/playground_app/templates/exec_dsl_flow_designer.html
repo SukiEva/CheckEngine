@@ -78,6 +78,7 @@
       padding: 14px;
       display: grid;
       gap: 10px;
+      align-content: start;
       min-height: 0;
       overflow: auto;
     }
@@ -130,6 +131,9 @@
     }
 
     .el-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       gap: 6px;
       border-radius: 10px;
       font-size: 0.84rem;
@@ -259,9 +263,18 @@
       gap: 6px;
     }
     .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       min-width: 32px;
+      width: 32px;
       height: 32px;
       padding: 0;
+      line-height: 1;
+    }
+    .icon-btn .material-symbols-rounded {
+      margin: 0;
+      line-height: 1;
     }
 
     .muted { color: var(--muted); }
@@ -402,16 +415,9 @@
     .tab-panel.active {
       display: grid;
     }
-    .mini-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-    }
     .datasource-list {
       display: grid;
       gap: 8px;
-      min-height: 220px;
       align-content: start;
       border: 1px solid #e5e7eb;
       border-radius: 12px;
@@ -419,12 +425,12 @@
       background: #f9fafb;
     }
     .datasource-list:empty::before {
-      content: "暂无数据源配置，点击“载入”或“新增”开始配置。";
+      content: "暂无数据源配置，点击“+”开始配置。";
       color: var(--muted);
       font-size: 0.8rem;
       border: 1px dashed #cbd5e1;
       border-radius: 10px;
-      min-height: 160px;
+      min-height: 96px;
       display: grid;
       place-items: center;
       text-align: center;
@@ -519,16 +525,12 @@
           <button type="button" class="el-button el-button--default is-plain tab-btn active is-active" data-tab-target="input">输入参数</button>
         </div>
         <section class="tab-panel" data-tab-panel="datasource">
-          <div class="mini-toolbar">
-            <button type="button" class="el-button el-button--info is-plain" id="btnDsReload"><span class="material-symbols-rounded">database</span>载入</button>
-            <button type="button" class="el-button el-button--primary" id="btnDsSave"><span class="material-symbols-rounded">save</span>保存</button>
-          </div>
           <div class="field">
             <label>datasource（name/db_url）</label>
-            <button type="button" class="el-button el-button--primary is-plain is-circle icon-btn" id="btnDsAdd" title="新增数据源" aria-label="新增数据源"><span class="material-symbols-rounded">add</span></button>
           </div>
           <div class="field-note">仅支持 PostgreSQL：<code>postgresql://</code> 或 <code>postgresql+psycopg2://</code>。</div>
           <div class="datasource-list" id="datasourceList"></div>
+          <button type="button" class="el-button el-button--primary is-plain is-circle icon-btn" id="btnDsAdd" title="新增数据源" aria-label="新增数据源"><span class="material-symbols-rounded">add</span></button>
           <div class="inline-status" id="datasourceStatus">尚未加载数据源配置。</div>
         </section>
         <section class="tab-panel active" data-tab-panel="input">
@@ -612,6 +614,7 @@
     const datasourceList = document.getElementById('datasourceList');
     const datasourceStatus = document.getElementById('datasourceStatus');
     const DATASOURCE_CONFIG_STORAGE_KEY = 'execdsl_flow_designer_datasource_v1';
+    const INPUT_CONFIG_STORAGE_KEY = 'execdsl_flow_designer_input_v1';
     const DEFAULT_DATASOURCE_CONFIGS = [
       {
         name: 'saas_db',
@@ -622,13 +625,14 @@
         db_url: 'postgresql+psycopg2://user:password@127.0.0.1:5432/data_db',
       },
     ];
+    const DEFAULT_INPUT_ROWS = [{ key: 'source_object_id', value: 'DEMO_1' }];
 
     const state = {
       nodes: [],
       selectedId: null,
     };
     let datasourceNameOptions = [];
-    let runtimeInputRows = [{ key: 'source_object_id', value: 'DEMO_1' }];
+    let runtimeInputRows = [...DEFAULT_INPUT_ROWS];
 
     const FIXED_TYPES = new Set(['context', 'on_fail']);
     const SQL_NODE_TYPES = new Set(['context', 'precheck', 'step']);
@@ -1219,19 +1223,18 @@
 
     function normalizeInputRows(rows) {
       if (!Array.isArray(rows)) {
-        return [{ key: 'source_object_id', value: 'DEMO_1' }];
+        return [...DEFAULT_INPUT_ROWS];
       }
       const normalized = rows
         .map((row) => ({
           key: row && typeof row.key === 'string' ? row.key.trim() : '',
           value: row && typeof row.value === 'string' ? row.value : normalizeValueToInput(row && Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : ''),
-        }))
-        .filter((row) => row.key || row.value);
+        }));
       const hasSourceObjectId = normalized.some((row) => row.key === 'source_object_id');
       if (!hasSourceObjectId) {
         normalized.unshift({ key: 'source_object_id', value: 'DEMO_1' });
       }
-      return normalized.length ? normalized : [{ key: 'source_object_id', value: 'DEMO_1' }];
+      return normalized.length ? normalized : [...DEFAULT_INPUT_ROWS];
     }
 
     function renderRuntimeInputRows() {
@@ -1287,20 +1290,26 @@
     function saveInputConfigLocal() {
       const currentRows = readRuntimeInputRows();
       runtimeInputRows = currentRows;
-      localStorage.setItem('execdsl_flow_designer_input_v1', JSON.stringify(currentRows));
+      localStorage.setItem(INPUT_CONFIG_STORAGE_KEY, JSON.stringify(currentRows));
     }
 
     function loadInputConfigLocal() {
-      const raw = localStorage.getItem('execdsl_flow_designer_input_v1');
+      const raw = localStorage.getItem(INPUT_CONFIG_STORAGE_KEY);
       if (!raw) {
-        runtimeInputRows = normalizeInputRows(runtimeInputRows);
+        runtimeInputRows = normalizeInputRows(DEFAULT_INPUT_ROWS);
+        localStorage.setItem(INPUT_CONFIG_STORAGE_KEY, JSON.stringify(runtimeInputRows));
         return;
       }
       try {
         const parsed = JSON.parse(raw);
-        runtimeInputRows = normalizeInputRows(parsed);
+        const normalized = normalizeInputRows(parsed);
+        runtimeInputRows = normalized;
+        if (!Array.isArray(parsed) || parsed.length !== normalized.length) {
+          localStorage.setItem(INPUT_CONFIG_STORAGE_KEY, JSON.stringify(normalized));
+        }
       } catch (_error) {
-        runtimeInputRows = normalizeInputRows(runtimeInputRows);
+        runtimeInputRows = normalizeInputRows(DEFAULT_INPUT_ROWS);
+        localStorage.setItem(INPUT_CONFIG_STORAGE_KEY, JSON.stringify(runtimeInputRows));
       }
     }
 
@@ -1977,11 +1986,11 @@
       card.querySelector('[data-role="db_url"]').value = data && data.db_url ? data.db_url : '';
       card.querySelector('[data-role="remove"]').addEventListener('click', () => {
         card.remove();
-        updateDatasourceOptions(readDatasourceConfigRows());
+        saveDatasourceConfigLocal();
       });
       card.querySelectorAll('[data-role="name"], [data-role="db_url"]').forEach((input) => {
         input.addEventListener('change', () => {
-          updateDatasourceOptions(readDatasourceConfigRows());
+          saveDatasourceConfigLocal();
           renderEditor();
         });
       });
@@ -2028,7 +2037,8 @@
         const rawLocalValue = localStorage.getItem(DATASOURCE_CONFIG_STORAGE_KEY);
         if (!rawLocalValue) {
           renderDatasourceCards(DEFAULT_DATASOURCE_CONFIGS);
-          datasourceStatus.textContent = `未找到本地配置，已加载默认 ${DEFAULT_DATASOURCE_CONFIGS.length} 个数据源。`;
+          localStorage.setItem(DATASOURCE_CONFIG_STORAGE_KEY, JSON.stringify(DEFAULT_DATASOURCE_CONFIGS));
+          datasourceStatus.textContent = `未找到本地配置，已初始化默认 ${DEFAULT_DATASOURCE_CONFIGS.length} 个数据源。`;
           renderEditor();
           return;
         }
@@ -2036,7 +2046,8 @@
         const datasourceConfigs = normalizeDatasourceConfigs(parsed);
         if (!datasourceConfigs.length) {
           renderDatasourceCards(DEFAULT_DATASOURCE_CONFIGS);
-          datasourceStatus.textContent = `本地配置为空，已加载默认 ${DEFAULT_DATASOURCE_CONFIGS.length} 个数据源。`;
+          localStorage.setItem(DATASOURCE_CONFIG_STORAGE_KEY, JSON.stringify(DEFAULT_DATASOURCE_CONFIGS));
+          datasourceStatus.textContent = `本地配置为空，已恢复默认 ${DEFAULT_DATASOURCE_CONFIGS.length} 个数据源。`;
           renderEditor();
           return;
         }
@@ -2045,6 +2056,7 @@
         renderEditor();
       } catch (error) {
         renderDatasourceCards(DEFAULT_DATASOURCE_CONFIGS);
+        localStorage.setItem(DATASOURCE_CONFIG_STORAGE_KEY, JSON.stringify(DEFAULT_DATASOURCE_CONFIGS));
         datasourceStatus.textContent = `本地配置读取失败，已加载默认数据源。错误: ${error.message || '未知错误'}`;
         renderEditor();
       }
@@ -2058,15 +2070,6 @@
         : '已清空本地数据源配置。';
       updateDatasourceOptions(datasourcePayload);
       renderEditor();
-    }
-
-    function warmupDatasourceOptions() {
-      const datasourceConfigs = normalizeDatasourceConfigs(readDatasourceConfigRows());
-      updateDatasourceOptions(datasourceConfigs);
-      const selectedNode = state.nodes.find((item) => item.id === state.selectedId);
-      if (selectedNode && (selectedNode.type === 'context' || selectedNode.type === 'precheck' || selectedNode.type === 'step')) {
-        renderEditor();
-      }
     }
 
     function closeRuntimeDialog() {
@@ -2513,18 +2516,10 @@
       });
     });
 
-    document.getElementById('btnDsReload').addEventListener('click', () => {
-      loadDatasourceConfigLocal();
-    });
-
     document.getElementById('btnDsAdd').addEventListener('click', () => {
       datasourceList.appendChild(createDatasourceCard({ name: '', db_url: '' }));
-      warmupDatasourceOptions();
-      renderEditor();
-    });
-
-    document.getElementById('btnDsSave').addEventListener('click', () => {
       saveDatasourceConfigLocal();
+      renderEditor();
     });
 
     if (addInputParamButton) {
