@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any, Optional, Protocol, cast
@@ -28,8 +29,13 @@ class ExecutionStateLike(Protocol):
 class SqlExecutor:
     """执行 context、precheck、step 中的 SQL 节点。"""
 
-    def __init__(self, cte_builder: Optional[CteBuilder] = None) -> None:
+    def __init__(
+        self,
+        cte_builder: Optional[CteBuilder] = None,
+        logger: Optional[logging.Logger] = None,
+    ) -> None:
         self.cte_builder = cte_builder or CteBuilder()
+        self.logger = logger or logging.getLogger(__name__)
 
     def execute_node(
         self,
@@ -50,7 +56,9 @@ class SqlExecutor:
             exported_data, exported_fields = self._project_outputs(node, node_name, rows)
         except Exception as exc:  # noqa: BLE001
             if isinstance(exc, DSLExecutionError):
+                self.logger.exception("SQL node execution failed with DSL error at node %s", node_name)
                 raise
+            self.logger.exception("SQL node execution failed at node %s", node_name)
             raise DSLExecutionError(
                 f"SQL node execution failed: {node_name}",
             ) from exc

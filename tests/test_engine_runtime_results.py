@@ -223,7 +223,9 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         with self.assertRaisesRegex(DSLValidationError, "on_fail.decision"):
             engine.execute(invalid_dsl_text, {}, datasource_registry=registry)
 
-        logger_mock.exception.assert_called_once_with(
+        self.assertEqual(logger_mock.exception.call_count, 2)
+        logger_mock.exception.assert_any_call("Failed to parse expression syntax: %s", "$steps.step_a.v >")
+        logger_mock.exception.assert_any_call(
             "Failed to compile expression at %s: %s",
             "on_fail.decision",
             "$steps.step_a.v >",
