@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ExecDSL 流程图式设计器（实验版）</title>
-  <link rel="stylesheet" href="/static/vendor/element-plus/index.css" />
-  <link rel="stylesheet" href="/static/vendor/prism/prism.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" />
   <style>
     :root {
@@ -425,7 +425,8 @@
       overflow: auto;
     }
     #dslPreview,
-    #runtimeResult {
+    #runtimeResult,
+    #validateResult {
       margin: 0;
       max-height: 60vh;
       border: 1px solid #dbe4ee;
@@ -434,7 +435,8 @@
       background: #f8fafc;
     }
     #dslPreview code,
-    #runtimeResult code {
+    #runtimeResult code,
+    #validateResult code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       font-size: 0.8rem;
       line-height: 1.45;
@@ -680,10 +682,10 @@
     </div>
   </dialog>
 
-  <script src="/static/vendor/prism/prism-core.min.js"></script>
-  <script src="/static/vendor/prism/prism-clike.min.js"></script>
-  <script src="/static/vendor/prism/prism-javascript.min.js"></script>
-  <script src="/static/vendor/prism/prism-json.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-clike.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
   <script>
     function renderMaterialIcons(root = document) {
       const iconElements = root.querySelectorAll('.ep-icon');
