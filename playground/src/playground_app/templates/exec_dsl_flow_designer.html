@@ -669,6 +669,17 @@
     </div>
   </dialog>
 
+  <dialog id="validateDialog" class="ep-dialog ep-dialog-wide">
+    <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+      <strong style="font-size:0.95rem;">DSL 校验结果</strong>
+      <button class="el-button el-button--default is-plain" id="btnCloseValidate" style="padding:6px 10px;"><span class="ep-icon">close</span>关闭</button>
+    </div>
+    <div style="padding:12px; display:grid; gap:12px;">
+      <div id="validateStatus" style="font-size:0.82rem; color:#6b7280;">尚未校验。</div>
+      <pre id="validateResult"><code id="validateResultCode" class="language-json">{}</code></pre>
+    </div>
+  </dialog>
+
   <script src="/static/vendor/prism/prism-core.min.js"></script>
   <script src="/static/vendor/prism/prism-clike.min.js"></script>
   <script src="/static/vendor/prism/prism-javascript.min.js"></script>
@@ -699,10 +710,13 @@
     const dslPreviewCode = document.getElementById('dslPreviewCode');
     const jsonPreviewDialog = document.getElementById('jsonPreviewDialog');
     const runtimeDialog = document.getElementById('runtimeDialog');
+    const validateDialog = document.getElementById('validateDialog');
     const runtimeInputRowsEl = document.getElementById('runtimeInputRows');
     const addInputParamButton = document.getElementById('btnAddInputParam');
     const runtimeStatus = document.getElementById('runtimeStatus');
     const runtimeResultCode = document.getElementById('runtimeResultCode');
+    const validateStatus = document.getElementById('validateStatus');
+    const validateResultCode = document.getElementById('validateResultCode');
     const statusText = document.getElementById('statusText');
     const validateButton = document.getElementById('btnValidate');
     const runButton = document.getElementById('btnRun');
@@ -1897,6 +1911,11 @@
         basics.push('$input.source_object_id');
       }
       const runtimePaths = [];
+      const currentNodeOutputFields = (currentNode.outputs || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const currentNodeLocalPaths = currentNodeOutputFields.map((field) => `$.${field}`);
 
       state.nodes.forEach((item, index) => {
         const nodeKey = normalizeNodeKey(item, index + 1);
@@ -1920,7 +1939,7 @@
       if (currentNode.type !== 'step') {
         basics.push('$steps.<step_id>.<output>');
       }
-      return [...new Set([...basics, ...runtimePaths])];
+      return [...new Set([...basics, ...currentNodeLocalPaths, ...runtimePaths])];
     }
 
     function normalizeNodeKey(node, fallbackIndex) {
@@ -2347,6 +2366,30 @@
       }
     }
 
+    function closeValidateDialog() {
+      if (typeof validateDialog.close === 'function' && validateDialog.hasAttribute('open')) {
+        validateDialog.close();
+      } else {
+        validateDialog.removeAttribute('open');
+      }
+    }
+
+    function openValidateDialog() {
+      if (typeof validateDialog.showModal === 'function') {
+        validateDialog.showModal();
+      } else {
+        validateDialog.setAttribute('open', 'open');
+      }
+    }
+
+    function renderValidateResult(payload) {
+      const resultJson = JSON.stringify(payload || {}, null, 2);
+      validateResultCode.textContent = resultJson;
+      if (window.Prism && typeof window.Prism.highlightElement === 'function') {
+        window.Prism.highlightElement(validateResultCode);
+      }
+    }
+
     function setRunButtonLoading(isLoading) {
       if (isLoading) {
         runButton.classList.add('btn-loading', 'is-loading');
@@ -2378,6 +2421,9 @@
     async function validateDslNow() {
       const dslPayload = toDslObject();
       setValidateButtonLoading(true);
+      openValidateDialog();
+      validateStatus.textContent = '校验中...';
+      renderValidateResult({});
       try {
         const response = await fetch('/api/validate-dsl', {
           method: 'POST',
@@ -2390,13 +2436,21 @@
         if (!response.ok) {
           statusText.classList.add('status-warn');
           statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(payload.detail || payload.error || '未知错误')}`;
+          validateStatus.textContent = `校验失败: ${payload.detail || payload.error || '未知错误'}`;
+          renderValidateResult(payload);
           return;
         }
         statusText.classList.remove('status-warn');
         statusText.textContent = 'DSL 校验通过。';
+        validateStatus.textContent = 'DSL 校验通过。';
+        renderValidateResult(payload);
       } catch (error) {
         statusText.classList.add('status-warn');
         statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(error.message || '网络错误')}`;
+        validateStatus.textContent = `校验失败: ${error.message || '网络错误'}`;
+        renderValidateResult({
+          error: error.message || '网络错误',
+        });
       } finally {
         setValidateButtonLoading(false);
       }
@@ -2829,6 +2883,10 @@
 
     document.getElementById('btnCloseRuntime').addEventListener('click', () => {
       closeRuntimeDialog();
+    });
+
+    document.getElementById('btnCloseValidate').addEventListener('click', () => {
+      closeValidateDialog();
     });
 
     document.querySelectorAll('[data-tab-target]').forEach((tabButton) => {
