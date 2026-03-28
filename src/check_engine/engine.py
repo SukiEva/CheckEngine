@@ -62,25 +62,6 @@ class DslEngine:
         if not isinstance(dsl_text, str):
             raise TypeError("dsl_text must be a string.")
         compiled_dsl = self._compile(dsl_text)
-        return self._execute_compiled(compiled_dsl, input_data, datasource_registry)
-
-    def _compile(self, dsl_text: str) -> CompiledDsl:
-        """编译 DSL 并返回可由缓存共享复用的只读结果。"""
-        cached = self._compile_cache_backend.get(dsl_text)
-        if cached is not None:
-            return cached
-
-        document = self.parser.parse(dsl_text)
-        compiled = self.compiler.compile(document=document)
-        self._compile_cache_backend.put(dsl_text, compiled)
-        return compiled
-
-    def _execute_compiled(
-        self,
-        compiled_dsl: CompiledDsl,
-        input_data: Mapping[str, Any],
-        datasource_registry: DatasourceRegistry,
-    ) -> ExecutionResult:
         document = compiled_dsl.document
         state = ExecutionState.new(input_data=input_data)
 
@@ -105,6 +86,17 @@ class DslEngine:
             return final_failure
 
         return ExecutionResult.build_pass(state)
+
+    def _compile(self, dsl_text: str) -> CompiledDsl:
+        """编译 DSL 并返回可由缓存共享复用的只读结果。"""
+        cached = self._compile_cache_backend.get(dsl_text)
+        if cached is not None:
+            return cached
+
+        document = self.parser.parse(dsl_text)
+        compiled = self.compiler.compile(document=document)
+        self._compile_cache_backend.put(dsl_text, compiled)
+        return compiled
 
     def _run_context(
         self,
