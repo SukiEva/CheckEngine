@@ -400,6 +400,81 @@
     .status strong { color: var(--success); }
     .status-warn strong { color: #b45309; }
 
+    .tab-switch {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .tab-btn {
+      border-radius: 10px;
+      background: #eef3f8;
+      color: #455a74;
+      border: 1px solid #d3dde8;
+      justify-content: center;
+      padding: 8px 6px;
+      font-size: 0.8rem;
+    }
+    .tab-btn.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: #90caf9;
+    }
+    .tab-panel {
+      display: none;
+      gap: 10px;
+      align-content: start;
+    }
+    .tab-panel.active {
+      display: grid;
+    }
+    .mini-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .datasource-list {
+      display: grid;
+      gap: 8px;
+    }
+    .datasource-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+      background: #fcfdff;
+    }
+    .datasource-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .inline-status {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .btn-loading {
+      position: relative;
+      overflow: hidden;
+      pointer-events: none;
+      opacity: 0.9;
+    }
+    .btn-loading::after {
+      content: "";
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.45);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin-left: 4px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     @media (max-width: 1500px) {
       .app {
         grid-template-columns: 260px minmax(0, 1fr) 340px;
@@ -422,10 +497,32 @@
   <div class="app">
     <aside class="panel">
       <div class="panel-head">
-        <h2 class="panel-title">节点工具箱</h2>
-        <div class="panel-sub">点击节点类型即可添加到固定执行栏，再点击节点进行编辑。</div>
+        <h2 class="panel-title">运行配置</h2>
+        <div class="panel-sub">在同一页面维护数据源配置和 input 参数配置。</div>
       </div>
-      <div class="panel-body" id="toolbox"></div>
+      <div class="panel-body">
+        <div class="tab-switch">
+          <button type="button" class="tab-btn" data-tab-target="datasource">数据源配置</button>
+          <button type="button" class="tab-btn active" data-tab-target="input">输入参数</button>
+        </div>
+        <section class="tab-panel" data-tab-panel="datasource">
+          <div class="mini-toolbar">
+            <button type="button" class="btn-muted" id="btnDsReload"><span class="material-symbols-rounded">database</span>载入</button>
+            <button type="button" class="btn-primary" id="btnDsAdd"><span class="material-symbols-rounded">add</span>新增</button>
+            <button type="button" class="btn-primary" id="btnDsSave"><span class="material-symbols-rounded">save</span>保存</button>
+          </div>
+          <div class="field-note">仅支持 PostgreSQL：<code>postgresql://</code> 或 <code>postgresql+psycopg2://</code>。</div>
+          <div class="datasource-list" id="datasourceList"></div>
+          <div class="inline-status" id="datasourceStatus">尚未加载数据源配置。</div>
+        </section>
+        <section class="tab-panel active" data-tab-panel="input">
+          <div class="field">
+            <label for="runtimeInputJson">input_data(JSON)</label>
+            <textarea id="runtimeInputJson" style="width:100%; min-height:160px; border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; font:inherit;">{"source_object_id": "DEMO_1"}</textarea>
+          </div>
+          <div class="inline-status">运行 DSL 时将使用这里的 input_data。</div>
+        </section>
+      </div>
     </aside>
 
     <main class="panel canvas-wrap">
@@ -435,7 +532,6 @@
         <button class="btn-muted" id="btnImport"><span class="material-symbols-rounded">upload_file</span>导入 JSON</button>
         <button class="btn-muted" id="btnPreview"><span class="material-symbols-rounded">visibility</span>预览 JSON</button>
         <button class="btn-muted" id="btnRun"><span class="material-symbols-rounded">play_circle</span>运行 DSL</button>
-        <button class="btn-muted" id="btnDatasourcePage"><span class="material-symbols-rounded">database</span>数据源配置</button>
         <button class="btn-muted" id="btnExport"><span class="material-symbols-rounded">download</span>下载 JSON</button>
         <input type="file" id="fileImportJson" accept="application/json" style="display:none;" />
       </div>
@@ -468,35 +564,24 @@
 
   <dialog id="runtimeDialog" style="width:min(960px,95vw); border:1px solid #e5e7eb; border-radius:14px; padding:0; box-shadow:0 24px 48px rgba(15, 23, 42, .2);">
     <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
-      <strong style="font-size:0.95rem;">运行 DSL（PostgreSQL 数据源）</strong>
+      <strong style="font-size:0.95rem;">DSL 运行结果</strong>
       <button class="btn-muted" id="btnCloseRuntime" style="padding:6px 10px;"><span class="material-symbols-rounded">close</span>关闭</button>
     </div>
     <div style="padding:12px; display:grid; gap:12px;">
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <button type="button" class="btn-primary" id="btnRunNow"><span class="material-symbols-rounded">bolt</span>执行当前 DSL</button>
-        <button type="button" class="btn-muted" id="btnGoDatasourceConfig"><span class="material-symbols-rounded">settings</span>打开数据源配置页面</button>
-        <span style="font-size:0.8rem; color:#6b7280;">运行时自动读取全局数据源配置（SQLite）。</span>
-      </div>
-      <div>
-        <label for="runtimeInputJson" style="display:block; font-size:0.82rem; color:#6b7280; margin-bottom:6px;">input_data(JSON)</label>
-        <textarea id="runtimeInputJson" style="width:100%; min-height:88px; border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; font:inherit;">{"source_object_id": "DEMO_1"}</textarea>
-      </div>
       <div id="runtimeStatus" style="font-size:0.82rem; color:#6b7280;">尚未执行。</div>
       <pre id="runtimeResult" style="max-height:38vh;">{}</pre>
     </div>
   </dialog>
 
   <script>
-    const NODE_DEFS = [
-      { type: 'context', label: 'Context 节点', hint: '用于填充 $context', defaultTitle: '加载上下文', sqlRole: true, icon: 'account_tree' },
-      { type: 'variable', label: 'Variable 节点', hint: '用于 variables.assign_by_condition', defaultTitle: '计算变量', decisionRole: true, icon: 'function' },
-      { type: 'precheck', label: 'Precheck 节点', hint: '前置校验，失败短路', defaultTitle: '前置检查', sqlRole: true, icon: 'rule' },
-      { type: 'step', label: 'Step 节点', hint: '正式执行步骤，支持 consumes', defaultTitle: '执行步骤', sqlRole: true, icon: 'checklist_rtl' },
-      { type: 'on_fail', label: 'On Fail 节点', hint: '顶层失败判定与消息', defaultTitle: '最终失败判定', decisionRole: true, icon: 'warning' },
-    ];
+    const NODE_DEF_MAP = {
+      context: { type: 'context', label: 'Context 节点', defaultTitle: '加载上下文' },
+      variable: { type: 'variable', label: 'Variable 节点', defaultTitle: '计算变量' },
+      precheck: { type: 'precheck', label: 'Precheck 节点', defaultTitle: '前置检查' },
+      step: { type: 'step', label: 'Step 节点', defaultTitle: '执行步骤' },
+      on_fail: { type: 'on_fail', label: 'On Fail 节点', defaultTitle: '最终失败判定' },
+    };
 
-    const toolbox = document.getElementById('toolbox');
-    const canvas = document.getElementById('canvas');
     const dropZone = document.getElementById('dropZone');
     const editorPanel = document.getElementById('editorPanel');
     const dslPreview = document.getElementById('dslPreview');
@@ -506,13 +591,32 @@
     const runtimeStatus = document.getElementById('runtimeStatus');
     const runtimeResult = document.getElementById('runtimeResult');
     const statusText = document.getElementById('statusText');
+    const runButton = document.getElementById('btnRun');
+    const datasourceList = document.getElementById('datasourceList');
+    const datasourceStatus = document.getElementById('datasourceStatus');
 
     const state = {
       nodes: [],
       selectedId: null,
     };
+    let datasourceNameOptions = [];
 
     const FIXED_TYPES = new Set(['context', 'on_fail']);
+    const SQL_NODE_TYPES = new Set(['context', 'precheck', 'step']);
+    const DECISION_NODE_TYPES = new Set(['precheck', 'on_fail']);
+    const OUTPUT_NODE_TYPES = new Set(['context', 'precheck', 'step']);
+
+    function isSqlNode(nodeType) {
+      return SQL_NODE_TYPES.has(nodeType);
+    }
+
+    function isDecisionNode(nodeType) {
+      return DECISION_NODE_TYPES.has(nodeType);
+    }
+
+    function hasOutputs(nodeType) {
+      return OUTPUT_NODE_TYPES.has(nodeType);
+    }
 
     function getDefaultDecisionByNodeType(nodeType) {
       if (nodeType === 'on_fail') {
@@ -537,6 +641,7 @@
         datasource: 'saas_db',
         resultMode: def.type === 'context' ? 'record' : 'records',
         decision: getDefaultDecisionByNodeType(def.type),
+        variableWhenRows: [{ condition: '', value: '' }],
         variableValue: '',
         variableDefault: '',
         failMode: 'single',
@@ -553,17 +658,6 @@
 
     function makeNodeId() {
       return `node_${Date.now()}_${Math.random().toString(16).slice(2, 7)}`;
-    }
-
-    function renderToolbox() {
-      toolbox.innerHTML = '';
-      NODE_DEFS.forEach((def) => {
-        const card = document.createElement('div');
-        card.className = 'tool-item';
-        card.innerHTML = `<strong><span class="material-symbols-rounded">${def.icon}</span>${def.label}</strong><span>${def.hint}</span>`;
-        card.addEventListener('click', () => addNodeByType(def.type));
-        toolbox.appendChild(card);
-      });
     }
 
     function renderCanvas() {
@@ -648,7 +742,7 @@
     }
 
     function addNodeByType(nodeType) {
-      const def = NODE_DEFS.find((item) => item.type === nodeType);
+      const def = NODE_DEF_MAP[nodeType] || null;
       if (!def) return;
       if (FIXED_TYPES.has(nodeType) && state.nodes.some((item) => item.type === nodeType)) {
         statusText.classList.add('status-warn');
@@ -700,10 +794,16 @@
           </div>
         </div>
         ` : ''}
-        ${node.type === 'context' || node.type === 'precheck' || node.type === 'step' ? `
+        ${isSqlNode(node.type) ? `
         <div class="field">
           <label>Datasource</label>
-          <input id="f_datasource" value="${escapeAttr(node.datasource || '')}" />
+          <input
+            id="f_datasource"
+            list="datasourceOptions"
+            value="${escapeAttr(node.datasource || '')}"
+            placeholder="输入或选择已配置的数据源"
+          />
+          <datalist id="datasourceOptions">${renderDatasourceOptionsHtml()}</datalist>
         </div>
         <div class="field">
           <label>Result Mode</label>
@@ -724,14 +824,17 @@
           <button class="btn-muted icon-btn" id="btnAddSqlParam" type="button" title="新增 SQL 变量" aria-label="新增 SQL 变量"><span class="material-symbols-rounded">add</span></button>
         </div>
         ` : ''}
+        ${isDecisionNode(node.type) ? `
         <div class="field">
           <label>Decision（用于 precheck/on_fail/variable）</label>
           <input id="f_decision" data-ref-autocomplete="true" value="${escapeAttr(node.decision || '')}" />
         </div>
+        ` : ''}
         ${node.type === 'variable' ? `
         <div class="field">
-          <label>命中条件后的赋值（value）</label>
-          <input id="f_variable_value" data-ref-autocomplete="true" value="${escapeAttr(node.variableValue || '')}" placeholder="例如 1000 或 \"PASS\"" />
+          <label>When 条件与赋值（condition/value）</label>
+          <div id="f_variable_when_rows"></div>
+          <button class="btn-muted icon-btn" id="btnAddVariableWhen" type="button" title="新增 when 条件" aria-label="新增 when 条件"><span class="material-symbols-rounded">add</span></button>
         </div>
         <div class="field">
           <label>默认值（default）</label>
@@ -760,10 +863,13 @@
           <input id="f_divider" value="${escapeAttr(node.divider || '')}" />
         </div>
         ` : ''}
+        ${hasOutputs(node.type) ? `
         <div class="field">
           <label>Outputs（逗号分隔）</label>
           <input id="f_outputs" value="${escapeAttr(node.outputs)}" />
         </div>
+        ` : ''}
+        ${node.type === 'step' ? `
         <div class="field">
           <label>Consumes（step_name + alias）</label>
           <div id="f_consumes_rows"></div>
@@ -771,6 +877,7 @@
           <div class="field-note">step_name 支持选择已有 step 名，也支持输入 <code>$</code> 触发运行时变量联想。</div>
           <datalist id="consumeStepOptions"></datalist>
         </div>
+        ` : ''}
         ${node.type === 'precheck' || node.type === 'step' ? `
         <div class="field">
           <label>Description</label>
@@ -781,12 +888,16 @@
 
       const persistEditorNode = () => {
         node.title = document.getElementById('f_title').value.trim();
-        node.decision = document.getElementById('f_decision').value.trim();
+        if (isDecisionNode(node.type)) {
+          node.decision = document.getElementById('f_decision').value.trim();
+        } else {
+          node.decision = '';
+        }
         if (node.type === 'variable') {
-          node.variableValue = document.getElementById('f_variable_value').value.trim();
+          node.variableWhenRows = readVariableWhenRows();
           node.variableDefault = document.getElementById('f_variable_default').value.trim();
         }
-        if (node.type === 'context' || node.type === 'precheck' || node.type === 'step') {
+        if (isSqlNode(node.type)) {
           node.sql = document.getElementById('f_sql').value;
           node.sqlParams = readSqlParamRows();
           node.sqlParamsText = JSON.stringify(sqlParamsRowsToObject(node.sqlParams));
@@ -799,11 +910,22 @@
           node.messageEn = document.getElementById('f_message_en').value;
           node.divider = document.getElementById('f_divider').value.trim();
         }
-        node.outputs = document.getElementById('f_outputs').value.trim();
-        node.consumeRows = readConsumeRows();
-        node.consumes = formatConsumesTextFromRows(node.consumeRows);
+        if (hasOutputs(node.type)) {
+          node.outputs = document.getElementById('f_outputs').value.trim();
+        } else {
+          node.outputs = '';
+        }
+        if (node.type === 'step') {
+          node.consumeRows = readConsumeRows();
+          node.consumes = formatConsumesTextFromRows(node.consumeRows);
+        } else {
+          node.consumeRows = [{ stepName: '', alias: '' }];
+          node.consumes = '';
+        }
         if (node.type === 'precheck' || node.type === 'step') {
           node.description = document.getElementById('f_description').value.trim();
+        } else {
+          node.description = '';
         }
         renderCanvas();
         saveLocal();
@@ -811,16 +933,18 @@
         statusText.innerHTML = `<strong>已自动保存：</strong>${escapeHtml(node.title || node.id)}`;
       };
 
-      if (node.type === 'context' || node.type === 'precheck' || node.type === 'step') {
+      if (isSqlNode(node.type)) {
         renderSqlParamRows(node, persistEditorNode);
       }
       if (node.type === 'step') {
         renderConsumeRows(node, persistEditorNode);
       }
+      if (node.type === 'variable') {
+        renderVariableWhenRows(node, persistEditorNode);
+      }
       [
         'f_title',
         'f_decision',
-        'f_variable_value',
         'f_variable_default',
         'f_sql',
         'f_datasource',
@@ -847,6 +971,15 @@
       }
 
       bindAutocompletes(node);
+    }
+
+    function renderDatasourceOptionsHtml() {
+      if (!datasourceNameOptions.length) {
+        return '';
+      }
+      return datasourceNameOptions
+        .map((name) => `<option value="${escapeAttr(name)}"></option>`)
+        .join('');
     }
 
     function deleteNodeById(nodeId) {
@@ -907,6 +1040,44 @@
       });
     }
 
+    function renderVariableWhenRows(node, onChanged) {
+      const rowsContainer = document.getElementById('f_variable_when_rows');
+      const addButton = document.getElementById('btnAddVariableWhen');
+      if (!rowsContainer || !addButton) return;
+      const rows = Array.isArray(node.variableWhenRows) && node.variableWhenRows.length
+        ? node.variableWhenRows
+        : [{ condition: '', value: '' }];
+      const drawRows = () => {
+        rowsContainer.innerHTML = rows.map((row, index) => `
+          <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
+            <input data-variable-condition="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.condition || '')}" placeholder="条件，如 $input.amount > 1000" />
+            <input data-variable-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.value || '')}" placeholder="赋值，如 1000 或 \"PASS\"" />
+            <button class="btn-danger icon-btn" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="material-symbols-rounded">delete</span></button>
+          </div>
+        `).join('');
+        rowsContainer.querySelectorAll('[data-variable-remove]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const removeIndex = Number(button.getAttribute('data-variable-remove'));
+            rows.splice(removeIndex, 1);
+            if (!rows.length) rows.push({ condition: '', value: '' });
+            drawRows();
+            if (typeof onChanged === 'function') onChanged();
+          });
+        });
+        rowsContainer.querySelectorAll('[data-variable-condition], [data-variable-value]').forEach((input) => {
+          input.addEventListener('change', () => {
+            if (typeof onChanged === 'function') onChanged();
+          });
+        });
+        bindRuntimeAutocomplete(node);
+      };
+      drawRows();
+      addButton.addEventListener('click', () => {
+        rows.push({ condition: '', value: '' });
+        drawRows();
+      });
+    }
+
     function renderConsumeRows(node, onChanged) {
       const rowsContainer = document.getElementById('f_consumes_rows');
       const addButton = document.getElementById('btnAddConsumeRow');
@@ -964,6 +1135,27 @@
         key: input.value.trim(),
         value: valueInputs[index] ? valueInputs[index].value.trim() : '',
       }));
+    }
+
+    function readVariableWhenRows() {
+      const rowsContainer = document.getElementById('f_variable_when_rows');
+      if (!rowsContainer) return [];
+      const conditions = Array.from(rowsContainer.querySelectorAll('[data-variable-condition]'));
+      return conditions
+        .map((conditionInput) => {
+          const rowIndex = conditionInput.getAttribute('data-variable-condition');
+          if (rowIndex === null) return null;
+          const valueInput = rowsContainer.querySelector(`[data-variable-value="${rowIndex}"]`);
+          if (!valueInput) return null;
+          const condition = conditionInput.value.trim();
+          const valueText = valueInput.value;
+          if (!condition) return null;
+          return {
+            condition,
+            value: parseInputValue(valueText),
+          };
+        })
+        .filter(Boolean);
     }
 
     function readConsumeRows() {
@@ -1395,10 +1587,9 @@
         }
 
         if (node.type === 'variable') {
-          const variableValue = parseInputValue(node.variableValue);
           const variableDefault = parseInputValue(node.variableDefault);
           variables[key] = {
-            when: node.decision ? [{ condition: node.decision, value: variableValue }] : [],
+            when: Array.isArray(node.variableWhenRows) ? node.variableWhenRows : [],
             default: variableDefault,
           };
         }
@@ -1512,6 +1703,7 @@
           datasource: extra.datasource || 'saas_db',
           resultMode: extra.resultMode || (nodeType === 'context' ? 'record' : 'records'),
           decision: typeof extra.decision === 'string' ? extra.decision : getDefaultDecisionByNodeType(nodeType),
+          variableWhenRows: Array.isArray(extra.variableWhenRows) ? extra.variableWhenRows : [{ condition: '', value: '' }],
           variableValue: extra.variableValue || '',
           variableDefault: extra.variableDefault || '',
           failMode: extra.failMode || 'single',
@@ -1543,12 +1735,14 @@
       const variableMap = normalizedPayload.variables || {};
       Object.entries(variableMap).forEach(([key, value]) => {
         const whenItems = Array.isArray(value.when) ? value.when : [];
-        const decisionText = whenItems.length ? String(whenItems[0].condition || '') : '';
-        const variableValue = whenItems.length ? normalizeValueToInput(whenItems[0].value) : '';
         const variableDefault = normalizeValueToInput(value.default);
         pushNode('variable', key, {
-          decision: decisionText,
-          variableValue,
+          variableWhenRows: whenItems.length
+            ? whenItems.map((whenItem) => ({
+              condition: normalizeValueToInput(whenItem.condition),
+              value: normalizeValueToInput(whenItem.value),
+            }))
+            : [{ condition: '', value: '' }],
           variableDefault,
         });
       });
@@ -1614,13 +1808,111 @@
       }
     }
 
-    async function openRuntimeDialog() {
-      runtimeStatus.textContent = '运行时将自动读取全局数据源配置。';
-      runtimeResult.textContent = '{}';
-      if (typeof runtimeDialog.showModal === 'function') {
-        runtimeDialog.showModal();
-      } else {
-        runtimeDialog.setAttribute('open', 'open');
+    function updateDatasourceOptions(datasourceConfigs) {
+      if (!Array.isArray(datasourceConfigs)) {
+        datasourceNameOptions = [];
+        return;
+      }
+      datasourceNameOptions = datasourceConfigs
+        .map((item) => (item && typeof item.name === 'string' ? item.name.trim() : ''))
+        .filter((name) => name.length > 0);
+    }
+
+    function createDatasourceCard(data) {
+      const card = document.createElement('div');
+      card.className = 'datasource-card';
+      card.innerHTML = `
+        <div class="datasource-grid">
+          <input data-role="name" placeholder="datasource 名称，例如 saas_db" />
+          <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" />
+          <button class="btn-danger icon-btn" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="material-symbols-rounded">delete</span></button>
+        </div>
+      `;
+      card.querySelector('[data-role="name"]').value = data && data.name ? data.name : '';
+      card.querySelector('[data-role="db_url"]').value = data && data.db_url ? data.db_url : '';
+      card.querySelector('[data-role="remove"]').addEventListener('click', () => {
+        card.remove();
+        updateDatasourceOptions(readDatasourceConfigRows());
+      });
+      card.querySelectorAll('[data-role="name"], [data-role="db_url"]').forEach((input) => {
+        input.addEventListener('change', () => {
+          updateDatasourceOptions(readDatasourceConfigRows());
+          renderEditor();
+        });
+      });
+      return card;
+    }
+
+    function readDatasourceConfigRows() {
+      return Array.from(datasourceList.children)
+        .map((card) => ({
+          name: card.querySelector('[data-role="name"]').value.trim(),
+          db_url: card.querySelector('[data-role="db_url"]').value.trim(),
+        }))
+        .filter((item) => item.name || item.db_url);
+    }
+
+    function renderDatasourceCards(datasourceItems) {
+      datasourceList.innerHTML = '';
+      datasourceItems.forEach((item) => datasourceList.appendChild(createDatasourceCard(item)));
+      updateDatasourceOptions(datasourceItems);
+    }
+
+    async function loadDatasourceConfigFromServer() {
+      datasourceStatus.textContent = '正在载入数据源配置...';
+      try {
+        const datasources = await fetchDatasourceConfig();
+        renderDatasourceCards(datasources);
+        datasourceStatus.textContent = datasources.length
+          ? `已载入 ${datasources.length} 个数据源。`
+          : '暂无数据源配置，请新增并保存。';
+        renderEditor();
+      } catch (error) {
+        datasourceStatus.textContent = `载入失败: ${error.message || '网络错误'}`;
+      }
+    }
+
+    async function saveDatasourceConfigToServer() {
+      const datasourcePayload = readDatasourceConfigRows();
+      if (!datasourcePayload.length) {
+        datasourceStatus.textContent = '请至少配置一个数据源后再保存。';
+        return;
+      }
+      datasourceStatus.textContent = '正在保存数据源配置...';
+      try {
+        const response = await fetch('/api/datasource-configs', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ datasources: datasourcePayload }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          datasourceStatus.textContent = `保存失败: ${payload.detail || payload.error || '未知错误'}`;
+          return;
+        }
+        const savedItems = Array.isArray(payload.datasources) ? payload.datasources : datasourcePayload;
+        renderDatasourceCards(savedItems);
+        datasourceStatus.textContent = `已保存 ${payload.saved || savedItems.length} 个数据源。`;
+        renderEditor();
+      } catch (error) {
+        datasourceStatus.textContent = `保存失败: ${error.message || '网络错误'}`;
+      }
+    }
+
+    async function warmupDatasourceOptions() {
+      try {
+        const datasourceConfigs = readDatasourceConfigRows();
+        if (!datasourceConfigs.length) {
+          updateDatasourceOptions([]);
+          return;
+        }
+        updateDatasourceOptions(datasourceConfigs);
+        const selectedNode = state.nodes.find((item) => item.id === state.selectedId);
+        if (selectedNode && (selectedNode.type === 'context' || selectedNode.type === 'precheck' || selectedNode.type === 'step')) {
+          renderEditor();
+        }
+      } catch (_error) {
+        updateDatasourceOptions([]);
       }
     }
 
@@ -1632,23 +1924,53 @@
       }
     }
 
+    function openRuntimeDialog() {
+      if (typeof runtimeDialog.showModal === 'function') {
+        runtimeDialog.showModal();
+      } else {
+        runtimeDialog.setAttribute('open', 'open');
+      }
+    }
+
+    function setRunButtonLoading(isLoading) {
+      if (isLoading) {
+        runButton.classList.add('btn-primary', 'btn-loading');
+        runButton.classList.remove('btn-muted');
+        runButton.disabled = true;
+        runButton.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span>运行中';
+        return;
+      }
+      runButton.classList.remove('btn-primary', 'btn-loading');
+      runButton.classList.add('btn-muted');
+      runButton.disabled = false;
+      runButton.innerHTML = '<span class="material-symbols-rounded">play_circle</span>运行 DSL';
+    }
+
     async function runDslNow() {
       const dslPayload = toDslObject();
+      let datasourcePayload = readDatasourceConfigRows();
+      if (!datasourcePayload.length) {
+        await loadDatasourceConfigFromServer();
+        datasourcePayload = readDatasourceConfigRows();
+      }
+      if (!datasourcePayload.length) {
+        statusText.classList.add('status-warn');
+        statusText.textContent = '运行失败：请先在“数据源配置”页签中维护至少一个数据源。';
+        return;
+      }
       let inputPayload = {};
       try {
         inputPayload = runtimeInputJson.value.trim() ? JSON.parse(runtimeInputJson.value) : {};
       } catch (error) {
-        runtimeStatus.textContent = `input_data 解析失败: ${error.message || '不是合法 JSON'}`;
+        statusText.classList.add('status-warn');
+        statusText.textContent = `input_data 解析失败: ${error.message || '不是合法 JSON'}`;
         return;
       }
+      setRunButtonLoading(true);
+      openRuntimeDialog();
       runtimeStatus.textContent = '执行中...';
       runtimeResult.textContent = '{}';
       try {
-        const datasourcePayload = await fetchDatasourceConfig();
-        if (!datasourcePayload.length) {
-          runtimeStatus.textContent = '全局数据源配置为空，请先到“数据源配置页面”维护。';
-          return;
-        }
         const response = await fetch('/api/run-dsl', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1666,8 +1988,12 @@
         }
         runtimeStatus.textContent = '执行成功。';
         runtimeResult.textContent = JSON.stringify(payload.result, null, 2);
+        statusText.classList.remove('status-warn');
+        statusText.textContent = '运行完成。';
       } catch (error) {
         runtimeStatus.textContent = `请求失败: ${error.message || '网络错误'}`;
+      } finally {
+        setRunButtonLoading(false);
       }
     }
 
@@ -1693,6 +2019,12 @@
           divider: typeof node.divider === 'string' ? node.divider : '',
           description: typeof node.description === 'string' ? node.description : '',
           variableValue: typeof node.variableValue === 'string' ? node.variableValue : '',
+          variableWhenRows: Array.isArray(node.variableWhenRows)
+            ? node.variableWhenRows
+            : (typeof node.decision === 'string' && node.decision
+              ? [{ condition: node.decision, value: typeof node.variableValue === 'string' ? node.variableValue : '' }]
+              : [{ condition: '', value: '' }]
+            ),
           variableDefault: typeof node.variableDefault === 'string' ? node.variableDefault : '',
           consumes: typeof node.consumes === 'string' ? node.consumes : '',
           consumeRows: Array.isArray(node.consumeRows) ? node.consumeRows : consumesTextToRows(typeof node.consumes === 'string' ? node.consumes : ''),
@@ -2029,7 +2361,7 @@
     document.getElementById('btnRun').addEventListener('click', () => {
       try {
         validateDslPayload(toDslObject());
-        openRuntimeDialog();
+        runDslNow();
       } catch (error) {
         statusText.classList.add('status-warn');
         statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(error.message || '结构不合法')}`;
@@ -2040,23 +2372,39 @@
       closeRuntimeDialog();
     });
 
-    document.getElementById('btnDatasourcePage').addEventListener('click', () => {
-      window.open('/datasource-configs', '_blank', 'noopener,noreferrer');
+    document.querySelectorAll('[data-tab-target]').forEach((tabButton) => {
+      tabButton.addEventListener('click', () => {
+        const target = tabButton.getAttribute('data-tab-target');
+        document.querySelectorAll('[data-tab-target]').forEach((item) => {
+          item.classList.toggle('active', item === tabButton);
+        });
+        document.querySelectorAll('[data-tab-panel]').forEach((panel) => {
+          const isActive = panel.getAttribute('data-tab-panel') === target;
+          panel.classList.toggle('active', isActive);
+        });
+      });
     });
 
-    document.getElementById('btnGoDatasourceConfig').addEventListener('click', () => {
-      window.open('/datasource-configs', '_blank', 'noopener,noreferrer');
+    document.getElementById('btnDsReload').addEventListener('click', () => {
+      loadDatasourceConfigFromServer();
     });
 
-    document.getElementById('btnRunNow').addEventListener('click', () => {
-      runDslNow();
+    document.getElementById('btnDsAdd').addEventListener('click', () => {
+      datasourceList.appendChild(createDatasourceCard({ name: '', db_url: '' }));
+      warmupDatasourceOptions();
+      renderEditor();
+    });
+
+    document.getElementById('btnDsSave').addEventListener('click', () => {
+      saveDatasourceConfigToServer();
     });
 
     loadLocal();
-    renderToolbox();
     renderCanvas();
     renderEditor();
+    loadDatasourceConfigFromServer();
     closeDslPreview();
+    setRunButtonLoading(false);
   </script>
 </body>
 </html>
