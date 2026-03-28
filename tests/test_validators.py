@@ -190,6 +190,13 @@ class ValidatorTestCase(unittest.TestCase):
         with self.assertRaises(DSLValidationError):
             self.structure_validator.validate(document)
 
+    def test_validate_precheck_on_fail_local_exists_syntax_is_valid(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0]["on_fail"]["decision"] = "exists($.func)"
+        document = self.parser.parse(json.dumps(data))
+
+        self.structure_validator.validate(document)
+
     def test_invalid_sub_repeat_template_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["prechecks"][0]["on_fail"]["message_cn"] = "存在汇率为空的记录: 记录{func}-{txn}-{rate_date}"
