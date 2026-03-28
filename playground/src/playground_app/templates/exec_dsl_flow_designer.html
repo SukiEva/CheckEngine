@@ -262,21 +262,6 @@
       align-items: center;
       gap: 6px;
     }
-    .icon-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 32px;
-      width: 32px;
-      height: 32px;
-      padding: 0;
-      line-height: 1;
-    }
-    .icon-btn .material-symbols-rounded {
-      margin: 0;
-      line-height: 1;
-    }
-
     .muted { color: var(--muted); }
 
     .field {
@@ -371,6 +356,11 @@
       max-height: 42vh;
       overflow: auto;
     }
+    .json-key { color: #93c5fd; }
+    .json-string { color: #86efac; }
+    .json-number { color: #fca5a5; }
+    .json-boolean { color: #fcd34d; }
+    .json-null { color: #c4b5fd; }
 
     .material-symbols-rounded {
       font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 20;
@@ -530,14 +520,14 @@
           </div>
           <div class="field-note">仅支持 PostgreSQL：<code>postgresql://</code> 或 <code>postgresql+psycopg2://</code>。</div>
           <div class="datasource-list" id="datasourceList"></div>
-          <button type="button" class="el-button el-button--primary is-plain is-circle icon-btn" id="btnDsAdd" title="新增数据源" aria-label="新增数据源"><span class="material-symbols-rounded">add</span></button>
+          <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnDsAdd" title="新增数据源" aria-label="新增数据源"><span class="material-symbols-rounded">add</span></button>
           <div class="inline-status" id="datasourceStatus">尚未加载数据源配置。</div>
         </section>
         <section class="tab-panel active" data-tab-panel="input">
           <div class="field">
             <label>input_data（key/value）</label>
             <div id="runtimeInputRows"></div>
-            <button type="button" class="el-button el-button--primary is-plain is-circle icon-btn" id="btnAddInputParam" title="新增输入参数" aria-label="新增输入参数"><span class="material-symbols-rounded">add</span></button>
+            <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddInputParam" title="新增输入参数" aria-label="新增输入参数"><span class="material-symbols-rounded">add</span></button>
           </div>
           <div class="inline-status">运行 DSL 时将使用这里的 input_data；默认包含 <code>source_object_id</code>。</div>
         </section>
@@ -681,6 +671,8 @@
         messageCn: '',
         messageEn: '',
         divider: '',
+        dividerCn: '',
+        dividerEn: '',
         outputs: 'ok',
         consumes: '',
         consumeRows: [{ stepName: '', alias: '' }],
@@ -696,18 +688,18 @@
     function renderCanvas() {
       dropZone.innerHTML = '';
       const lanes = [
-        { type: 'context', label: '1) Context（固定 1 个）' },
+        { type: 'context', label: '1) Context' },
         { type: 'variable', label: '2) Variables' },
-        { type: 'precheck', label: '3) Prechecks（可多个）' },
-        { type: 'step', label: '4) Steps（可多个）' },
-        { type: 'on_fail', label: '5) On Fail（固定 1 个）' },
+        { type: 'precheck', label: '3) Prechecks' },
+        { type: 'step', label: '4) Steps' },
+        { type: 'on_fail', label: '5) On Fail' },
       ];
 
       lanes.forEach((lane) => {
         const laneHasFixedNode = FIXED_TYPES.has(lane.type) && state.nodes.some((item) => item.type === lane.type);
         const addButtonHtml = laneHasFixedNode
           ? ''
-          : `<button class="el-button el-button--primary is-plain is-circle icon-btn" data-add-type="${lane.type}" type="button" title="新增 ${lane.type} 节点" aria-label="新增 ${lane.type} 节点"><span class="material-symbols-rounded">add</span></button>`;
+          : `<button class="el-button el-button--primary is-plain is-circle el-button--small" data-add-type="${lane.type}" type="button" title="新增 ${lane.type} 节点" aria-label="新增 ${lane.type} 节点"><span class="material-symbols-rounded">add</span></button>`;
         const laneEl = document.createElement('section');
         laneEl.className = 'flow-lane';
         laneEl.innerHTML = `
@@ -741,6 +733,9 @@
         }
         laneNodes.forEach((node, index) => {
           const nodeRank = node.type === 'step' ? `S${node.stepOrder || index + 1}` : `#${index + 1}`;
+          const nodeTitle = (node.type === 'context' || node.type === 'on_fail')
+            ? node.type
+            : (node.title || '(未命名节点)');
           const el = document.createElement('article');
           el.className = `flow-node${state.selectedId === node.id ? ' selected' : ''}`;
           el.dataset.nodeId = node.id;
@@ -750,14 +745,14 @@
               <span class="node-head-actions">
                 <span>${nodeRank}</span>
                 ${(node.type === 'precheck' || node.type === 'step')
-                  ? `<button class="el-button el-button--default is-plain is-circle node-move-up-btn icon-btn" type="button" data-node-move-up="${node.id}" title="上移节点" aria-label="上移节点"><span class="material-symbols-rounded">arrow_upward</span></button>
-                     <button class="el-button el-button--default is-plain is-circle node-move-down-btn icon-btn" type="button" data-node-move-down="${node.id}" title="下移节点" aria-label="下移节点"><span class="material-symbols-rounded">arrow_downward</span></button>`
+                  ? `<button class="el-button el-button--default is-plain is-circle el-button--small node-move-up-btn" type="button" data-node-move-up="${node.id}" title="上移节点" aria-label="上移节点"><span class="material-symbols-rounded">arrow_upward</span></button>
+                     <button class="el-button el-button--default is-plain is-circle el-button--small node-move-down-btn" type="button" data-node-move-down="${node.id}" title="下移节点" aria-label="下移节点"><span class="material-symbols-rounded">arrow_downward</span></button>`
                   : ''}
-                <button class="el-button el-button--danger is-plain is-circle node-delete-btn icon-btn" type="button" data-node-delete="${node.id}" title="删除节点" aria-label="删除节点"><span class="material-symbols-rounded">delete</span></button>
+                <button class="el-button el-button--danger is-plain is-circle el-button--small node-delete-btn" type="button" data-node-delete="${node.id}" title="删除节点" aria-label="删除节点"><span class="material-symbols-rounded">delete</span></button>
               </span>
             </div>
             <div class="node-body">
-              <strong>${escapeHtml(node.title || '(未命名节点)')}</strong>
+              <strong>${escapeHtml(nodeTitle)}</strong>
               <div class="muted">ds: ${escapeHtml(node.datasource || '-')} / mode: ${escapeHtml(node.resultMode || '-')}</div>
               ${(node.type === 'precheck' || node.type === 'step') && node.description
                 ? `<div class="muted">description: ${escapeHtml(node.description)}</div>`
@@ -826,11 +821,16 @@
         return;
       }
 
+      const showNodeTitleField = !(node.type === 'context' || node.type === 'on_fail');
+      const showDividerConfig = node.failMode === 'sub_repeat' || node.failMode === 'full_repeat';
+
       editorPanel.innerHTML = `
+        ${showNodeTitleField ? `
         <div class="field">
           <label>节点标题</label>
           <input id="f_title" value="${escapeAttr(node.title)}" />
         </div>
+        ` : ''}
         <div class="field">
           <label>类型（只读）</label>
           <input value="${node.type}" disabled />
@@ -862,7 +862,7 @@
         <div class="field">
           <label>SQL 变量（key/value）</label>
           <div id="f_sql_params_rows"></div>
-          <button class="el-button el-button--primary is-plain is-circle icon-btn" id="btnAddSqlParam" type="button" title="新增 SQL 变量" aria-label="新增 SQL 变量"><span class="material-symbols-rounded">add</span></button>
+          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddSqlParam" type="button" title="新增 SQL 变量" aria-label="新增 SQL 变量"><span class="material-symbols-rounded">add</span></button>
         </div>
         ` : ''}
         ${isDecisionNode(node.type) ? `
@@ -875,7 +875,7 @@
         <div class="field">
           <label>When 条件与赋值（condition/value）</label>
           <div id="f_variable_when_rows"></div>
-          <button class="el-button el-button--primary is-plain is-circle icon-btn" id="btnAddVariableWhen" type="button" title="新增 when 条件" aria-label="新增 when 条件"><span class="material-symbols-rounded">add</span></button>
+          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddVariableWhen" type="button" title="新增 when 条件" aria-label="新增 when 条件"><span class="material-symbols-rounded">add</span></button>
         </div>
         <div class="field">
           <label>默认值（default）</label>
@@ -899,10 +899,20 @@
           <label>Message EN</label>
           <textarea id="f_message_en" data-ref-autocomplete="true">${escapeHtml(node.messageEn || '')}</textarea>
         </div>
+        ${showDividerConfig ? `
         <div class="field">
-          <label>Divider（sub_repeat 时使用）</label>
+          <label>Divider（通用）</label>
           <input id="f_divider" value="${escapeAttr(node.divider || '')}" />
         </div>
+        <div class="field">
+          <label>Divider CN（中文优先）</label>
+          <input id="f_divider_cn" value="${escapeAttr(node.dividerCn || '')}" />
+        </div>
+        <div class="field">
+          <label>Divider EN（英文优先）</label>
+          <input id="f_divider_en" value="${escapeAttr(node.dividerEn || '')}" />
+        </div>
+        ` : ''}
         ` : ''}
         ${hasOutputs(node.type) ? `
         <div class="field">
@@ -914,7 +924,7 @@
         <div class="field">
           <label>Consumes（step_name + alias）</label>
           <div id="f_consumes_rows"></div>
-          <button class="el-button el-button--primary is-plain is-circle icon-btn" id="btnAddConsumeRow" type="button" title="新增 consume" aria-label="新增 consume"><span class="material-symbols-rounded">add</span></button>
+          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddConsumeRow" type="button" title="新增 consume" aria-label="新增 consume"><span class="material-symbols-rounded">add</span></button>
           <div class="field-note">step_name 支持选择已有 step 名，也支持输入 <code>$</code> 触发运行时变量联想。</div>
           <datalist id="consumeStepOptions"></datalist>
         </div>
@@ -928,7 +938,11 @@
       `;
 
       const persistEditorNode = () => {
-        node.title = document.getElementById('f_title').value.trim();
+        if (showNodeTitleField) {
+          node.title = document.getElementById('f_title').value.trim();
+        } else {
+          node.title = node.type;
+        }
         if (isDecisionNode(node.type)) {
           node.decision = document.getElementById('f_decision').value.trim();
         } else {
@@ -946,10 +960,23 @@
           node.resultMode = document.getElementById('f_result_mode').value;
         }
         if (node.type === 'precheck' || node.type === 'on_fail') {
+          const previousFailMode = node.failMode;
           node.failMode = document.getElementById('f_fail_mode').value;
           node.messageCn = document.getElementById('f_message_cn').value;
           node.messageEn = document.getElementById('f_message_en').value;
-          node.divider = document.getElementById('f_divider').value.trim();
+          if (node.failMode === 'sub_repeat' || node.failMode === 'full_repeat') {
+            node.divider = (document.getElementById('f_divider') || { value: '' }).value.trim();
+            node.dividerCn = (document.getElementById('f_divider_cn') || { value: '' }).value.trim();
+            node.dividerEn = (document.getElementById('f_divider_en') || { value: '' }).value.trim();
+          } else {
+            node.divider = '';
+            node.dividerCn = '';
+            node.dividerEn = '';
+          }
+          if (previousFailMode !== node.failMode) {
+            renderEditor();
+            return;
+          }
         }
         if (hasOutputs(node.type)) {
           node.outputs = document.getElementById('f_outputs').value.trim();
@@ -994,6 +1021,8 @@
         'f_message_cn',
         'f_message_en',
         'f_divider',
+        'f_divider_cn',
+        'f_divider_en',
         'f_outputs',
         'f_description',
       ].forEach((elementId) => {
@@ -1045,7 +1074,7 @@
           <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
             <input data-sql-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="变量名，如 user_id" />
             <input data-sql-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.value || '')}" placeholder="值，如 $input.user_id 或 100" />
-            <button class="el-button el-button--danger is-plain is-circle icon-btn" type="button" data-sql-remove="${index}" title="删除 SQL 变量" aria-label="删除 SQL 变量"><span class="material-symbols-rounded">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-sql-remove="${index}" title="删除 SQL 变量" aria-label="删除 SQL 变量"><span class="material-symbols-rounded">delete</span></button>
           </div>
         `).join('');
         rowsContainer.querySelectorAll('[data-sql-remove]').forEach((button) => {
@@ -1084,7 +1113,7 @@
           <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
             <input data-variable-condition="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.condition || '')}" placeholder="条件，如 $input.amount > 1000" />
             <input data-variable-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.value || '')}" placeholder="赋值，如 1000 或 \"PASS\"" />
-            <button class="el-button el-button--danger is-plain is-circle icon-btn" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="material-symbols-rounded">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="material-symbols-rounded">delete</span></button>
           </div>
         `).join('');
         rowsContainer.querySelectorAll('[data-variable-remove]').forEach((button) => {
@@ -1133,7 +1162,7 @@
           <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:6px; margin-bottom:6px;">
             <input data-consume-step="${index}" data-ref-autocomplete="true" list="consumeStepOptions" value="${escapeAttr(row.stepName || '')}" placeholder="step_name 或 $steps.xxx" />
             <input data-consume-alias="${index}" value="${escapeAttr(row.alias || '')}" placeholder="alias（可选）" />
-            <button class="el-button el-button--danger is-plain is-circle icon-btn" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="material-symbols-rounded">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="material-symbols-rounded">delete</span></button>
           </div>
         `).join('');
         rowsContainer.querySelectorAll('[data-consume-remove]').forEach((button) => {
@@ -1244,7 +1273,7 @@
         <div class="kv-row">
           <input data-input-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="参数名，如 source_object_id" />
           <input data-input-value="${index}" value="${escapeAttr(row.value || '')}" placeholder="参数值，如 DEMO_1、100 或 true" />
-          <button class="el-button el-button--danger is-plain is-circle icon-btn" type="button" data-input-remove="${index}" title="删除输入参数" aria-label="删除输入参数"><span class="material-symbols-rounded">delete</span></button>
+          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-input-remove="${index}" title="删除输入参数" aria-label="删除输入参数"><span class="material-symbols-rounded">delete</span></button>
         </div>
       `).join('');
       runtimeInputRowsEl.querySelectorAll('[data-input-remove]').forEach((button) => {
@@ -1720,6 +1749,23 @@
         .replaceAll(/[^a-zA-Z0-9_]/g, '_');
     }
 
+    function buildDividerPayload(node) {
+      if (!node || (node.failMode !== 'sub_repeat' && node.failMode !== 'full_repeat')) {
+        return {};
+      }
+      const payload = {};
+      if (node.divider) {
+        payload.divider = node.divider;
+      }
+      if (node.dividerCn) {
+        payload.divider_cn = node.dividerCn;
+      }
+      if (node.dividerEn) {
+        payload.divider_en = node.dividerEn;
+      }
+      return payload;
+    }
+
     function toDslObject() {
       let context = null;
       const variables = {};
@@ -1770,7 +1816,7 @@
               mode: node.failMode || 'single',
               message_cn: node.messageCn || `${key} 未通过`,
               message_en: node.messageEn || `${key} failed`,
-              ...(node.divider ? { divider: node.divider } : {}),
+              ...buildDividerPayload(node),
             },
             outputs,
           });
@@ -1797,7 +1843,7 @@
             mode: node.failMode || 'single',
             message_cn: node.messageCn || `${key} 命中失败条件`,
             message_en: node.messageEn || `${key} failure condition matched`,
-            ...(node.divider ? { divider: node.divider } : {}),
+            ...buildDividerPayload(node),
           };
         }
       });
@@ -1825,9 +1871,31 @@
       return result;
     }
 
+    function highlightJsonSyntax(jsonText) {
+      return escapeHtml(jsonText).replace(
+        /&quot;([^&]|&(amp|lt|gt|quot|#039);)*&quot;\s*:|&quot;([^&]|&(amp|lt|gt|quot|#039);)*&quot;|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?|\btrue\b|\bfalse\b|\bnull\b/g,
+        (token) => {
+          if (token.startsWith('&quot;') && /:\s*$/.test(token)) {
+            return `<span class="json-key">${token}</span>`;
+          }
+          if (token.startsWith('&quot;') && token.endsWith('&quot;')) {
+            return `<span class="json-string">${token}</span>`;
+          }
+          if (token === 'true' || token === 'false') {
+            return `<span class="json-boolean">${token}</span>`;
+          }
+          if (token === 'null') {
+            return `<span class="json-null">${token}</span>`;
+          }
+          return `<span class="json-number">${token}</span>`;
+        },
+      );
+    }
+
     function renderDslPreview() {
       const payload = toDslObject();
-      dslPreview.textContent = JSON.stringify(payload, null, 2);
+      const jsonText = JSON.stringify(payload, null, 2);
+      dslPreview.innerHTML = highlightJsonSyntax(jsonText);
     }
 
     function openDslPreview() {
@@ -1871,6 +1939,8 @@
           messageCn: extra.messageCn || '',
           messageEn: extra.messageEn || '',
           divider: extra.divider || '',
+          dividerCn: extra.dividerCn || '',
+          dividerEn: extra.dividerEn || '',
           outputs: extra.outputs || '',
           consumes: extra.consumes || '',
           consumeRows: Array.isArray(extra.consumeRows) ? extra.consumeRows : consumesTextToRows(extra.consumes || ''),
@@ -1916,6 +1986,8 @@
           messageCn: item.on_fail && item.on_fail.message_cn ? item.on_fail.message_cn : '',
           messageEn: item.on_fail && item.on_fail.message_en ? item.on_fail.message_en : '',
           divider: item.on_fail && item.on_fail.divider ? item.on_fail.divider : '',
+          dividerCn: item.on_fail && item.on_fail.divider_cn ? item.on_fail.divider_cn : '',
+          dividerEn: item.on_fail && item.on_fail.divider_en ? item.on_fail.divider_en : '',
           datasource: item.datasource || 'saas_db',
           resultMode: item.result_mode || 'records',
           sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
@@ -1950,6 +2022,8 @@
           messageCn: normalizedPayload.on_fail.message_cn || '',
           messageEn: normalizedPayload.on_fail.message_en || '',
           divider: normalizedPayload.on_fail.divider || '',
+          dividerCn: normalizedPayload.on_fail.divider_cn || '',
+          dividerEn: normalizedPayload.on_fail.divider_en || '',
         });
       }
 
@@ -1976,10 +2050,10 @@
       const card = document.createElement('div');
       card.className = 'datasource-card';
       card.innerHTML = `
-        <div class="datasource-grid">
+        <div class="kv-row">
           <input data-role="name" placeholder="datasource 名称，例如 saas_db" />
           <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" />
-          <button class="el-button el-button--danger is-plain is-circle icon-btn" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="material-symbols-rounded">delete</span></button>
+          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="material-symbols-rounded">delete</span></button>
         </div>
       `;
       card.querySelector('[data-role="name"]').value = data && data.name ? data.name : '';
@@ -2164,6 +2238,8 @@
           messageCn: typeof node.messageCn === 'string' ? node.messageCn : '',
           messageEn: typeof node.messageEn === 'string' ? node.messageEn : '',
           divider: typeof node.divider === 'string' ? node.divider : '',
+          dividerCn: typeof node.dividerCn === 'string' ? node.dividerCn : '',
+          dividerEn: typeof node.dividerEn === 'string' ? node.dividerEn : '',
           description: typeof node.description === 'string' ? node.description : '',
           variableValue: typeof node.variableValue === 'string' ? node.variableValue : '',
           variableWhenRows: Array.isArray(node.variableWhenRows)
@@ -2313,6 +2389,9 @@
         mode: safePolicy.mode || 'single',
         message_cn: safePolicy.message_cn || message.zh || '',
         message_en: safePolicy.message_en || message.en || '',
+        divider: typeof safePolicy.divider === 'string' ? safePolicy.divider : '',
+        divider_cn: typeof safePolicy.divider_cn === 'string' ? safePolicy.divider_cn : '',
+        divider_en: typeof safePolicy.divider_en === 'string' ? safePolicy.divider_en : '',
       };
       delete normalized.message;
       return normalized;
