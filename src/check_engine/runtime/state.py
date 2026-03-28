@@ -20,6 +20,7 @@ def _to_plain_data(value: Any) -> Any:
 
 
 class _StatePayload(TypedDict):
+    input: Mapping[str, Any]
     context: Mapping[str, Any]
     variables: Mapping[str, Any]
     steps: Mapping[str, Any]
@@ -77,6 +78,7 @@ class ExecutionResult:
     message_en: Optional[str]
     error_message: Optional[str]
     runtime_exception: bool
+    input: Mapping[str, Any]
     context: Mapping[str, Any]
     variables: Mapping[str, Any]
     steps: Mapping[str, Any]
@@ -141,6 +143,7 @@ class ExecutionResult:
             "message_en": self.message_en,
             "error_message": self.error_message,
             "runtime_exception": self.runtime_exception,
+            "input": _to_plain_data(self.input),
             "context": _to_plain_data(self.context),
             "variables": _to_plain_data(self.variables),
             "steps": _to_plain_data(self.steps),
@@ -150,6 +153,7 @@ class ExecutionResult:
     @staticmethod
     def _state_payload(state: "ExecutionState") -> _StatePayload:
         return {
+            "input": state.input_data,
             "context": state.context_data,
             "variables": state.variables_data,
             "steps": state.step_data,
