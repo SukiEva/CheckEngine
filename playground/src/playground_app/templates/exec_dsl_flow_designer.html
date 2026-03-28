@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
   <style>
     :root {
       --bg: #f5f7fa;
@@ -128,26 +129,14 @@
       background: var(--surface-2);
     }
 
-    button {
-      border: 1px solid transparent;
-      padding: 8px 12px;
-      border-radius: 999px;
-      font: inherit;
-      font-size: 0.85rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: transform .15s ease, opacity .15s ease, box-shadow .15s ease, background .15s ease;
-      display: inline-flex;
-      align-items: center;
+    .el-button {
       gap: 6px;
+      border-radius: 10px;
+      font-size: 0.84rem;
     }
-    button:hover { transform: translateY(-1px); }
-    button:active { transform: translateY(0); opacity: .9; }
-
-    .btn-primary { background: var(--accent); color: var(--on-accent); }
-    .btn-muted { background: #eef3f8; color: #455a74; border-color: #d3dde8; }
-    .btn-danger { background: var(--danger-soft); color: var(--danger); border-color: #f2b8b5; }
-    .btn-primary:hover { box-shadow: 0 8px 16px rgba(30, 136, 229, 0.28); }
+    .el-button .material-symbols-rounded {
+      font-size: 17px;
+    }
 
     #canvas {
       position: relative;
@@ -266,31 +255,10 @@
       align-items: center;
       gap: 6px;
     }
-    .node-delete-btn {
-      border: 1px solid #ef9a9a;
-      background: #ffebee;
-      color: #b3261e;
-      border-radius: 999px;
-      min-width: 28px;
-      width: 28px;
-      height: 28px;
-      cursor: pointer;
-      padding: 0;
-      line-height: 1;
-    }
-    .node-delete-btn:hover {
-      background: #ffe4e6;
-    }
     .icon-btn {
-      min-width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.94rem;
+      min-width: 32px;
+      height: 32px;
       padding: 0;
-      line-height: 1;
     }
 
     .muted { color: var(--muted); }
@@ -311,16 +279,25 @@
     .field textarea,
     .field select {
       width: 100%;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-sm);
-      padding: 8px 10px;
+      border: 1px solid var(--el-border-color, #dcdfe6);
+      border-radius: 8px;
+      padding: 8px 11px;
       font: inherit;
-      font-size: 0.86rem;
+      font-size: 0.84rem;
       resize: vertical;
       min-height: 38px;
+      background: #fff;
+      color: #303133;
     }
 
     .field textarea { min-height: 90px; line-height: 1.5; }
+    .field input:focus,
+    .field textarea:focus,
+    .field select:focus {
+      outline: none;
+      border-color: var(--el-color-primary, #409eff);
+      box-shadow: 0 0 0 1px var(--el-color-primary-light-7, #a0cfff);
+    }
     .field-note {
       margin-top: 2px;
       color: var(--muted);
@@ -384,13 +361,6 @@
       font-size: 18px;
       line-height: 1;
     }
-    .node-delete-btn .material-symbols-rounded {
-      font-size: 16px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
-
     .status {
       font-size: 0.82rem;
       color: var(--muted);
@@ -405,23 +375,18 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
       padding: 4px;
-      border: 1px solid #d9e0e8;
+      border: 1px solid #e4e7ed;
       border-radius: 12px;
-      background: #f7f9fc;
+      background: #fff;
     }
     .tab-btn {
-      border-radius: 10px;
-      background: #eef3f8;
-      color: #455a74;
-      border: 1px solid #d3dde8;
       justify-content: center;
-      padding: 8px 6px;
       font-size: 0.8rem;
     }
-    .tab-btn.active {
-      background: var(--accent-soft);
-      color: var(--accent);
-      border-color: #90caf9;
+    .tab-btn.is-active {
+      border-color: var(--el-color-primary, #409eff);
+      color: var(--el-color-primary, #409eff);
+      background: var(--el-color-primary-light-9, #ecf5ff);
     }
     .tab-panel {
       display: none;
@@ -484,6 +449,19 @@
       animation: spin .8s linear infinite;
       margin-left: 4px;
     }
+    .ep-dialog {
+      width: min(920px, 92vw);
+      border: 1px solid #e4e7ed;
+      border-radius: 12px;
+      padding: 0;
+      box-shadow: 0 18px 32px rgba(0, 0, 0, 0.16);
+    }
+    .ep-dialog::backdrop {
+      background: rgba(17, 24, 39, 0.36);
+    }
+    .ep-dialog-wide {
+      width: min(960px, 95vw);
+    }
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
@@ -515,14 +493,14 @@
       </div>
       <div class="panel-body">
         <div class="tab-switch">
-          <button type="button" class="tab-btn" data-tab-target="datasource">数据源配置</button>
-          <button type="button" class="tab-btn active" data-tab-target="input">输入参数</button>
+          <button type="button" class="el-button el-button--default is-plain tab-btn" data-tab-target="datasource">数据源配置</button>
+          <button type="button" class="el-button el-button--primary tab-btn active is-active" data-tab-target="input">输入参数</button>
         </div>
         <section class="tab-panel" data-tab-panel="datasource">
           <div class="mini-toolbar">
-            <button type="button" class="btn-muted" id="btnDsReload"><span class="material-symbols-rounded">database</span>载入</button>
-            <button type="button" class="btn-primary" id="btnDsAdd"><span class="material-symbols-rounded">add</span>新增</button>
-            <button type="button" class="btn-primary" id="btnDsSave"><span class="material-symbols-rounded">save</span>保存</button>
+            <button type="button" class="el-button el-button--info is-plain" id="btnDsReload"><span class="material-symbols-rounded">database</span>载入</button>
+            <button type="button" class="el-button el-button--primary is-plain" id="btnDsAdd"><span class="material-symbols-rounded">add</span>新增</button>
+            <button type="button" class="el-button el-button--primary" id="btnDsSave"><span class="material-symbols-rounded">save</span>保存</button>
           </div>
           <div class="field-note">仅支持 PostgreSQL：<code>postgresql://</code> 或 <code>postgresql+psycopg2://</code>。</div>
           <div class="datasource-list" id="datasourceList"></div>
@@ -532,7 +510,7 @@
           <div class="field">
             <label>input_data（key/value）</label>
             <div id="runtimeInputRows"></div>
-            <button type="button" class="btn-muted icon-btn" id="btnAddInputParam" title="新增输入参数" aria-label="新增输入参数"><span class="material-symbols-rounded">add</span></button>
+            <button type="button" class="el-button el-button--primary is-plain is-circle icon-btn" id="btnAddInputParam" title="新增输入参数" aria-label="新增输入参数"><span class="material-symbols-rounded">add</span></button>
           </div>
           <div class="inline-status">运行 DSL 时将使用这里的 input_data；默认包含 <code>source_object_id</code>。</div>
         </section>
@@ -541,12 +519,12 @@
 
     <main class="panel canvas-wrap">
       <div class="canvas-toolbar">
-        <button class="btn-primary" id="btnReset"><span class="material-symbols-rounded">delete_sweep</span>清空画布</button>
-        <button class="btn-muted" id="btnArrange"><span class="material-symbols-rounded">format_line_spacing</span>重排顺序</button>
-        <button class="btn-muted" id="btnImport"><span class="material-symbols-rounded">upload_file</span>导入 JSON</button>
-        <button class="btn-muted" id="btnPreview"><span class="material-symbols-rounded">visibility</span>预览 JSON</button>
-        <button class="btn-muted" id="btnRun"><span class="material-symbols-rounded">play_circle</span>运行 DSL</button>
-        <button class="btn-muted" id="btnExport"><span class="material-symbols-rounded">download</span>下载 JSON</button>
+        <button class="el-button el-button--primary" id="btnReset"><span class="material-symbols-rounded">delete_sweep</span>清空画布</button>
+        <button class="el-button el-button--default is-plain" id="btnArrange"><span class="material-symbols-rounded">format_line_spacing</span>重排顺序</button>
+        <button class="el-button el-button--default is-plain" id="btnImport"><span class="material-symbols-rounded">upload_file</span>导入 JSON</button>
+        <button class="el-button el-button--default is-plain" id="btnPreview"><span class="material-symbols-rounded">visibility</span>预览 JSON</button>
+        <button class="el-button el-button--success is-plain" id="btnRun"><span class="material-symbols-rounded">play_circle</span>运行 DSL</button>
+        <button class="el-button el-button--default is-plain" id="btnExport"><span class="material-symbols-rounded">download</span>下载 JSON</button>
         <input type="file" id="fileImportJson" accept="application/json" style="display:none;" />
       </div>
       <section id="canvas">
@@ -566,20 +544,20 @@
     </aside>
   </div>
 
-  <dialog id="jsonPreviewDialog" style="width:min(920px,92vw); border:1px solid #e5e7eb; border-radius:14px; padding:0; box-shadow:0 24px 48px rgba(15, 23, 42, .2);">
+  <dialog id="jsonPreviewDialog" class="ep-dialog">
     <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
       <strong style="font-size:0.95rem;">ExecDSL JSON 预览</strong>
-      <button class="btn-muted" id="btnClosePreview" style="padding:6px 10px;"><span class="material-symbols-rounded">close</span>关闭</button>
+      <button class="el-button el-button--default is-plain" id="btnClosePreview" style="padding:6px 10px;"><span class="material-symbols-rounded">close</span>关闭</button>
     </div>
     <div style="padding:12px;">
       <pre id="dslPreview" style="max-height:60vh;"></pre>
     </div>
   </dialog>
 
-  <dialog id="runtimeDialog" style="width:min(960px,95vw); border:1px solid #e5e7eb; border-radius:14px; padding:0; box-shadow:0 24px 48px rgba(15, 23, 42, .2);">
+  <dialog id="runtimeDialog" class="ep-dialog ep-dialog-wide">
     <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
       <strong style="font-size:0.95rem;">DSL 运行结果</strong>
-      <button class="btn-muted" id="btnCloseRuntime" style="padding:6px 10px;"><span class="material-symbols-rounded">close</span>关闭</button>
+      <button class="el-button el-button--default is-plain" id="btnCloseRuntime" style="padding:6px 10px;"><span class="material-symbols-rounded">close</span>关闭</button>
     </div>
     <div style="padding:12px; display:grid; gap:12px;">
       <div id="runtimeStatus" style="font-size:0.82rem; color:#6b7280;">尚未执行。</div>
@@ -690,7 +668,7 @@
         const laneHasFixedNode = FIXED_TYPES.has(lane.type) && state.nodes.some((item) => item.type === lane.type);
         const addButtonHtml = laneHasFixedNode
           ? ''
-          : `<button class="btn-muted icon-btn" data-add-type="${lane.type}" type="button" title="新增 ${lane.type} 节点" aria-label="新增 ${lane.type} 节点"><span class="material-symbols-rounded">add</span></button>`;
+          : `<button class="el-button el-button--primary is-plain is-circle icon-btn" data-add-type="${lane.type}" type="button" title="新增 ${lane.type} 节点" aria-label="新增 ${lane.type} 节点"><span class="material-symbols-rounded">add</span></button>`;
         const laneEl = document.createElement('section');
         laneEl.className = 'flow-lane';
         laneEl.innerHTML = `
@@ -732,7 +710,7 @@
               <span>${node.type}</span>
               <span class="node-head-actions">
                 <span>${nodeRank}</span>
-                <button class="node-delete-btn icon-btn" type="button" data-node-delete="${node.id}" title="删除节点" aria-label="删除节点"><span class="material-symbols-rounded">delete</span></button>
+                <button class="el-button el-button--danger is-plain is-circle node-delete-btn icon-btn" type="button" data-node-delete="${node.id}" title="删除节点" aria-label="删除节点"><span class="material-symbols-rounded">delete</span></button>
               </span>
             </div>
             <div class="node-body">
@@ -805,8 +783,8 @@
           <label>Step 顺序</label>
           <input value="${node.stepOrder || '-'}" disabled />
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="btn-muted" id="btnStepUp">上移</button>
-            <button class="btn-muted" id="btnStepDown">下移</button>
+            <button class="el-button el-button--default is-plain" id="btnStepUp">上移</button>
+            <button class="el-button el-button--default is-plain" id="btnStepDown">下移</button>
           </div>
         </div>
         ` : ''}
@@ -837,7 +815,7 @@
         <div class="field">
           <label>SQL 变量（key/value）</label>
           <div id="f_sql_params_rows"></div>
-          <button class="btn-muted icon-btn" id="btnAddSqlParam" type="button" title="新增 SQL 变量" aria-label="新增 SQL 变量"><span class="material-symbols-rounded">add</span></button>
+          <button class="el-button el-button--primary is-plain is-circle icon-btn" id="btnAddSqlParam" type="button" title="新增 SQL 变量" aria-label="新增 SQL 变量"><span class="material-symbols-rounded">add</span></button>
         </div>
         ` : ''}
         ${isDecisionNode(node.type) ? `
@@ -850,7 +828,7 @@
         <div class="field">
           <label>When 条件与赋值（condition/value）</label>
           <div id="f_variable_when_rows"></div>
-          <button class="btn-muted icon-btn" id="btnAddVariableWhen" type="button" title="新增 when 条件" aria-label="新增 when 条件"><span class="material-symbols-rounded">add</span></button>
+          <button class="el-button el-button--primary is-plain is-circle icon-btn" id="btnAddVariableWhen" type="button" title="新增 when 条件" aria-label="新增 when 条件"><span class="material-symbols-rounded">add</span></button>
         </div>
         <div class="field">
           <label>默认值（default）</label>
@@ -889,7 +867,7 @@
         <div class="field">
           <label>Consumes（step_name + alias）</label>
           <div id="f_consumes_rows"></div>
-          <button class="btn-muted icon-btn" id="btnAddConsumeRow" type="button" title="新增 consume" aria-label="新增 consume"><span class="material-symbols-rounded">add</span></button>
+          <button class="el-button el-button--primary is-plain is-circle icon-btn" id="btnAddConsumeRow" type="button" title="新增 consume" aria-label="新增 consume"><span class="material-symbols-rounded">add</span></button>
           <div class="field-note">step_name 支持选择已有 step 名，也支持输入 <code>$</code> 触发运行时变量联想。</div>
           <datalist id="consumeStepOptions"></datalist>
         </div>
@@ -1029,7 +1007,7 @@
           <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
             <input data-sql-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="变量名，如 user_id" />
             <input data-sql-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.value || '')}" placeholder="值，如 $input.user_id 或 100" />
-            <button class="btn-danger icon-btn" type="button" data-sql-remove="${index}" title="删除 SQL 变量" aria-label="删除 SQL 变量"><span class="material-symbols-rounded">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle icon-btn" type="button" data-sql-remove="${index}" title="删除 SQL 变量" aria-label="删除 SQL 变量"><span class="material-symbols-rounded">delete</span></button>
           </div>
         `).join('');
         rowsContainer.querySelectorAll('[data-sql-remove]').forEach((button) => {
@@ -1068,7 +1046,7 @@
           <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
             <input data-variable-condition="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.condition || '')}" placeholder="条件，如 $input.amount > 1000" />
             <input data-variable-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.value || '')}" placeholder="赋值，如 1000 或 \"PASS\"" />
-            <button class="btn-danger icon-btn" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="material-symbols-rounded">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle icon-btn" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="material-symbols-rounded">delete</span></button>
           </div>
         `).join('');
         rowsContainer.querySelectorAll('[data-variable-remove]').forEach((button) => {
@@ -1117,7 +1095,7 @@
           <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:6px; margin-bottom:6px;">
             <input data-consume-step="${index}" data-ref-autocomplete="true" list="consumeStepOptions" value="${escapeAttr(row.stepName || '')}" placeholder="step_name 或 $steps.xxx" />
             <input data-consume-alias="${index}" value="${escapeAttr(row.alias || '')}" placeholder="alias（可选）" />
-            <button class="btn-danger icon-btn" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="material-symbols-rounded">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle icon-btn" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="material-symbols-rounded">delete</span></button>
           </div>
         `).join('');
         rowsContainer.querySelectorAll('[data-consume-remove]').forEach((button) => {
@@ -1229,7 +1207,7 @@
         <div class="kv-row">
           <input data-input-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="参数名，如 source_object_id" />
           <input data-input-value="${index}" value="${escapeAttr(row.value || '')}" placeholder="参数值，如 DEMO_1、100 或 true" />
-          <button class="btn-danger icon-btn" type="button" data-input-remove="${index}" title="删除输入参数" aria-label="删除输入参数"><span class="material-symbols-rounded">delete</span></button>
+          <button class="el-button el-button--danger is-plain is-circle icon-btn" type="button" data-input-remove="${index}" title="删除输入参数" aria-label="删除输入参数"><span class="material-symbols-rounded">delete</span></button>
         </div>
       `).join('');
       runtimeInputRowsEl.querySelectorAll('[data-input-remove]').forEach((button) => {
@@ -1933,7 +1911,7 @@
         <div class="datasource-grid">
           <input data-role="name" placeholder="datasource 名称，例如 saas_db" />
           <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" />
-          <button class="btn-danger icon-btn" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="material-symbols-rounded">delete</span></button>
+          <button class="el-button el-button--danger is-plain is-circle icon-btn" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="material-symbols-rounded">delete</span></button>
         </div>
       `;
       card.querySelector('[data-role="name"]').value = data && data.name ? data.name : '';
@@ -2042,14 +2020,12 @@
 
     function setRunButtonLoading(isLoading) {
       if (isLoading) {
-        runButton.classList.add('btn-primary', 'btn-loading');
-        runButton.classList.remove('btn-muted');
+        runButton.classList.add('btn-loading', 'is-loading');
         runButton.disabled = true;
         runButton.innerHTML = '<span class="material-symbols-rounded">hourglass_top</span>运行中';
         return;
       }
-      runButton.classList.remove('btn-primary', 'btn-loading');
-      runButton.classList.add('btn-muted');
+      runButton.classList.remove('btn-loading', 'is-loading');
       runButton.disabled = false;
       runButton.innerHTML = '<span class="material-symbols-rounded">play_circle</span>运行 DSL';
     }
@@ -2477,7 +2453,12 @@
       tabButton.addEventListener('click', () => {
         const target = tabButton.getAttribute('data-tab-target');
         document.querySelectorAll('[data-tab-target]').forEach((item) => {
-          item.classList.toggle('active', item === tabButton);
+          const isActiveTab = item === tabButton;
+          item.classList.toggle('active', isActiveTab);
+          item.classList.toggle('is-active', isActiveTab);
+          item.classList.toggle('el-button--primary', isActiveTab);
+          item.classList.toggle('el-button--default', !isActiveTab);
+          item.classList.toggle('is-plain', !isActiveTab);
         });
         document.querySelectorAll('[data-tab-panel]').forEach((panel) => {
           const isActive = panel.getAttribute('data-tab-panel') === target;
