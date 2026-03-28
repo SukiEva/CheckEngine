@@ -356,6 +356,11 @@
       max-height: 42vh;
       overflow: auto;
     }
+    .json-key { color: #93c5fd; }
+    .json-string { color: #86efac; }
+    .json-number { color: #fca5a5; }
+    .json-boolean { color: #fcd34d; }
+    .json-null { color: #c4b5fd; }
 
     .material-symbols-rounded {
       font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 20;
@@ -683,11 +688,11 @@
     function renderCanvas() {
       dropZone.innerHTML = '';
       const lanes = [
-        { type: 'context', label: '1) Context（固定 1 个）' },
+        { type: 'context', label: '1) Context' },
         { type: 'variable', label: '2) Variables' },
-        { type: 'precheck', label: '3) Prechecks（可多个）' },
-        { type: 'step', label: '4) Steps（可多个）' },
-        { type: 'on_fail', label: '5) On Fail（固定 1 个）' },
+        { type: 'precheck', label: '3) Prechecks' },
+        { type: 'step', label: '4) Steps' },
+        { type: 'on_fail', label: '5) On Fail' },
       ];
 
       lanes.forEach((lane) => {
@@ -1866,9 +1871,31 @@
       return result;
     }
 
+    function highlightJsonSyntax(jsonText) {
+      return escapeHtml(jsonText).replace(
+        /&quot;([^&]|&(amp|lt|gt|quot|#039);)*&quot;\s*:|&quot;([^&]|&(amp|lt|gt|quot|#039);)*&quot;|-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?|\btrue\b|\bfalse\b|\bnull\b/g,
+        (token) => {
+          if (token.startsWith('&quot;') && /:\s*$/.test(token)) {
+            return `<span class="json-key">${token}</span>`;
+          }
+          if (token.startsWith('&quot;') && token.endsWith('&quot;')) {
+            return `<span class="json-string">${token}</span>`;
+          }
+          if (token === 'true' || token === 'false') {
+            return `<span class="json-boolean">${token}</span>`;
+          }
+          if (token === 'null') {
+            return `<span class="json-null">${token}</span>`;
+          }
+          return `<span class="json-number">${token}</span>`;
+        },
+      );
+    }
+
     function renderDslPreview() {
       const payload = toDslObject();
-      dslPreview.textContent = JSON.stringify(payload, null, 2);
+      const jsonText = JSON.stringify(payload, null, 2);
+      dslPreview.innerHTML = highlightJsonSyntax(jsonText);
     }
 
     function openDslPreview() {
@@ -2023,7 +2050,7 @@
       const card = document.createElement('div');
       card.className = 'datasource-card';
       card.innerHTML = `
-        <div class="datasource-grid">
+        <div class="kv-row">
           <input data-role="name" placeholder="datasource 名称，例如 saas_db" />
           <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" />
           <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="material-symbols-rounded">delete</span></button>
