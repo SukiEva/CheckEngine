@@ -26,10 +26,10 @@ class DslCompiler:
 
     def __init__(
         self,
-        expression_evaluator: Optional[ExpressionEvaluator] = None,
+        expression_evaluator: ExpressionEvaluator,
         logger: Optional[logging.Logger] = None,
     ) -> None:
-        self.expression_evaluator = expression_evaluator or ExpressionEvaluator()
+        self.expression_evaluator = expression_evaluator
         self.logger = logger or logging.getLogger(__name__)
 
     def compile(self, document: DslDocument) -> CompiledDsl:
