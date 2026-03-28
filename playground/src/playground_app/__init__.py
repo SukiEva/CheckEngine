@@ -94,6 +94,25 @@ def create_app() -> FastAPI:
         finally:
             _dispose_engines(created_engines)
 
+    @app.post("/api/validate-dsl")
+    async def validate_dsl(request: Request) -> dict[str, Any]:
+        try:
+            payload = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="请求体必须是 JSON 对象。") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="请求体必须是 JSON 对象。")
+
+        dsl_text = payload.get("dsl_text")
+        if not isinstance(dsl_text, str) or not dsl_text.strip():
+            raise HTTPException(status_code=400, detail="dsl_text 不能为空。")
+
+        try:
+            dsl_engine.validate(dsl_text)
+            return {"ok": True}
+        except (ValueError, DSLExecutionError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     return app
 
 
