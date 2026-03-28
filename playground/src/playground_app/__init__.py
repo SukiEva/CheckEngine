@@ -68,14 +68,6 @@ def create_app() -> FastAPI:
             context={"request": request},
         )
 
-    @app.get("/datasource-configs", response_class=HTMLResponse)
-    def datasource_config_page(request: Request) -> Any:
-        return templates.TemplateResponse(
-            request=request,
-            name="datasource_configs.html",
-            context={"request": request},
-        )
-
     @app.post("/api/run-dsl")
     async def run_dsl(request: Request) -> dict[str, Any]:
         try:
