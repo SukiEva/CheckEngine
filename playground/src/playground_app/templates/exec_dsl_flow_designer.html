@@ -6,6 +6,7 @@
   <title>ExecDSL 流程图式设计器（实验版）</title>
   <link rel="stylesheet" href="/static/vendor/element-plus/index.css" />
   <link rel="stylesheet" href="/static/vendor/highlightjs/github-dark.min.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" />
   <style>
     :root {
       --bg: #f5f7fa;
@@ -441,10 +442,16 @@
       line-height: 1;
       font-style: normal;
     }
-    .ep-icon-svg {
-      display: block;
-      width: 1em;
-      height: 1em;
+    .ep-icon.material-icons-outlined {
+      font-size: inherit;
+      line-height: 1;
+      font-weight: normal;
+      letter-spacing: normal;
+      text-transform: none;
+      white-space: nowrap;
+      direction: ltr;
+      -webkit-font-feature-settings: "liga";
+      -webkit-font-smoothing: antialiased;
     }
     .status {
       font-size: 0.82rem;
@@ -654,29 +661,14 @@
 
   <script src="/static/vendor/highlightjs/highlight.min.js"></script>
   <script>
-    const EP_ICON_FILE_MAP = {
-      add: 'plus',
-      delete: 'delete',
-      delete_sweep: 'brush',
-      upload_file: 'upload',
-      visibility: 'view',
-      play_circle: 'video-play',
-      download: 'download',
-      close: 'close',
-      arrow_upward: 'top',
-      arrow_downward: 'bottom',
-      hourglass_top: 'loading',
-    };
-
-    function renderElementPlusIcons(root = document) {
+    function renderMaterialIcons(root = document) {
       const iconElements = root.querySelectorAll('.ep-icon');
       iconElements.forEach((iconElement) => {
         const iconName = (iconElement.dataset.iconName || iconElement.textContent || '').trim();
         if (!iconName) return;
-        const iconFileName = EP_ICON_FILE_MAP[iconName];
-        if (!iconFileName) return;
         iconElement.dataset.iconName = iconName;
-        iconElement.innerHTML = `<img class="ep-icon-svg" src="/static/vendor/element-plus-icons/${iconFileName}.svg" alt="" />`;
+        iconElement.textContent = iconName;
+        iconElement.classList.add('material-icons-outlined');
         iconElement.setAttribute('aria-hidden', 'true');
       });
     }
@@ -903,7 +895,7 @@
           laneBody.appendChild(nodeEl);
         });
       });
-      renderElementPlusIcons(dropZone);
+      renderMaterialIcons(dropZone);
     }
 
     function addNodeByType(nodeType) {
@@ -1055,7 +1047,7 @@
         </div>
         ` : ''}
         `;
-      renderElementPlusIcons(editorPanel);
+      renderMaterialIcons(editorPanel);
 
       const persistEditorNode = () => {
         if (showNodeTitleField) {
@@ -2270,13 +2262,13 @@
         runButton.classList.add('btn-loading', 'is-loading');
         runButton.disabled = true;
         runButton.innerHTML = '<span class="ep-icon">hourglass_top</span>运行中';
-        renderElementPlusIcons(runButton);
+        renderMaterialIcons(runButton);
         return;
       }
       runButton.classList.remove('btn-loading', 'is-loading');
       runButton.disabled = false;
       runButton.innerHTML = '<span class="ep-icon">play_circle</span>运行 DSL';
-      renderElementPlusIcons(runButton);
+      renderMaterialIcons(runButton);
     }
 
     async function runDslNow() {
@@ -2723,7 +2715,7 @@
     loadDatasourceConfigLocal();
     closeDslPreview();
     setRunButtonLoading(false);
-    renderElementPlusIcons();
+    renderMaterialIcons();
   </script>
 </body>
 </html>
