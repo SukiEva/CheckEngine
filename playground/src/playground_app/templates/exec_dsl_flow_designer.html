@@ -1237,12 +1237,18 @@
       const withoutDoubleQuote = withoutSingleQuote.replace(/"(?:[^"\\]|\\.)*"/g, ' ');
       const withoutLineComment = withoutDoubleQuote.replace(/--.*$/gm, ' ');
       const cleanedSql = withoutLineComment.replace(/\/\*[\s\S]*?\*\//g, ' ');
-      const regex = /(^|[^:]):([a-zA-Z_][a-zA-Z0-9_]*)/g;
+      const regex = /:([a-zA-Z_][a-zA-Z0-9_]*)/g;
       const keys = [];
       const seen = new Set();
       let matched = regex.exec(cleanedSql);
       while (matched) {
-        const key = matched[2];
+        const tokenStart = matched.index;
+        const previousChar = tokenStart > 0 ? cleanedSql[tokenStart - 1] : '';
+        if (previousChar === ':') {
+          matched = regex.exec(cleanedSql);
+          continue;
+        }
+        const key = matched[1];
         if (!seen.has(key)) {
           seen.add(key);
           keys.push(key);
@@ -2676,6 +2682,19 @@
         return '';
       }
       const trimmed = rawText.trim();
+      const integerLiteralMatch = /^-?\d+$/.test(trimmed);
+      if (integerLiteralMatch) {
+        try {
+          const parsedInteger = BigInt(trimmed);
+          const maxSafeInteger = BigInt(Number.MAX_SAFE_INTEGER);
+          const minSafeInteger = BigInt(Number.MIN_SAFE_INTEGER);
+          if (parsedInteger > maxSafeInteger || parsedInteger < minSafeInteger) {
+            return trimmed;
+          }
+        } catch (_error) {
+          return trimmed;
+        }
+      }
       try {
         return JSON.parse(trimmed);
       } catch (_error) {
