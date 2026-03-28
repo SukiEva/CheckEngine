@@ -95,8 +95,10 @@ class ExpressionEvaluator:
         try:
             tree = ast.parse(python_expr, mode="eval")
         except SyntaxError as exc:
-            self.logger.exception("Failed to parse expression syntax: %s", expression)
-            raise DSLExecutionError(f"Expression syntax error: {expression}") from exc
+            raise DSLExecutionError(
+                f"Expression syntax error: {expression}",
+                original_exception=exc,
+            ) from exc
 
         _SafeExpressionValidator().visit(tree)
         code = compile(tree, "<dsl-expression>", "eval")
@@ -124,9 +126,9 @@ class ExpressionEvaluator:
         try:
             return eval(expression.code, {"__builtins__": {}}, {**ref_env, "exists": self._exists})
         except Exception as exc:  # noqa: BLE001
-            self.logger.exception("Failed to evaluate expression: %s", expression.source)
             raise DSLExecutionError(
                 f"Expression evaluation failed: {expression.source}",
+                original_exception=exc,
             ) from exc
 
     @staticmethod

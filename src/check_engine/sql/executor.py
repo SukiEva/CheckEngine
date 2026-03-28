@@ -56,17 +56,17 @@ class SqlExecutor:
             exported_data, exported_fields = self._project_outputs(node, node_name, rows)
         except Exception as exc:  # noqa: BLE001
             if isinstance(exc, DSLExecutionError):
-                self.logger.exception("SQL node execution failed with DSL error at node %s", node_name)
                 raise
-            self.logger.exception("SQL node execution failed at node %s", node_name)
             raise DSLExecutionError(
                 f"SQL node execution failed: {node_name}",
+                original_exception=exc,
             ) from exc
 
         return NodeExecutionResult(
             raw_rows=rows,
             exported_data=exported_data,
             exported_fields=exported_fields,
+            executed_sql=final_sql,
         )
 
     @staticmethod
