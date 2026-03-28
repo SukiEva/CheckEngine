@@ -435,9 +435,16 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      width: 1em;
+      height: 1em;
       font-size: 18px;
       line-height: 1;
       font-style: normal;
+    }
+    .ep-icon-svg {
+      display: block;
+      width: 1em;
+      height: 1em;
     }
     .status {
       font-size: 0.82rem;
@@ -647,27 +654,29 @@
 
   <script src="/static/vendor/highlightjs/highlight.min.js"></script>
   <script>
-    const EP_ICON_TEXT_MAP = {
-      add: '+',
-      delete: '×',
-      delete_sweep: '🧹',
-      upload_file: '⇪',
-      visibility: '👁',
-      play_circle: '▶',
-      download: '⇩',
-      close: '✕',
-      arrow_upward: '↑',
-      arrow_downward: '↓',
-      hourglass_top: '⌛',
+    const EP_ICON_FILE_MAP = {
+      add: 'plus',
+      delete: 'delete',
+      delete_sweep: 'brush',
+      upload_file: 'upload',
+      visibility: 'view',
+      play_circle: 'video-play',
+      download: 'download',
+      close: 'close',
+      arrow_upward: 'top',
+      arrow_downward: 'bottom',
+      hourglass_top: 'loading',
     };
 
     function renderElementPlusIcons(root = document) {
       const iconElements = root.querySelectorAll('.ep-icon');
       iconElements.forEach((iconElement) => {
-        const rawName = (iconElement.dataset.iconName || iconElement.textContent || '').trim();
-        if (!rawName) return;
-        iconElement.dataset.iconName = rawName;
-        iconElement.textContent = EP_ICON_TEXT_MAP[rawName] || rawName;
+        const iconName = (iconElement.dataset.iconName || iconElement.textContent || '').trim();
+        if (!iconName) return;
+        const iconFileName = EP_ICON_FILE_MAP[iconName];
+        if (!iconFileName) return;
+        iconElement.dataset.iconName = iconName;
+        iconElement.innerHTML = `<img class="ep-icon-svg" src="/static/vendor/element-plus-icons/${iconFileName}.svg" alt="" />`;
         iconElement.setAttribute('aria-hidden', 'true');
       });
     }
