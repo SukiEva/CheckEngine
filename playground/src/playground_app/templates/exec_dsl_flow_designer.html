@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ExecDSL 流程图式设计器（实验版）</title>
   <link rel="stylesheet" href="/static/vendor/element-plus/index.css" />
-  <link rel="stylesheet" href="/static/vendor/highlightjs/github-dark.min.css" />
+  <link rel="stylesheet" href="/static/vendor/prism/prism.min.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" />
   <style>
     :root {
@@ -354,6 +354,11 @@
     }
 
     .field textarea { min-height: 90px; line-height: 1.5; }
+    .field input.editor-readonly-input[disabled] {
+      background: #f3f4f6;
+      color: #6b7280;
+      cursor: not-allowed;
+    }
     .field input:focus,
     .kv-row input:focus,
     .field textarea:focus,
@@ -659,7 +664,10 @@
     </div>
   </dialog>
 
-  <script src="/static/vendor/highlightjs/highlight.min.js"></script>
+  <script src="/static/vendor/prism/prism-core.min.js"></script>
+  <script src="/static/vendor/prism/prism-clike.min.js"></script>
+  <script src="/static/vendor/prism/prism-javascript.min.js"></script>
+  <script src="/static/vendor/prism/prism-json.min.js"></script>
   <script>
     function renderMaterialIcons(root = document) {
       const iconElements = root.querySelectorAll('.ep-icon');
@@ -942,9 +950,15 @@
           <input id="f_title" value="${escapeAttr(node.title)}" />
         </div>
         ` : ''}
+        ${node.type === 'precheck' || node.type === 'step' ? `
+        <div class="field">
+          <label>Description</label>
+          <input id="f_description" value="${escapeAttr(node.description || '')}" placeholder="可选：用于 precheck/step 的说明" />
+        </div>
+        ` : ''}
         <div class="field">
           <label>类型（只读）</label>
-          <input value="${node.type}" disabled />
+          <input class="editor-readonly-input" value="${node.type}" disabled />
         </div>
         ${isSqlNode(node.type) ? `
         <div class="field">
@@ -1038,12 +1052,6 @@
           <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddConsumeRow" type="button" title="新增 consume" aria-label="新增 consume"><span class="ep-icon">add</span></button>
           <div class="field-note">step_name 支持选择已有 step 名，也支持输入 <code>$</code> 触发运行时变量联想。</div>
           <datalist id="consumeStepOptions"></datalist>
-        </div>
-        ` : ''}
-        ${node.type === 'precheck' || node.type === 'step' ? `
-        <div class="field">
-          <label>Description</label>
-          <input id="f_description" value="${escapeAttr(node.description || '')}" placeholder="可选：用于 precheck/step 的说明" />
         </div>
         ` : ''}
         `;
@@ -1189,6 +1197,7 @@
             <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-sql-remove="${index}" title="删除 SQL 变量" aria-label="删除 SQL 变量"><span class="ep-icon">delete</span></button>
           </div>
         `).join('');
+        renderMaterialIcons(rowsContainer);
         rowsContainer.querySelectorAll('[data-sql-remove]').forEach((button) => {
           button.addEventListener('click', () => {
             const removeIndex = Number(button.getAttribute('data-sql-remove'));
@@ -1228,6 +1237,7 @@
             <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="ep-icon">delete</span></button>
           </div>
         `).join('');
+        renderMaterialIcons(rowsContainer);
         rowsContainer.querySelectorAll('[data-variable-remove]').forEach((button) => {
           button.addEventListener('click', () => {
             const removeIndex = Number(button.getAttribute('data-variable-remove'));
@@ -1277,6 +1287,7 @@
             <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="ep-icon">delete</span></button>
           </div>
         `).join('');
+        renderMaterialIcons(rowsContainer);
         rowsContainer.querySelectorAll('[data-consume-remove]').forEach((button) => {
           button.addEventListener('click', () => {
             const removeIndex = Number(button.getAttribute('data-consume-remove'));
@@ -1988,8 +1999,8 @@
       const jsonText = JSON.stringify(payload, null, 2);
       if (!dslPreviewCode) return;
       dslPreviewCode.textContent = jsonText;
-      if (window.hljs && typeof window.hljs.highlightElement === 'function') {
-        window.hljs.highlightElement(dslPreviewCode);
+      if (window.Prism && typeof window.Prism.highlightElement === 'function') {
+        window.Prism.highlightElement(dslPreviewCode);
       }
     }
 
