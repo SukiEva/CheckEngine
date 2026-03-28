@@ -7,7 +7,7 @@ import re
 from collections.abc import Collection
 from dataclasses import dataclass
 from types import CodeType
-from typing import Any
+from typing import Any, Optional
 
 from ..exceptions import DSLExecutionError
 from ..runtime import ExecutionState
@@ -66,7 +66,7 @@ class _SafeExpressionValidator(ast.NodeVisitor):
 class ExpressionEvaluator:
     """求值 DSL 布尔表达式。"""
 
-    REF_PATTERN = re.compile(r"\$[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
+    REF_PATTERN = re.compile(r"\$(?:\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
     NULL_PATTERN = re.compile(r"\bnull\b")
 
     def compile(self, expression: str) -> CompiledExpression:
@@ -102,12 +102,17 @@ class ExpressionEvaluator:
             code=code,
         )
 
-    def evaluate(self, expression: str, state: ExecutionState) -> Any:
-        return self.evaluate_compiled(self.compile(expression), state)
+    def evaluate(self, expression: str, state: ExecutionState, local_data: Optional[Any] = None) -> Any:
+        return self.evaluate_compiled(self.compile(expression), state, local_data=local_data)
 
-    def evaluate_compiled(self, expression: CompiledExpression, state: ExecutionState) -> Any:
+    def evaluate_compiled(
+        self,
+        expression: CompiledExpression,
+        state: ExecutionState,
+        local_data: Optional[Any] = None,
+    ) -> Any:
         ref_env = {
-            "__ref_{0}".format(index): state.resolve_reference(reference)
+            "__ref_{0}".format(index): state.resolve_reference(reference, local_data=local_data)
             for index, reference in enumerate(expression.references)
         }
 

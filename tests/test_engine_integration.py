@@ -192,6 +192,21 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "precheck")
         self.assertEqual(result.failed_node, "check_rate_null")
 
+    def test_execute_precheck_exists_path_supports_local_output_reference(self) -> None:
+        self._insert_header("FAIL_PRECHECK_LOCAL_PATH", "flow1", "scenario1")
+        self._insert_journal("FAIL_PRECHECK_LOCAL_PATH", "USD", "1", "user", "2024-01-01", None, 100)
+        self._insert_rate("USD", 1.0)
+
+        dsl_data = json.loads(self.dsl_text)
+        dsl_data["prechecks"][0]["outputs"] = ["func"]
+        dsl_data["prechecks"][0]["on_fail"]["decision"] = "exists($.func)"
+
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_PRECHECK_LOCAL_PATH"}, self.registry)
+
+        self.assertFalse(result.passed)
+        self.assertEqual(result.phase, "precheck")
+        self.assertEqual(result.failed_node, "check_rate_null")
+
     def _create_schema(self) -> None:
         with self.saas_db.get_session() as session:
             session.execute(

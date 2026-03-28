@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 from ..exceptions import DSLExecutionError
 
@@ -140,7 +140,10 @@ class RuntimeReferenceResolver:
             "steps": StepScopeResolver(self.step_data),
         }
 
-    def resolve_reference(self, reference: str) -> Any:
+    def resolve_reference(self, reference: str, local_data: Optional[Any] = None) -> Any:
+        if reference.startswith("$."):
+            return self._resolve_local_reference(reference, local_data)
+
         parts = self.parse_reference_parts(reference)
         scope = parts[0]
         resolver = self._resolvers.get(scope)
@@ -148,8 +151,50 @@ class RuntimeReferenceResolver:
             raise DSLExecutionError(f"Unknown scope: {reference}")
         return resolver.resolve(parts[1:], reference)
 
+    def _resolve_local_reference(self, reference: str, local_data: Optional[Any]) -> Any:
+        if local_data is None:
+            raise DSLExecutionError(f"Local scope is not available for reference: {reference}")
+
+        suffix = reference[2:]
+        if not suffix:
+            raise DSLExecutionError(f"Invalid reference path: {reference}")
+
+        parts = suffix.split(".")
+        current: Any = local_data
+        for part in parts:
+            if not part:
+                raise DSLExecutionError(f"Invalid reference path: {reference}")
+            current = self._resolve_local_part(current, part, reference)
+        return current
+
+    def _resolve_local_part(self, current: Any, part: str, reference: str) -> Any:
+        if isinstance(current, Mapping):
+            if part not in current:
+                raise DSLExecutionError(f"Referenced field does not exist: {reference}")
+            return current[part]
+
+        if StepScopeResolver._is_projectable_sequence(current):
+            projected: list[Any] = []
+            for item in current:
+                if not isinstance(item, Mapping):
+                    raise DSLExecutionError(
+                        f"Cannot resolve reference path further: {reference}",
+                    )
+                if part not in item:
+                    raise DSLExecutionError(f"Referenced field does not exist: {reference}")
+                projected.append(item[part])
+            return projected
+
+        raise DSLExecutionError(
+            f"Cannot resolve reference path further: {reference}",
+        )
+
     @staticmethod
     def parse_reference_parts(reference: str) -> list[str]:
         if not reference.startswith("$"):
             raise DSLExecutionError(f"Invalid reference path: {reference}")
+        if reference.startswith("$."):
+            raise DSLExecutionError(
+                f"Local reference requires runtime local scope and cannot be parsed globally: {reference}",
+            )
         return reference[1:].split(".")

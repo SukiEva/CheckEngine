@@ -203,7 +203,7 @@ class ExecutionState:
             )
         )
 
-    def resolve_reference(self, reference: str) -> Any:
+    def resolve_reference(self, reference: str, local_data: Optional[Any] = None) -> Any:
         self.reference_resolver.update_sources(
             input_data=self.input_data,
             context_data=self.context_data,
@@ -211,7 +211,7 @@ class ExecutionState:
             prechecks_data=self.prechecks_data,
             step_data=self.step_data,
         )
-        return self.reference_resolver.resolve_reference(reference)
+        return self.reference_resolver.resolve_reference(reference, local_data=local_data)
 
     def resolve_path(self, path: str) -> Any:
         return self.resolve_reference(path if path.startswith("$") else "$" + path)

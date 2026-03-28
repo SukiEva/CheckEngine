@@ -71,6 +71,26 @@ class RuntimeReferenceResolverTestCase(unittest.TestCase):
 
         self.assertEqual(resolver.resolve_reference("$prechecks.check_a.line_no"), [1, 2])
 
+    def test_resolve_local_scope_reference(self) -> None:
+        resolver = RuntimeReferenceResolver(
+            input_data={},
+            context_data={},
+            variables_data={},
+            prechecks_data={},
+            step_data={},
+        )
+
+        local_data = {
+            "line_no": [1, 2],
+            "rows": (
+                MappingProxyType({"func": "USD"}),
+                MappingProxyType({"func": "CNY"}),
+            ),
+        }
+
+        self.assertEqual(resolver.resolve_reference("$.line_no", local_data=local_data), [1, 2])
+        self.assertEqual(resolver.resolve_reference("$.rows.func", local_data=local_data), ["USD", "CNY"])
+
 
 if __name__ == "__main__":
     unittest.main()

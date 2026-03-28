@@ -175,7 +175,12 @@ class DslEngine:
             ):
                 if precheck.on_fail is None:
                     raise RuntimeError("precheck.on_fail is unexpectedly None.")
-                message_cn, message_en = self.message_renderer.render(precheck.on_fail, state, result.raw_rows)
+                message_cn, message_en = self.message_renderer.render(
+                    precheck.on_fail,
+                    state,
+                    result.raw_rows,
+                    local_data=result.exported_data,
+                )
                 return ExecutionResult.build_failure(
                     phase="precheck",
                     failed_node=precheck.name,
@@ -284,10 +289,16 @@ class DslEngine:
     ) -> bool:
         if precheck.on_fail is None:
             raise ValueError("precheck.on_fail must not be None.")
-        return self._should_fail_by_expression(compiled_expression, state)
+        precheck_data = state.prechecks_data.get(precheck.name)
+        return self._should_fail_by_expression(compiled_expression, state, local_data=precheck_data)
 
-    def _should_fail_by_expression(self, expression: CompiledExpression, state: ExecutionState) -> bool:
-        return bool(self.expression_evaluator.evaluate_compiled(expression, state))
+    def _should_fail_by_expression(
+        self,
+        expression: CompiledExpression,
+        state: ExecutionState,
+        local_data: Optional[Any] = None,
+    ) -> bool:
+        return bool(self.expression_evaluator.evaluate_compiled(expression, state, local_data=local_data))
 
     def _run_runtime_action(
         self,
