@@ -9,7 +9,7 @@
 ## 目录结构
 
 ```text
-playground/flask_app/
+playground/
   pyproject.toml
   README.md
   src/playground_app/
@@ -20,7 +20,7 @@ playground/flask_app/
 ## 运行方式（使用 uv）
 
 ```bash
-cd playground/flask_app
+cd playground
 uv sync
 uv run playground-server
 ```
@@ -48,7 +48,7 @@ uv run playground-server
 ## 前端数据源配置与运行
 
 - 运行弹窗新增「从 SQLite 载入」「保存数据源配置」「执行当前 DSL」按钮。
-- 数据源配置会持久化到 SQLite 文件：`playground/flask_app/data/playground.db`。
+- 数据源配置会持久化到 SQLite 文件：`playground/data/playground.db`。
 - 点击「执行当前 DSL」时会使用当前页面配置作为 `datasources` 请求参数。
 
 ## 接口说明
