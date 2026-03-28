@@ -626,6 +626,7 @@
         <button class="el-button el-button--primary" id="btnReset"><span class="ep-icon">delete_sweep</span>清空画布</button>
         <button class="el-button el-button--default is-plain" id="btnImport"><span class="ep-icon">upload_file</span>导入 JSON</button>
         <button class="el-button el-button--default is-plain" id="btnPreview"><span class="ep-icon">visibility</span>预览 JSON</button>
+        <button class="el-button el-button--default is-plain" id="btnValidate"><span class="ep-icon">fact_check</span>校验 DSL</button>
         <button class="el-button el-button--success is-plain" id="btnRun"><span class="ep-icon">play_circle</span>运行 DSL</button>
         <button class="el-button el-button--default is-plain" id="btnExport"><span class="ep-icon">download</span>下载 JSON</button>
         <input type="file" id="fileImportJson" accept="application/json" style="display:none;" />
@@ -703,6 +704,7 @@
     const runtimeStatus = document.getElementById('runtimeStatus');
     const runtimeResultCode = document.getElementById('runtimeResultCode');
     const statusText = document.getElementById('statusText');
+    const validateButton = document.getElementById('btnValidate');
     const runButton = document.getElementById('btnRun');
     const datasourceList = document.getElementById('datasourceList');
     const datasourceStatus = document.getElementById('datasourceStatus');
@@ -2313,6 +2315,47 @@
       renderMaterialIcons(runButton);
     }
 
+    function setValidateButtonLoading(isLoading) {
+      if (isLoading) {
+        validateButton.classList.add('btn-loading', 'is-loading');
+        validateButton.disabled = true;
+        validateButton.innerHTML = '<span class="ep-icon">hourglass_top</span>校验中';
+        renderMaterialIcons(validateButton);
+        return;
+      }
+      validateButton.classList.remove('btn-loading', 'is-loading');
+      validateButton.disabled = false;
+      validateButton.innerHTML = '<span class="ep-icon">fact_check</span>校验 DSL';
+      renderMaterialIcons(validateButton);
+    }
+
+    async function validateDslNow() {
+      const dslPayload = toDslObject();
+      setValidateButtonLoading(true);
+      try {
+        const response = await fetch('/api/validate-dsl', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dsl_text: JSON.stringify(dslPayload, null, 2),
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          statusText.classList.add('status-warn');
+          statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(payload.detail || payload.error || '未知错误')}`;
+          return;
+        }
+        statusText.classList.remove('status-warn');
+        statusText.textContent = 'DSL 校验通过。';
+      } catch (error) {
+        statusText.classList.add('status-warn');
+        statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(error.message || '网络错误')}`;
+      } finally {
+        setValidateButtonLoading(false);
+      }
+    }
+
     async function runDslNow() {
       const dslPayload = toDslObject();
       let datasourcePayload = readDatasourceConfigRows();
@@ -2703,6 +2746,16 @@
       a.click();
       URL.revokeObjectURL(url);
       statusText.textContent = '已下载 DSL JSON。';
+    });
+
+    document.getElementById('btnValidate').addEventListener('click', () => {
+      try {
+        validateDslPayload(toDslObject());
+        validateDslNow();
+      } catch (error) {
+        statusText.classList.add('status-warn');
+        statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(error.message || '结构不合法')}`;
+      }
     });
 
     document.getElementById('btnRun').addEventListener('click', () => {
