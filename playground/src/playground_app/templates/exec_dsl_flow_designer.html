@@ -134,6 +134,9 @@
       border-radius: 10px;
       font-size: 0.84rem;
     }
+    .el-button.is-circle {
+      border-radius: 50%;
+    }
     .el-button .material-symbols-rounded {
       font-size: 17px;
     }
@@ -408,6 +411,25 @@
     .datasource-list {
       display: grid;
       gap: 8px;
+      min-height: 220px;
+      align-content: start;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 10px;
+      background: #f9fafb;
+    }
+    .datasource-list:empty::before {
+      content: "暂无数据源配置，点击“载入”或“新增”开始配置。";
+      color: var(--muted);
+      font-size: 0.8rem;
+      border: 1px dashed #cbd5e1;
+      border-radius: 10px;
+      min-height: 160px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 8px;
+      background: #fff;
     }
     .datasource-card {
       border: 1px solid var(--line);
@@ -419,7 +441,7 @@
     }
     .datasource-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) auto;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
       gap: 6px;
       align-items: center;
     }
@@ -494,13 +516,16 @@
       <div class="panel-body">
         <div class="tab-switch">
           <button type="button" class="el-button el-button--default is-plain tab-btn" data-tab-target="datasource">数据源配置</button>
-          <button type="button" class="el-button el-button--primary tab-btn active is-active" data-tab-target="input">输入参数</button>
+          <button type="button" class="el-button el-button--default is-plain tab-btn active is-active" data-tab-target="input">输入参数</button>
         </div>
         <section class="tab-panel" data-tab-panel="datasource">
           <div class="mini-toolbar">
             <button type="button" class="el-button el-button--info is-plain" id="btnDsReload"><span class="material-symbols-rounded">database</span>载入</button>
-            <button type="button" class="el-button el-button--primary is-plain" id="btnDsAdd"><span class="material-symbols-rounded">add</span>新增</button>
             <button type="button" class="el-button el-button--primary" id="btnDsSave"><span class="material-symbols-rounded">save</span>保存</button>
+          </div>
+          <div class="field">
+            <label>datasource（name/db_url）</label>
+            <button type="button" class="el-button el-button--primary is-plain is-circle icon-btn" id="btnDsAdd" title="新增数据源" aria-label="新增数据源"><span class="material-symbols-rounded">add</span></button>
           </div>
           <div class="field-note">仅支持 PostgreSQL：<code>postgresql://</code> 或 <code>postgresql+psycopg2://</code>。</div>
           <div class="datasource-list" id="datasourceList"></div>
@@ -520,7 +545,6 @@
     <main class="panel canvas-wrap">
       <div class="canvas-toolbar">
         <button class="el-button el-button--primary" id="btnReset"><span class="material-symbols-rounded">delete_sweep</span>清空画布</button>
-        <button class="el-button el-button--default is-plain" id="btnArrange"><span class="material-symbols-rounded">format_line_spacing</span>重排顺序</button>
         <button class="el-button el-button--default is-plain" id="btnImport"><span class="material-symbols-rounded">upload_file</span>导入 JSON</button>
         <button class="el-button el-button--default is-plain" id="btnPreview"><span class="material-symbols-rounded">visibility</span>预览 JSON</button>
         <button class="el-button el-button--success is-plain" id="btnRun"><span class="material-symbols-rounded">play_circle</span>运行 DSL</button>
@@ -587,6 +611,17 @@
     const runButton = document.getElementById('btnRun');
     const datasourceList = document.getElementById('datasourceList');
     const datasourceStatus = document.getElementById('datasourceStatus');
+    const DATASOURCE_CONFIG_STORAGE_KEY = 'execdsl_flow_designer_datasource_v1';
+    const DEFAULT_DATASOURCE_CONFIGS = [
+      {
+        name: 'saas_db',
+        db_url: 'postgresql+psycopg2://user:password@127.0.0.1:5432/saas_db',
+      },
+      {
+        name: 'data_db',
+        db_url: 'postgresql+psycopg2://user:password@127.0.0.1:5432/data_db',
+      },
+    ];
 
     const state = {
       nodes: [],
@@ -710,6 +745,10 @@
               <span>${node.type}</span>
               <span class="node-head-actions">
                 <span>${nodeRank}</span>
+                ${(node.type === 'precheck' || node.type === 'step')
+                  ? `<button class="el-button el-button--default is-plain is-circle node-move-up-btn icon-btn" type="button" data-node-move-up="${node.id}" title="上移节点" aria-label="上移节点"><span class="material-symbols-rounded">arrow_upward</span></button>
+                     <button class="el-button el-button--default is-plain is-circle node-move-down-btn icon-btn" type="button" data-node-move-down="${node.id}" title="下移节点" aria-label="下移节点"><span class="material-symbols-rounded">arrow_downward</span></button>`
+                  : ''}
                 <button class="el-button el-button--danger is-plain is-circle node-delete-btn icon-btn" type="button" data-node-delete="${node.id}" title="删除节点" aria-label="删除节点"><span class="material-symbols-rounded">delete</span></button>
               </span>
             </div>
@@ -728,6 +767,20 @@
             deleteButton.addEventListener('click', (event) => {
               event.stopPropagation();
               deleteNodeById(node.id);
+            });
+          }
+          const moveUpButton = el.querySelector('[data-node-move-up]');
+          if (moveUpButton) {
+            moveUpButton.addEventListener('click', (event) => {
+              event.stopPropagation();
+              moveNodeInLane(node.id, -1);
+            });
+          }
+          const moveDownButton = el.querySelector('[data-node-move-down]');
+          if (moveDownButton) {
+            moveDownButton.addEventListener('click', (event) => {
+              event.stopPropagation();
+              moveNodeInLane(node.id, 1);
             });
           }
           laneBody.appendChild(el);
@@ -778,16 +831,6 @@
           <label>类型（只读）</label>
           <input value="${node.type}" disabled />
         </div>
-        ${node.type === 'step' ? `
-        <div class="field">
-          <label>Step 顺序</label>
-          <input value="${node.stepOrder || '-'}" disabled />
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="el-button el-button--default is-plain" id="btnStepUp">上移</button>
-            <button class="el-button el-button--default is-plain" id="btnStepDown">下移</button>
-          </div>
-        </div>
-        ` : ''}
         ${isSqlNode(node.type) ? `
         <div class="field">
           <label>Datasource</label>
@@ -954,15 +997,6 @@
         if (!input) return;
         input.addEventListener('change', persistEditorNode);
       });
-
-      if (node.type === 'step') {
-        document.getElementById('btnStepUp').addEventListener('click', () => {
-          moveStepOrder(node.id, -1);
-        });
-        document.getElementById('btnStepDown').addEventListener('click', () => {
-          moveStepOrder(node.id, 1);
-        });
-      }
 
       bindAutocompletes(node);
     }
@@ -1293,6 +1327,38 @@
       saveLocal();
       statusText.classList.remove('status-warn');
       statusText.innerHTML = `<strong>已调整 Step 顺序：</strong>${escapeHtml(currentStep.title || currentStep.id)}`;
+    }
+
+    function movePrecheckOrder(nodeId, offset) {
+      const precheckIndexes = state.nodes
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => item.type === 'precheck');
+      const currentIndex = precheckIndexes.findIndex(({ item }) => item.id === nodeId);
+      if (currentIndex < 0) return;
+      const targetIndex = currentIndex + offset;
+      if (targetIndex < 0 || targetIndex >= precheckIndexes.length) return;
+      const sourceNodeIndex = precheckIndexes[currentIndex].index;
+      const targetNodeIndex = precheckIndexes[targetIndex].index;
+      const temp = state.nodes[sourceNodeIndex];
+      state.nodes[sourceNodeIndex] = state.nodes[targetNodeIndex];
+      state.nodes[targetNodeIndex] = temp;
+      renderCanvas();
+      renderEditor();
+      saveLocal();
+      statusText.classList.remove('status-warn');
+      statusText.innerHTML = `<strong>已调整 Precheck 顺序：</strong>${escapeHtml(precheckIndexes[currentIndex].item.title || precheckIndexes[currentIndex].item.id)}`;
+    }
+
+    function moveNodeInLane(nodeId, offset) {
+      const node = state.nodes.find((item) => item.id === nodeId);
+      if (!node) return;
+      if (node.type === 'step') {
+        moveStepOrder(nodeId, offset);
+        return;
+      }
+      if (node.type === 'precheck') {
+        movePrecheckOrder(nodeId, offset);
+      }
     }
 
     function applyStepVerticalLayout() {
@@ -1878,20 +1944,13 @@
         });
       }
 
-      return applyHorizontalLayout(nextNodes);
-    }
-
-    async function fetchDatasourceConfig() {
-      try {
-        const response = await fetch('/api/datasource-configs');
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload.detail || payload.error || '未知错误');
-        }
-        return Array.isArray(payload.datasources) ? payload.datasources : [];
-      } catch (error) {
-        throw new Error(error.message || '网络错误');
-      }
+      const stepNodes = nextNodes
+        .filter((item) => item.type === 'step')
+        .sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
+      stepNodes.forEach((stepNode, index) => {
+        stepNode.stepOrder = index + 1;
+      });
+      return nextNodes;
     }
 
     function updateDatasourceOptions(datasourceConfigs) {
@@ -1944,61 +2003,69 @@
       updateDatasourceOptions(datasourceItems);
     }
 
-    async function loadDatasourceConfigFromServer() {
-      datasourceStatus.textContent = '正在载入数据源配置...';
-      try {
-        const datasources = await fetchDatasourceConfig();
-        renderDatasourceCards(datasources);
-        datasourceStatus.textContent = datasources.length
-          ? `已载入 ${datasources.length} 个数据源。`
-          : '暂无数据源配置，请新增并保存。';
-        renderEditor();
-      } catch (error) {
-        datasourceStatus.textContent = `载入失败: ${error.message || '网络错误'}`;
+    function normalizeDatasourceConfigs(rawDatasourceConfigs) {
+      if (!Array.isArray(rawDatasourceConfigs)) {
+        return [];
       }
+      return rawDatasourceConfigs
+        .map((item) => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) {
+            return null;
+          }
+          const name = typeof item.name === 'string' ? item.name.trim() : '';
+          const dbUrl = typeof item.db_url === 'string' ? item.db_url.trim() : '';
+          if (!name && !dbUrl) {
+            return null;
+          }
+          return { name, db_url: dbUrl };
+        })
+        .filter(Boolean);
     }
 
-    async function saveDatasourceConfigToServer() {
-      const datasourcePayload = readDatasourceConfigRows();
-      if (!datasourcePayload.length) {
-        datasourceStatus.textContent = '请至少配置一个数据源后再保存。';
-        return;
-      }
-      datasourceStatus.textContent = '正在保存数据源配置...';
+    function loadDatasourceConfigLocal() {
+      datasourceStatus.textContent = '正在载入本地数据源配置...';
       try {
-        const response = await fetch('/api/datasource-configs', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ datasources: datasourcePayload }),
-        });
-        const payload = await response.json();
-        if (!response.ok) {
-          datasourceStatus.textContent = `保存失败: ${payload.detail || payload.error || '未知错误'}`;
-          return;
-        }
-        const savedItems = Array.isArray(payload.datasources) ? payload.datasources : datasourcePayload;
-        renderDatasourceCards(savedItems);
-        datasourceStatus.textContent = `已保存 ${payload.saved || savedItems.length} 个数据源。`;
-        renderEditor();
-      } catch (error) {
-        datasourceStatus.textContent = `保存失败: ${error.message || '网络错误'}`;
-      }
-    }
-
-    async function warmupDatasourceOptions() {
-      try {
-        const datasourceConfigs = readDatasourceConfigRows();
-        if (!datasourceConfigs.length) {
-          updateDatasourceOptions([]);
-          return;
-        }
-        updateDatasourceOptions(datasourceConfigs);
-        const selectedNode = state.nodes.find((item) => item.id === state.selectedId);
-        if (selectedNode && (selectedNode.type === 'context' || selectedNode.type === 'precheck' || selectedNode.type === 'step')) {
+        const rawLocalValue = localStorage.getItem(DATASOURCE_CONFIG_STORAGE_KEY);
+        if (!rawLocalValue) {
+          renderDatasourceCards(DEFAULT_DATASOURCE_CONFIGS);
+          datasourceStatus.textContent = `未找到本地配置，已加载默认 ${DEFAULT_DATASOURCE_CONFIGS.length} 个数据源。`;
           renderEditor();
+          return;
         }
-      } catch (_error) {
-        updateDatasourceOptions([]);
+        const parsed = JSON.parse(rawLocalValue);
+        const datasourceConfigs = normalizeDatasourceConfigs(parsed);
+        if (!datasourceConfigs.length) {
+          renderDatasourceCards(DEFAULT_DATASOURCE_CONFIGS);
+          datasourceStatus.textContent = `本地配置为空，已加载默认 ${DEFAULT_DATASOURCE_CONFIGS.length} 个数据源。`;
+          renderEditor();
+          return;
+        }
+        renderDatasourceCards(datasourceConfigs);
+        datasourceStatus.textContent = `已从本地载入 ${datasourceConfigs.length} 个数据源。`;
+        renderEditor();
+      } catch (error) {
+        renderDatasourceCards(DEFAULT_DATASOURCE_CONFIGS);
+        datasourceStatus.textContent = `本地配置读取失败，已加载默认数据源。错误: ${error.message || '未知错误'}`;
+        renderEditor();
+      }
+    }
+
+    function saveDatasourceConfigLocal() {
+      const datasourcePayload = normalizeDatasourceConfigs(readDatasourceConfigRows());
+      localStorage.setItem(DATASOURCE_CONFIG_STORAGE_KEY, JSON.stringify(datasourcePayload));
+      datasourceStatus.textContent = datasourcePayload.length
+        ? `已保存 ${datasourcePayload.length} 个数据源到本地浏览器。`
+        : '已清空本地数据源配置。';
+      updateDatasourceOptions(datasourcePayload);
+      renderEditor();
+    }
+
+    function warmupDatasourceOptions() {
+      const datasourceConfigs = normalizeDatasourceConfigs(readDatasourceConfigRows());
+      updateDatasourceOptions(datasourceConfigs);
+      const selectedNode = state.nodes.find((item) => item.id === state.selectedId);
+      if (selectedNode && (selectedNode.type === 'context' || selectedNode.type === 'precheck' || selectedNode.type === 'step')) {
+        renderEditor();
       }
     }
 
@@ -2034,7 +2101,7 @@
       const dslPayload = toDslObject();
       let datasourcePayload = readDatasourceConfigRows();
       if (!datasourcePayload.length) {
-        await loadDatasourceConfigFromServer();
+        loadDatasourceConfigLocal();
         datasourcePayload = readDatasourceConfigRows();
       }
       if (!datasourcePayload.length) {
@@ -2312,17 +2379,6 @@
       }
     }
 
-    function applyHorizontalLayout(nodes) {
-      const placedNodes = [...nodes];
-      const stepNodes = placedNodes
-        .filter((item) => item.type === 'step')
-        .sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
-      stepNodes.forEach((stepNode, index) => {
-        stepNode.stepOrder = index + 1;
-      });
-      return placedNodes;
-    }
-
     function validateDslPayload(payload) {
       const allowedTopFields = ['context', 'variables', 'prechecks', 'steps', 'on_fail'];
       const unknownTopFields = Object.keys(payload).filter((key) => !allowedTopFields.includes(key));
@@ -2374,13 +2430,6 @@
       renderEditor();
       saveLocal();
       statusText.textContent = '画布已清空。';
-    });
-
-    document.getElementById('btnArrange').addEventListener('click', () => {
-      state.nodes = applyHorizontalLayout(state.nodes);
-      renderCanvas();
-      saveLocal();
-      statusText.textContent = '已按执行阶段重排节点顺序。';
     });
 
     document.getElementById('btnImport').addEventListener('click', () => {
@@ -2456,9 +2505,6 @@
           const isActiveTab = item === tabButton;
           item.classList.toggle('active', isActiveTab);
           item.classList.toggle('is-active', isActiveTab);
-          item.classList.toggle('el-button--primary', isActiveTab);
-          item.classList.toggle('el-button--default', !isActiveTab);
-          item.classList.toggle('is-plain', !isActiveTab);
         });
         document.querySelectorAll('[data-tab-panel]').forEach((panel) => {
           const isActive = panel.getAttribute('data-tab-panel') === target;
@@ -2468,7 +2514,7 @@
     });
 
     document.getElementById('btnDsReload').addEventListener('click', () => {
-      loadDatasourceConfigFromServer();
+      loadDatasourceConfigLocal();
     });
 
     document.getElementById('btnDsAdd').addEventListener('click', () => {
@@ -2478,7 +2524,7 @@
     });
 
     document.getElementById('btnDsSave').addEventListener('click', () => {
-      saveDatasourceConfigToServer();
+      saveDatasourceConfigLocal();
     });
 
     if (addInputParamButton) {
@@ -2495,7 +2541,7 @@
     renderRuntimeInputRows();
     renderCanvas();
     renderEditor();
-    loadDatasourceConfigFromServer();
+    loadDatasourceConfigLocal();
     closeDslPreview();
     setRunButtonLoading(false);
   </script>
