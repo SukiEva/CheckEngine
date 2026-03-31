@@ -1,0 +1,35 @@
+<dialog id="jsonPreviewDialog" class="ep-dialog">
+  <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+    <strong style="font-size:0.95rem;">ExecDSL JSON 预览</strong>
+    <div style="display:flex; gap:8px;">
+      <button class="el-button el-button--default is-plain" id="btnCopyPreview" style="padding:6px 10px;"><span class="ep-icon">content_copy</span>复制</button>
+      <button class="el-button el-button--default is-plain" id="btnDownloadPreview" style="padding:6px 10px;"><span class="ep-icon">download</span>下载</button>
+      <button class="el-button el-button--default is-plain" id="btnClosePreview" style="padding:6px 10px;"><span class="ep-icon">close</span>关闭</button>
+    </div>
+  </div>
+  <div style="padding:12px;">
+    <pre id="dslPreview"><code id="dslPreviewCode" class="language-json"></code></pre>
+  </div>
+</dialog>
+
+<dialog id="runtimeDialog" class="ep-dialog ep-dialog-wide">
+  <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+    <strong style="font-size:0.95rem;">DSL 运行结果</strong>
+    <button class="el-button el-button--default is-plain" id="btnCloseRuntime" style="padding:6px 10px;"><span class="ep-icon">close</span>关闭</button>
+  </div>
+  <div style="padding:12px; display:grid; gap:12px;">
+    <div id="runtimeStatus" style="font-size:0.82rem; color:#6b7280;">尚未执行。</div>
+    <pre id="runtimeResult"><code id="runtimeResultCode" class="language-json">{}</code></pre>
+  </div>
+</dialog>
+
+<dialog id="validateDialog" class="ep-dialog ep-dialog-wide">
+  <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+    <strong style="font-size:0.95rem;">DSL 校验结果</strong>
+    <button class="el-button el-button--default is-plain" id="btnCloseValidate" style="padding:6px 10px;"><span class="ep-icon">close</span>关闭</button>
+  </div>
+  <div style="padding:12px; display:grid; gap:12px;">
+    <div id="validateStatus" style="font-size:0.82rem; color:#6b7280;">尚未校验。</div>
+    <pre id="validateResult"><code id="validateResultCode" class="language-json">{}</code></pre>
+  </div>
+</dialog>
