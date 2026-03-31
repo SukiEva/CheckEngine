@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Sequence
-from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, Optional
 
 from ..dsl import FAIL_MODE_FULL_REPEAT, FAIL_MODE_SINGLE, FAIL_MODE_SUB_REPEAT, FailPolicy
@@ -178,7 +177,7 @@ class MessageRenderer(MessageRenderHelpers):
             )
         try:
             value = self._resolve_token_value(token, state, row, overrides, local_data)
-            return self._format_value_with_spec(value, format_spec)
+            return format(value, format_spec)
         except DSLExecutionError:
             raise
         except Exception as exc:  # noqa: BLE001
@@ -231,24 +230,6 @@ class MessageRenderer(MessageRenderHelpers):
     @staticmethod
     def _build_format_marker(index: int) -> str:
         return "__CHECK_ENGINE_FMT_{0}__".format(index)
-
-    @staticmethod
-    def _format_value_with_spec(value: Any, format_spec: str) -> str:
-        normalized_value = value
-        if isinstance(value, str) and MessageRenderer._is_numeric_format_spec(format_spec):
-            normalized = value.strip().replace(",", "")
-            try:
-                normalized_value = Decimal(normalized)
-            except (InvalidOperation, ValueError):
-                normalized_value = value
-        return format(normalized_value, format_spec)
-
-    @staticmethod
-    def _is_numeric_format_spec(format_spec: str) -> bool:
-        spec = format_spec.strip()
-        if not spec:
-            return False
-        return spec[-1] in {"f", "F", "e", "E", "g", "G", "%"}
 
     @staticmethod
     def _resolve_full_repeat_divider(policy: FailPolicy, locale: str) -> str:

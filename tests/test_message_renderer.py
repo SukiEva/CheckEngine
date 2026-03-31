@@ -202,20 +202,6 @@ class MessageRendererTestCase(unittest.TestCase):
         self.assertEqual(message_cn, "标记{A}-{B}")
         self.assertEqual(message_en, "Token {A}-{B}")
 
-    def test_render_single_mixed_plain_and_formatted_placeholders_with_numeric_string(self) -> None:
-        self.state.step_data = {"a": {"xx": "ok"}, "b": {"xx": "1234.5"}}
-        policy = FailPolicy(
-            decision="true",
-            mode="single",
-            message_cn="状态{$steps.a.xx}，金额f{$steps.b.xx:.2f}",
-            message_en="Status {$steps.a.xx}, amount f{$steps.b.xx:.2f}",
-        )
-
-        message_cn, message_en = self.renderer.render(policy, self.state)
-
-        self.assertEqual(message_cn, "状态ok，金额1234.50")
-        self.assertEqual(message_en, "Status ok, amount 1234.50")
-
 
 if __name__ == "__main__":
     unittest.main()
