@@ -68,7 +68,7 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self._insert_journal("PASS_1", "CNY", "2", "user", "2024-01-01", 1.0, 500)
         self._insert_rate("CNY", 1.0)
 
-        result = self.engine.execute(self.dsl_text, {"source_object_id": "PASS_1"}, self.registry)
+        result = self.engine.execute(self.dsl_text, {"source_object_id": "PASS_1", "flow": "flow1", "scenario": "scenario1"}, self.registry)
 
         self.assertTrue(result.passed)
         self.assertEqual(result.phase, "pass")
@@ -81,7 +81,7 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self._insert_journal("FAIL_FINAL", "CNY", "2", "user", "2024-01-01", 1.0, 700)
         self._insert_rate("CNY", 1.0)
 
-        result = self.engine.execute(self.dsl_text, {"source_object_id": "FAIL_FINAL"}, self.registry)
+        result = self.engine.execute(self.dsl_text, {"source_object_id": "FAIL_FINAL", "flow": "flow1", "scenario": "scenario1"}, self.registry)
 
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "final")
@@ -99,7 +99,7 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
 
         dsl_data = json.loads(self.dsl_text)
         dsl_data["on_fail"]["decision"] = "exists($steps.exchange_rate.final_amount)"
-        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_EXISTS"}, self.registry)
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_EXISTS", "flow": "flow1", "scenario": "scenario1"}, self.registry)
 
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "final")
@@ -112,7 +112,7 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
 
         dsl_data = json.loads(self.dsl_text)
         dsl_data["on_fail"]["decision"] = "not exists($steps.exchange_rate.final_amount)"
-        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "PASS_NOT_EXISTS"}, self.registry)
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "PASS_NOT_EXISTS", "flow": "flow1", "scenario": "scenario1"}, self.registry)
 
         self.assertTrue(result.passed)
         self.assertEqual(result.phase, "pass")
@@ -130,7 +130,7 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
                 "default": 800,
             }
         }
-        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_CONSTANT"}, self.registry)
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_CONSTANT", "flow": "flow1", "scenario": "scenario1"}, self.registry)
 
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "final")
@@ -168,7 +168,7 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
             },
         }
 
-        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_RECORDS_EXISTS"}, self.registry)
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_RECORDS_EXISTS", "flow": "flow1", "scenario": "scenario1"}, self.registry)
 
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "final")
@@ -179,10 +179,10 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self._insert_journal("FAIL_PRECHECK", "USD", "1", "user", "2024-01-01", None, 100)
         self._insert_rate("USD", 1.0)
 
-        result = self.engine.execute(self.dsl_text, {"source_object_id": "FAIL_PRECHECK"}, self.registry)
+        result = self.engine.execute(self.dsl_text, {"source_object_id": "FAIL_PRECHECK", "flow": "flow1", "scenario": "scenario1"}, self.registry)
 
         self.assertFalse(result.passed)
-        self.assertEqual(result.phase, "precheck")
+        self.assertEqual(result.phase, "step")
         self.assertEqual(result.failed_node, "check_rate_null")
         self.assertEqual(result.message_cn, "存在汇率为空的记录: 记录USD-1-2024-01-01")
         if result.message_en is None:
@@ -194,7 +194,7 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self._insert_journal("PASS_PRECHECK_ON_PASS", "USD", "1", "user", "2024-01-01", 1.0, 100)
 
         dsl_data = json.loads(self.dsl_text)
-        dsl_data["prechecks"] = [
+        dsl_data["steps"] = [
             {
                 "name": "check_no_null_rate",
                 "type": "sql",
@@ -204,17 +204,16 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
                 "sql_params": {"source_object_id": "$input.source_object_id"},
                 "outputs": ["func"],
                 "on_pass": {
-                    "decision": "not exists($prechecks.check_no_null_rate.func)",
+                    "decision": "not exists($.func)",
                 },
             }
         ]
 
-        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "PASS_PRECHECK_ON_PASS"}, self.registry)
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "PASS_PRECHECK_ON_PASS", "flow": "flow1", "scenario": "scenario1"}, self.registry)
 
         self.assertTrue(result.passed)
         self.assertEqual(result.phase, "pass")
-        self.assertEqual(result.steps, {})
-        self.assertEqual([trace.node_name for trace in result.executed_nodes], ["context", "check_no_null_rate"])
+        self.assertEqual([trace.node_name for trace in result.executed_nodes], ["check_no_null_rate"])
 
     def test_execute_precheck_exists_path_uses_named_precheck_output(self) -> None:
         self._insert_header("FAIL_PRECHECK_PATH", "flow1", "scenario1")
@@ -222,13 +221,13 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self._insert_rate("USD", 1.0)
 
         dsl_data = json.loads(self.dsl_text)
-        dsl_data["prechecks"][0]["outputs"] = ["func"]
-        dsl_data["prechecks"][0]["on_fail"]["decision"] = "exists($prechecks.check_rate_null.func)"
+        dsl_data["steps"][0]["outputs"] = ["func"]
+        dsl_data["steps"][0]["on_fail"]["decision"] = "exists($.func)"
 
-        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_PRECHECK_PATH"}, self.registry)
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_PRECHECK_PATH", "flow": "flow1", "scenario": "scenario1"}, self.registry)
 
         self.assertFalse(result.passed)
-        self.assertEqual(result.phase, "precheck")
+        self.assertEqual(result.phase, "step")
         self.assertEqual(result.failed_node, "check_rate_null")
 
     def test_execute_precheck_exists_path_supports_local_output_reference(self) -> None:
@@ -237,13 +236,13 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self._insert_rate("USD", 1.0)
 
         dsl_data = json.loads(self.dsl_text)
-        dsl_data["prechecks"][0]["outputs"] = ["func"]
-        dsl_data["prechecks"][0]["on_fail"]["decision"] = "exists($.func)"
+        dsl_data["steps"][0]["outputs"] = ["func"]
+        dsl_data["steps"][0]["on_fail"]["decision"] = "exists($.func)"
 
-        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_PRECHECK_LOCAL_PATH"}, self.registry)
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_PRECHECK_LOCAL_PATH", "flow": "flow1", "scenario": "scenario1"}, self.registry)
 
         self.assertFalse(result.passed)
-        self.assertEqual(result.phase, "precheck")
+        self.assertEqual(result.phase, "step")
         self.assertEqual(result.failed_node, "check_rate_null")
 
     def _create_schema(self) -> None:

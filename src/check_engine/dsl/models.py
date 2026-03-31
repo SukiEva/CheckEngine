@@ -64,11 +64,6 @@ class SqlNode:
 
 
 @dataclass(frozen=True)
-class ContextNode(SqlNode):
-    """执行上下文节点。"""
-
-
-@dataclass(frozen=True)
 class VariableCondition:
     """变量条件分支。"""
 
@@ -88,20 +83,13 @@ class VariableDefinition:
 
 
 @dataclass(frozen=True)
-class PrecheckNode(SqlNode):
-    """前置检查节点。"""
-
-    name: str = ""
-    on_fail: Optional[FailPolicy] = None
-    on_pass: Optional[PassPolicy] = None
-
-
-@dataclass(frozen=True)
 class StepNode(SqlNode):
     """主执行步骤节点。"""
 
     name: str = ""
     consumes: Sequence[ConsumeSpec] = field(default_factory=list)
+    on_fail: Optional[FailPolicy] = None
+    on_pass: Optional[PassPolicy] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -112,15 +100,12 @@ class StepNode(SqlNode):
 class DslDocument:
     """完整 DSL 文档。"""
 
-    context: Optional[ContextNode]
     steps: Sequence[StepNode]
     on_fail: FailPolicy
     raw: Mapping[str, Any]
     variables: Mapping[str, VariableDefinition] = field(default_factory=dict)
-    prechecks: Sequence[PrecheckNode] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "steps", tuple(self.steps))
         object.__setattr__(self, "raw", dict(self.raw))
         object.__setattr__(self, "variables", dict(self.variables))
-        object.__setattr__(self, "prechecks", tuple(self.prechecks))

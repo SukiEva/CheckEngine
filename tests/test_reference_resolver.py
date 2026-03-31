@@ -17,22 +17,17 @@ class RuntimeReferenceResolverTestCase(unittest.TestCase):
     def test_resolve_mapping_scope_value(self) -> None:
         resolver = RuntimeReferenceResolver(
             input_data={"amount": 100},
-            context_data={"rate": 6.8},
             variables_data={"flag": True},
-            prechecks_data={},
             step_data={"step_a": {"result": 10}},
         )
 
         self.assertEqual(resolver.resolve_reference("$input.amount"), 100)
-        self.assertEqual(resolver.resolve_reference("$context.rate"), 6.8)
         self.assertTrue(resolver.resolve_reference("$variables.flag"))
 
     def test_resolve_steps_sequence_projection(self) -> None:
         resolver = RuntimeReferenceResolver(
             input_data={},
-            context_data={},
             variables_data={},
-            prechecks_data={},
             step_data={
                 "step_a": (
                     MappingProxyType({"code": "A"}),
@@ -46,37 +41,17 @@ class RuntimeReferenceResolverTestCase(unittest.TestCase):
     def test_resolve_unknown_scope_raises_error(self) -> None:
         resolver = RuntimeReferenceResolver(
             input_data={},
-            context_data={},
             variables_data={},
-            prechecks_data={},
             step_data={},
         )
 
         with self.assertRaisesRegex(DSLExecutionError, "Unknown scope"):
             resolver.resolve_reference("$unknown.value")
 
-    def test_resolve_prechecks_sequence_projection(self) -> None:
-        resolver = RuntimeReferenceResolver(
-            input_data={},
-            context_data={},
-            variables_data={},
-            prechecks_data={
-                "check_a": (
-                    MappingProxyType({"line_no": 1}),
-                    MappingProxyType({"line_no": 2}),
-                )
-            },
-            step_data={},
-        )
-
-        self.assertEqual(resolver.resolve_reference("$prechecks.check_a.line_no"), [1, 2])
-
     def test_resolve_local_scope_reference(self) -> None:
         resolver = RuntimeReferenceResolver(
             input_data={},
-            context_data={},
             variables_data={},
-            prechecks_data={},
             step_data={},
         )
 

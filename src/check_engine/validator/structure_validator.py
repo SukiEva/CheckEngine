@@ -6,7 +6,6 @@ import re
 from typing import Mapping, NoReturn, Sequence
 
 from ..dsl import (
-    ContextNode,
     DslDocument,
     ReservedNodeName,
     TopLevelField,
@@ -19,7 +18,6 @@ from ..dsl import (
     RESULT_MODE_RECORD,
     RESULT_MODE_RECORDS,
     FailPolicy,
-    PrecheckNode,
     PassPolicy,
     SqlNode,
     StepNode,
@@ -44,23 +42,14 @@ class StructureValidator:
 
     def validate(self, document: DslDocument) -> None:
         self._validate_top_level_fields(document.raw)
-        if document.context is not None:
-            self._validate_context(document.context)
         self._validate_variables(document.variables, document.raw.get(TopLevelField.VARIABLES, {}))
-        self._validate_prechecks(document.prechecks)
         self._validate_steps(document.steps)
-        self._validate_global_node_names(document.prechecks, document.steps)
         self._validate_fail_policy(document.on_fail, TopLevelField.ON_FAIL)
 
     def _validate_top_level_fields(self, raw: Mapping[str, object]) -> None:
         unknown_fields = sorted(set(raw.keys()) - self.VALID_TOP_LEVEL_FIELDS)
         if unknown_fields:
             self._raise(f"Unknown top-level fields are not allowed: {', '.join(unknown_fields)}")
-
-    def _validate_context(self, context: ContextNode) -> None:
-        self._validate_sql_node(context, "context")
-        if not context.outputs:
-            self._raise("context.outputs must not be empty.")
 
     def _validate_variables(self, variables: Mapping[str, VariableDefinition], raw_variables: Mapping[str, object]) -> None:
         for name, definition in variables.items():
@@ -81,23 +70,6 @@ class StructureValidator:
                 ):
                     self._raise(f"variables.{name}.when[{index}].value is required.")
 
-    def _validate_prechecks(self, prechecks: Sequence[PrecheckNode]) -> None:
-        names = set()
-        for index, node in enumerate(prechecks):
-            if node.name in names:
-                self._raise(f"prechecks[{index}].name is duplicated: {node.name}")
-            names.add(node.name)
-            self._validate_node_name(node.name, f"prechecks[{index}].name")
-            self._validate_sql_node(node, f"prechecks[{index}]")
-            if not node.outputs:
-                self._raise(f"prechecks[{index}].outputs must not be empty.")
-            if node.on_fail is None and node.on_pass is None:
-                self._raise(f"prechecks[{index}] must provide at least one of on_fail or on_pass.")
-            if node.on_fail is not None:
-                self._validate_fail_policy(node.on_fail, f"prechecks[{index}].on_fail")
-            if node.on_pass is not None:
-                self._validate_pass_policy(node.on_pass, f"prechecks[{index}].on_pass")
-
     def _validate_steps(self, steps: Sequence[StepNode]) -> None:
         names = set()
         for index, node in enumerate(steps):
@@ -107,6 +79,10 @@ class StructureValidator:
             self._validate_node_name(node.name, f"steps[{index}].name")
             self._validate_sql_node(node, f"steps[{index}]")
             self._validate_outputs(node.outputs, f"steps[{index}].outputs")
+            if node.on_fail is not None:
+                self._validate_fail_policy(node.on_fail, f"steps[{index}].on_fail")
+            if node.on_pass is not None:
+                self._validate_pass_policy(node.on_pass, f"steps[{index}].on_pass")
             aliases = set()
             for consume_index, consume in enumerate(node.consumes):
                 if not consume.from_path.strip():
@@ -186,12 +162,6 @@ class StructureValidator:
     def _validate_node_name(self, name: str, path: str) -> None:
         if name in self.RESERVED_NODE_NAMES:
             self._raise(f"{path} uses reserved node name: {name}")
-
-    def _validate_global_node_names(self, prechecks: Sequence[PrecheckNode], steps: Sequence[StepNode]) -> None:
-        precheck_names = {node.name for node in prechecks}
-        for index, node in enumerate(steps):
-            if node.name in precheck_names:
-                self._raise(f"steps[{index}].name conflicts with precheck name: {node.name}")
 
     @staticmethod
     def _raise(message: str) -> NoReturn:

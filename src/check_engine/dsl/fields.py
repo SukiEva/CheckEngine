@@ -8,9 +8,7 @@ from enum import Enum
 class TopLevelField(str, Enum):
     """DSL 顶层块字段。"""
 
-    CONTEXT = "context"
     VARIABLES = "variables"
-    PRECHECKS = "prechecks"
     STEPS = "steps"
     ON_FAIL = "on_fail"
 
@@ -73,7 +71,6 @@ class RuntimeScope(str, Enum):
     """运行时作用域名称。"""
 
     INPUT = "input"
-    CONTEXT = "context"
     VARIABLES = "variables"
     STEPS = "steps"
 

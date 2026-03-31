@@ -13,7 +13,6 @@ from .fields import (
 )
 from .models import (
     ConsumeSpec,
-    ContextNode,
     DslDocument,
     EXISTS_DECISION,
     FAIL_MODE_FULL_REPEAT,
@@ -24,7 +23,6 @@ from .models import (
     NODE_TYPE_SQL,
     NodeType,
     PassPolicy,
-    PrecheckNode,
     ResultMode,
     RESULT_MODE_RECORD,
     RESULT_MODE_RECORDS,
@@ -44,7 +42,6 @@ __all__ = [
     "TopLevelField",
     "VariableField",
     "ConsumeSpec",
-    "ContextNode",
     "DslDocument",
     "EXISTS_DECISION",
     "FAIL_MODE_FULL_REPEAT",
@@ -55,7 +52,6 @@ __all__ = [
     "NODE_TYPE_SQL",
     "NodeType",
     "PassPolicy",
-    "PrecheckNode",
     "ResultMode",
     "RESULT_MODE_RECORD",
     "RESULT_MODE_RECORDS",

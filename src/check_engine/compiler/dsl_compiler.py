@@ -15,8 +15,8 @@ class CompiledDsl:
 
     document: DslDocument
     variable_conditions: dict[str, tuple[CompiledExpression, ...]]
-    precheck_decisions: dict[str, CompiledExpression]
-    precheck_pass_decisions: dict[str, CompiledExpression]
+    step_fail_decisions: dict[str, CompiledExpression]
+    step_pass_decisions: dict[str, CompiledExpression]
     on_fail_decision: CompiledExpression
 
 
@@ -37,25 +37,25 @@ class DslCompiler:
             )
             for variable_name, definition in document.variables.items()
         }
-        precheck_decisions: dict[str, CompiledExpression] = {}
-        precheck_pass_decisions: dict[str, CompiledExpression] = {}
-        for precheck in document.prechecks:
-            if precheck.on_fail is not None:
-                precheck_decisions[precheck.name] = self._compile_expression(
-                    precheck.on_fail.decision,
-                    f"prechecks.{precheck.name}.on_fail.decision",
+        step_fail_decisions: dict[str, CompiledExpression] = {}
+        step_pass_decisions: dict[str, CompiledExpression] = {}
+        for step in document.steps:
+            if step.on_fail is not None:
+                step_fail_decisions[step.name] = self._compile_expression(
+                    step.on_fail.decision,
+                    f"steps.{step.name}.on_fail.decision",
                 )
-            if precheck.on_pass is not None:
-                precheck_pass_decisions[precheck.name] = self._compile_expression(
-                    precheck.on_pass.decision,
-                    f"prechecks.{precheck.name}.on_pass.decision",
+            if step.on_pass is not None:
+                step_pass_decisions[step.name] = self._compile_expression(
+                    step.on_pass.decision,
+                    f"steps.{step.name}.on_pass.decision",
                 )
         on_fail_decision = self._compile_expression(document.on_fail.decision, "on_fail.decision")
         return CompiledDsl(
             document=document,
             variable_conditions=variable_conditions,
-            precheck_decisions=precheck_decisions,
-            precheck_pass_decisions=precheck_pass_decisions,
+            step_fail_decisions=step_fail_decisions,
+            step_pass_decisions=step_pass_decisions,
             on_fail_decision=on_fail_decision,
         )
 

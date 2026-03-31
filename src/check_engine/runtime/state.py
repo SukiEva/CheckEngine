@@ -21,7 +21,6 @@ def _to_plain_data(value: Any) -> Any:
 
 class _StatePayload(TypedDict):
     input: Mapping[str, Any]
-    context: Mapping[str, Any]
     variables: Mapping[str, Any]
     steps: Mapping[str, Any]
     executed_nodes: Sequence[ExecutedNodeTrace]
@@ -79,7 +78,6 @@ class ExecutionResult:
     error_message: Optional[str]
     runtime_exception: bool
     input: Mapping[str, Any]
-    context: Mapping[str, Any]
     variables: Mapping[str, Any]
     steps: Mapping[str, Any]
     executed_nodes: Sequence[ExecutedNodeTrace] = field(default_factory=tuple)
@@ -144,7 +142,6 @@ class ExecutionResult:
             "error_message": self.error_message,
             "runtime_exception": self.runtime_exception,
             "input": _to_plain_data(self.input),
-            "context": _to_plain_data(self.context),
             "variables": _to_plain_data(self.variables),
             "steps": _to_plain_data(self.steps),
             "executed_nodes": [item.to_dict() for item in self.executed_nodes],
@@ -154,7 +151,6 @@ class ExecutionResult:
     def _state_payload(state: "ExecutionState") -> _StatePayload:
         return {
             "input": state.input_data,
-            "context": state.context_data,
             "variables": state.variables_data,
             "steps": state.step_data,
             "executed_nodes": tuple(state.executed_nodes),
@@ -166,10 +162,7 @@ class ExecutionState:
     """执行过程中的可变状态。"""
 
     input_data: Mapping[str, Any]
-    context_result: Optional[NodeExecutionResult] = None
-    context_data: MutableMapping[str, Any] = field(default_factory=dict)
     variables_data: MutableMapping[str, Any] = field(default_factory=dict)
-    prechecks_data: MutableMapping[str, Any] = field(default_factory=dict)
     step_results: MutableMapping[str, NodeExecutionResult] = field(default_factory=dict)
     step_data: MutableMapping[str, Any] = field(default_factory=dict)
     executed_nodes: list[ExecutedNodeTrace] = field(default_factory=list)
@@ -178,9 +171,7 @@ class ExecutionState:
     def __post_init__(self) -> None:
         self.reference_resolver = RuntimeReferenceResolver(
             input_data=self.input_data,
-            context_data=self.context_data,
             variables_data=self.variables_data,
-            prechecks_data=self.prechecks_data,
             step_data=self.step_data,
         )
 
@@ -188,18 +179,9 @@ class ExecutionState:
     def new(cls, input_data: Mapping[str, Any]) -> "ExecutionState":
         return cls(input_data=input_data)
 
-    def set_context_result(self, result: NodeExecutionResult) -> None:
-        self.context_result = result
-        self.context_data.clear()
-        if isinstance(result.exported_data, Mapping):
-            self.context_data.update(dict(result.exported_data))
-
     def set_step_result(self, step_name: str, result: NodeExecutionResult) -> None:
         self.step_results[step_name] = result
         self.step_data[step_name] = result.exported_data
-
-    def set_precheck_result(self, precheck_name: str, result: NodeExecutionResult) -> None:
-        self.prechecks_data[precheck_name] = result.exported_data
 
     def record_node_execution(
         self,
@@ -225,9 +207,7 @@ class ExecutionState:
     def resolve_reference(self, reference: str, local_data: Optional[Any] = None) -> Any:
         self.reference_resolver.update_sources(
             input_data=self.input_data,
-            context_data=self.context_data,
             variables_data=self.variables_data,
-            prechecks_data=self.prechecks_data,
             step_data=self.step_data,
         )
         return self.reference_resolver.resolve_reference(reference, local_data=local_data)
@@ -237,13 +217,6 @@ class ExecutionState:
 
     def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
         parts = RuntimeReferenceResolver.parse_reference_parts(from_path)
-        if parts == ["context"]:
-            if self.context_result is None:
-                raise DSLExecutionError(
-                    "Context result is missing; cannot build consumes.",
-                )
-            return self._rows_and_fields(self.context_result)
-
         if parts[0] != "steps":
             raise DSLExecutionError(
                 f"Unsupported consumes.from reference: {from_path}",
