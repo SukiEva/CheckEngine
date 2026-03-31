@@ -1,6 +1,6 @@
 # FastAPI Playground（独立子项目）
 
-该子项目基于 `exec_dsl_flow_designer.html` 提供可执行闭环：
+该子项目基于 `index.html` 提供可执行闭环：
 
 - 通过流程图方式生成 DSL
 - 配置真实 PostgreSQL 数据源连接
@@ -15,7 +15,7 @@ playground/
   README.md
   src/playground_app/
     __init__.py
-    templates/exec_dsl_flow_designer.html
+    templates/index.html
 ```
 
 ## 运行方式（使用 uv）

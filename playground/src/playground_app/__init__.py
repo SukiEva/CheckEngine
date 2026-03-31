@@ -61,7 +61,7 @@ def create_app() -> FastAPI:
     def index(request: Request) -> Any:
         return templates.TemplateResponse(
             request=request,
-            name="exec_dsl_flow_designer.html",
+            name="index.html",
             context={"request": request},
         )
 
