@@ -6,10 +6,10 @@ import logging
 import traceback
 from collections.abc import Callable, Mapping
 from functools import partial
-from typing import Any, Optional, TypeVar
+from typing import Any, Optional, TypeVar, cast
 
 from .compiler import CompiledDsl, CompileCacheLike, DslCompiler, HashedLruCompileCache, NoopCompileCache
-from .dsl import DslDocument, SqlNode, VariableDefinition
+from .dsl import DslDocument, NODE_TYPE_SQL, NODE_TYPE_VARIABLE, SqlNode, StepNode, VariableDefinition, VariableStepNode
 from .expression import CompiledExpression, ExpressionEvaluator
 from .exceptions import DSLExecutionError
 from .parser import JsonDslParser
@@ -41,6 +41,10 @@ class DslEngine:
         )
         self.sql_executor: SqlExecutor = SqlExecutor()
         self.message_renderer: MessageRenderer = MessageRenderer()
+        self._step_executors: dict[str, Callable[[StepNode, CompiledDsl, ExecutionState, DatasourceRegistry], NodeExecutionResult]] = {
+            NODE_TYPE_SQL: self._execute_sql_step,
+            NODE_TYPE_VARIABLE: self._execute_variable_step,
+        }
         self.compile_cache_size = compile_cache_size
         self._compile_cache_backend: CompileCacheLike[CompiledDsl] = (
             HashedLruCompileCache(compile_cache_size) if compile_cache_size > 0 else NoopCompileCache()
@@ -130,12 +134,11 @@ class DslEngine:
                 state=state,
                 failed_node=step.name,
                 action=partial(
-                    self._execute_sql_node,
-                    phase="step",
-                    node=step,
+                    self._execute_step,
+                    step=step,
+                    compiled_dsl=compiled_dsl,
                     state=state,
                     datasource_registry=datasource_registry,
-                    node_name=step.name,
                 ),
             )
             if runtime_failure is not None:
@@ -219,6 +222,65 @@ class DslEngine:
             executed_sql=result.executed_sql,
         )
         return result
+
+    def _execute_variable_step(
+        self,
+        node: StepNode,
+        compiled_dsl: CompiledDsl,
+        state: ExecutionState,
+        _datasource_registry: DatasourceRegistry,
+    ) -> NodeExecutionResult:
+        if not isinstance(node, VariableStepNode):
+            raise DSLExecutionError(f"Unsupported variable step node class: {type(node).__name__}")
+        compiled_conditions = compiled_dsl.step_variable_conditions.get(node.name, ())
+        value = self._evaluate_variable(
+            VariableDefinition(when=node.when, default=node.default),
+            compiled_conditions,
+            state,
+        )
+        state.record_node_execution(
+            phase="step",
+            node_name=node.name,
+            datasource=None,
+            result_mode=None,
+            row_count=None,
+            executed_sql=None,
+        )
+        return NodeExecutionResult(
+            raw_rows=(),
+            exported_data=value,
+            exported_fields=(),
+        )
+
+    def _execute_sql_step(
+        self,
+        step: StepNode,
+        _compiled_dsl: CompiledDsl,
+        state: ExecutionState,
+        datasource_registry: DatasourceRegistry,
+    ) -> NodeExecutionResult:
+        if not isinstance(step, SqlNode):
+            raise DSLExecutionError(f"Unsupported sql step node class: {type(step).__name__}")
+        return self._execute_sql_node(
+            phase="step",
+            node=cast(SqlNode, step),
+            state=state,
+            datasource_registry=datasource_registry,
+            node_name=step.name,
+        )
+
+    def _execute_step(
+        self,
+        *,
+        step: StepNode,
+        compiled_dsl: CompiledDsl,
+        state: ExecutionState,
+        datasource_registry: DatasourceRegistry,
+    ) -> NodeExecutionResult:
+        step_executor = self._step_executors.get(step.type)
+        if step_executor is None:
+            raise DSLExecutionError(f"Unsupported step type: {step.type}")
+        return step_executor(step, compiled_dsl, state, datasource_registry)
 
     def _evaluate_variable(
         self,

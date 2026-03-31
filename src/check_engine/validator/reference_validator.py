@@ -4,9 +4,21 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from typing import NoReturn, Optional
+from typing import Callable, NoReturn, Optional
 
-from ..dsl import DslDocument, FAIL_MODE_SINGLE, PassPolicy, RESULT_MODE_RECORDS, FailPolicy, StepNode, VariableDefinition
+from ..dsl import (
+    DslDocument,
+    FAIL_MODE_SINGLE,
+    NODE_TYPE_SQL,
+    NODE_TYPE_VARIABLE,
+    PassPolicy,
+    RESULT_MODE_RECORDS,
+    FailPolicy,
+    SqlStepNode,
+    StepNode,
+    VariableDefinition,
+    VariableStepNode,
+)
 from ..exceptions import DSLValidationError
 
 
@@ -14,6 +26,12 @@ class ReferenceValidator:
     """校验 DSL 中的作用域引用是否合法。"""
 
     PATH_PATTERN = re.compile(r"\$(?:\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
+
+    def __init__(self) -> None:
+        self.step_reference_validators: dict[str, Callable[[StepNode, DslDocument, set[str], set[str], dict[str, StepNode], str], None]] = {
+            NODE_TYPE_SQL: self._validate_sql_step_references,
+            NODE_TYPE_VARIABLE: self._validate_variable_step_references,
+        }
 
     def validate(self, document: DslDocument) -> None:
         step_names = tuple(step.name for step in document.steps)
@@ -27,16 +45,18 @@ class ReferenceValidator:
 
         available_steps: set[str] = set()
         for index, step in enumerate(document.steps):
-            self._validate_sql_params(
-                step.sql_params,
-                document,
-                available_steps=available_steps,
-                available_variables=all_variables,
-                step_map=step_map,
-                path_prefix=f"steps[{index}].sql_params",
-            )
-            self._validate_consumes(step, available_steps, document, step_map)
+            step_reference_validator = self.step_reference_validators.get(step.type)
+            if step_reference_validator is not None:
+                step_reference_validator(
+                    step,
+                    document,
+                    available_steps,
+                    all_variables,
+                    step_map,
+                    f"steps[{index}]",
+                )
             if step.on_fail is not None:
+                local_outputs = set(step.outputs) if isinstance(step, SqlStepNode) else None
                 self._validate_fail_policy(
                     step.on_fail,
                     document,
@@ -44,9 +64,10 @@ class ReferenceValidator:
                     available_variables=all_variables,
                     path=f"steps[{index}].on_fail",
                     step_map=step_map,
-                    local_outputs=set(step.outputs),
+                    local_outputs=local_outputs,
                 )
             if step.on_pass is not None:
+                local_outputs = set(step.outputs) if isinstance(step, SqlStepNode) else None
                 self._validate_pass_policy(
                     step.on_pass,
                     document,
@@ -54,7 +75,7 @@ class ReferenceValidator:
                     available_variables=all_variables,
                     path=f"steps[{index}].on_pass",
                     step_map=step_map,
-                    local_outputs=set(step.outputs),
+                    local_outputs=local_outputs,
                 )
             available_steps.add(step.name)
 
@@ -75,15 +96,18 @@ class ReferenceValidator:
         document: DslDocument,
         available_variables: set[str],
         step_map: dict[str, StepNode],
+        available_steps: Optional[set[str]] = None,
+        path_prefix: Optional[str] = None,
     ) -> None:
+        variable_path_prefix = path_prefix or f"variables.{variable_name}"
         for index, condition in enumerate(definition.when):
             for reference in self._extract_references(condition.condition):
                 self._validate_reference(
                     reference,
                     document,
-                    available_steps=set(),
+                    available_steps=available_steps or set(),
                     available_variables=available_variables,
-                    path=f"variables.{variable_name}.when[{index}].condition",
+                    path=f"{variable_path_prefix}.when[{index}].condition",
                     step_map=step_map,
                     local_outputs=None,
                 )
@@ -123,8 +147,50 @@ class ReferenceValidator:
             if parts[1] not in available_steps:
                 self._raise(f"consumes.from references a step that has not executed yet: {consume.from_path}")
             source_step = self._find_step(step_map, parts[1])
-            if not source_step.outputs:
+            if not isinstance(source_step, SqlStepNode) or not source_step.outputs:
                 self._raise(f"consumes.from references step outputs that are not declared: {consume.from_path}")
+
+    def _validate_sql_step_references(
+        self,
+        step: StepNode,
+        document: DslDocument,
+        available_steps: set[str],
+        available_variables: set[str],
+        step_map: dict[str, StepNode],
+        path_prefix: str,
+    ) -> None:
+        if not isinstance(step, SqlStepNode):
+            return
+        self._validate_sql_params(
+            step.sql_params,
+            document,
+            available_steps=available_steps,
+            available_variables=available_variables,
+            step_map=step_map,
+            path_prefix=f"{path_prefix}.sql_params",
+        )
+        self._validate_consumes(step, available_steps, document, step_map)
+
+    def _validate_variable_step_references(
+        self,
+        step: StepNode,
+        document: DslDocument,
+        available_steps: set[str],
+        available_variables: set[str],
+        step_map: dict[str, StepNode],
+        path_prefix: str,
+    ) -> None:
+        if not isinstance(step, VariableStepNode):
+            return
+        self._validate_variable_definition(
+            step.name,
+            VariableDefinition(when=step.when, default=step.default),
+            document,
+            available_variables=available_variables,
+            available_steps=available_steps,
+            step_map=step_map,
+            path_prefix=path_prefix,
+        )
 
     def _validate_fail_policy(
         self,
@@ -214,13 +280,21 @@ class ReferenceValidator:
             return
 
         if root == "steps":
-            if len(parts) != 3:
+            if len(parts) not in (2, 3):
                 self._raise(f"{path} steps reference has invalid depth: {reference}")
             step_name = parts[1]
-            field_name = parts[2]
             if step_name not in available_steps:
                 self._raise(f"{path} references a step not available at this point: {reference}")
             step = self._find_step(step_map, step_name)
+            if len(parts) == 2:
+                if step.type != NODE_TYPE_VARIABLE:
+                    self._raise(f"{path} sql step reference must include exported field: {reference}")
+                return
+            if step.type == NODE_TYPE_VARIABLE:
+                self._raise(f"{path} variable step reference only supports $steps.<name>: {reference}")
+            if not isinstance(step, SqlStepNode):
+                self._raise(f"{path} references an unsupported step type: {reference}")
+            field_name = parts[2]
             if not step.outputs:
                 self._raise(f"{path} references step outputs that are not declared: {reference}")
             if field_name not in step.outputs:
@@ -248,7 +322,7 @@ class ReferenceValidator:
         parts = self._split_reference(reference)
         if len(parts) == 3 and parts[0] == "steps":
             step = self._find_step(step_map, parts[1])
-            if step.result_mode == RESULT_MODE_RECORDS:
+            if isinstance(step, SqlStepNode) and step.result_mode == RESULT_MODE_RECORDS:
                 self._raise(f"{path} cannot reference array outputs in single mode: {reference}")
 
     def _extract_references(self, text: str) -> list[str]:

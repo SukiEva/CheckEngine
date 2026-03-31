@@ -323,6 +323,45 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             },
         )
 
+    def test_execute_variable_step_exports_scalar_to_steps_scope(self) -> None:
+        engine = DslEngine()
+        registry = cast(DatasourceRegistry, _UnusedRegistry())
+        dsl_text = json.dumps(
+            {
+                "variables": {
+                    "base_threshold": {
+                        "when": [],
+                        "default": 100,
+                    }
+                },
+                "steps": [
+                    {
+                        "name": "threshold_step",
+                        "type": "variable",
+                        "when": [
+                            {
+                                "condition": "$variables.base_threshold > 10",
+                                "value": 200,
+                            }
+                        ],
+                        "default": 0,
+                    }
+                ],
+                "on_fail": {
+                    "decision": "$steps.threshold_step > 150",
+                    "mode": "single",
+                    "message_cn": "超阈值",
+                    "message_en": "exceeded",
+                },
+            }
+        )
+
+        result = engine.execute(dsl_text, {}, datasource_registry=registry)
+
+        self.assertFalse(result.passed)
+        self.assertEqual(result.phase, "final")
+        self.assertEqual(result.steps["threshold_step"], 200)
+
     def test_node_execution_result_rows_are_read_only_views(self) -> None:
         result = NodeExecutionResult(
             raw_rows=[{"v": 1}],

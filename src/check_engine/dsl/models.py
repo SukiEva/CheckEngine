@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping, Optional, Sequence
+from typing import Any, Literal, Mapping, Optional, Sequence, Union
 
 NODE_TYPE_SQL = "sql"
+NODE_TYPE_VARIABLE = "variable"
 RESULT_MODE_RECORD = "record"
 RESULT_MODE_RECORDS = "records"
 FAIL_MODE_SUB_REPEAT = "sub_repeat"
@@ -13,7 +14,7 @@ FAIL_MODE_FULL_REPEAT = "full_repeat"
 FAIL_MODE_SINGLE = "single"
 EXISTS_DECISION = "exists"
 
-NodeType = Literal["sql"]
+NodeType = str
 ResultMode = Literal["record", "records"]
 FailMode = Literal["sub_repeat", "full_repeat", "single"]
 
@@ -83,7 +84,7 @@ class VariableDefinition:
 
 
 @dataclass(frozen=True)
-class StepNode(SqlNode):
+class SqlStepNode(SqlNode):
     """主执行步骤节点。"""
 
     name: str = ""
@@ -94,6 +95,36 @@ class StepNode(SqlNode):
     def __post_init__(self) -> None:
         super().__post_init__()
         object.__setattr__(self, "consumes", tuple(self.consumes))
+
+
+@dataclass(frozen=True)
+class VariableNode:
+    """variable 类型节点。"""
+
+    type: NodeType
+    when: Sequence[VariableCondition] = field(default_factory=list)
+    default: Any = None
+    description: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "when", tuple(self.when))
+
+
+@dataclass(frozen=True)
+class VariableStepNode(VariableNode):
+    """variable 类型步骤节点。"""
+
+    name: str = ""
+    consumes: Sequence[ConsumeSpec] = field(default_factory=list)
+    on_fail: Optional[FailPolicy] = None
+    on_pass: Optional[PassPolicy] = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        object.__setattr__(self, "consumes", tuple(self.consumes))
+
+
+StepNode = Union[SqlStepNode, VariableStepNode]
 
 
 @dataclass(frozen=True)
