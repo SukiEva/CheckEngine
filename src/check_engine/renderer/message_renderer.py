@@ -234,17 +234,14 @@ class MessageRenderer(MessageRenderHelpers):
 
     @staticmethod
     def _format_value_with_spec(value: Any, format_spec: str) -> str:
-        try:
-            return format(value, format_spec)
-        except (TypeError, ValueError) as exc:
-            if not isinstance(value, str) or not MessageRenderer._is_numeric_format_spec(format_spec):
-                raise exc
+        normalized_value = value
+        if isinstance(value, str) and MessageRenderer._is_numeric_format_spec(format_spec):
             normalized = value.strip().replace(",", "")
             try:
-                numeric_value = Decimal(normalized)
+                normalized_value = Decimal(normalized)
             except (InvalidOperation, ValueError):
-                raise exc
-            return format(numeric_value, format_spec)
+                normalized_value = value
+        return format(normalized_value, format_spec)
 
     @staticmethod
     def _is_numeric_format_spec(format_spec: str) -> bool:
