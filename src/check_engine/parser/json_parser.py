@@ -60,6 +60,8 @@ class JsonDslParser:
         prechecks = self.node_parser.parse_prechecks(data.get(TopLevelField.PRECHECKS, []), TopLevelField.PRECHECKS)
         steps = self.node_parser.parse_steps(data[TopLevelField.STEPS], TopLevelField.STEPS)
         on_fail = self.node_parser.parse_fail_policy(data[TopLevelField.ON_FAIL], TopLevelField.ON_FAIL)
+        if on_fail is None:
+            raise DSLParseError("on_fail must be an object.")
 
         return DslDocument(context=context, variables=variables, prechecks=prechecks, steps=steps, on_fail=on_fail, raw=data)
 

@@ -11,6 +11,7 @@ from ..dsl import (
     DslDocument,
     FAIL_MODE_SINGLE,
     PrecheckNode,
+    PassPolicy,
     RESULT_MODE_RECORDS,
     FailPolicy,
     StepNode,
@@ -39,20 +40,30 @@ class ReferenceValidator:
             available_variables.add(variable_name)
 
         for index, precheck in enumerate(document.prechecks):
-            if precheck.on_fail is None:
-                self._raise(f"prechecks[{index}].on_fail must be provided.")
             self._validate_sql_params(precheck.sql_params, document, available_steps=set(), available_variables=all_variables, step_map=step_map)
-            self._validate_fail_policy(
-                precheck.on_fail,
-                document,
-                available_steps=set(),
-                available_variables=all_variables,
-                path=f"prechecks[{index}].on_fail",
-                step_map=step_map,
-                precheck_map=precheck_map,
-                available_prechecks={precheck.name},
-                local_outputs=set(precheck.outputs),
-            )
+            if precheck.on_fail is not None:
+                self._validate_fail_policy(
+                    precheck.on_fail,
+                    document,
+                    available_steps=set(),
+                    available_variables=all_variables,
+                    path=f"prechecks[{index}].on_fail",
+                    step_map=step_map,
+                    precheck_map=precheck_map,
+                    available_prechecks={precheck.name},
+                    local_outputs=set(precheck.outputs),
+                )
+            if precheck.on_pass is not None:
+                self._validate_pass_policy(
+                    precheck.on_pass,
+                    document,
+                    available_variables=all_variables,
+                    path=f"prechecks[{index}].on_pass",
+                    step_map=step_map,
+                    precheck_map=precheck_map,
+                    available_prechecks={precheck.name},
+                    local_outputs=set(precheck.outputs),
+                )
 
         available_steps: set[str] = set()
         for index, step in enumerate(document.steps):
@@ -194,6 +205,30 @@ class ReferenceValidator:
                 )
                 if path == "on_fail" and policy.mode == FAIL_MODE_SINGLE:
                     self._validate_single_mode_message_reference(reference, step_map, f"{path}.{field_name}")
+
+    def _validate_pass_policy(
+        self,
+        policy: PassPolicy,
+        document: DslDocument,
+        available_variables: set[str],
+        path: str,
+        step_map: dict[str, StepNode],
+        precheck_map: dict[str, PrecheckNode],
+        available_prechecks: set[str],
+        local_outputs: Optional[set[str]],
+    ) -> None:
+        for reference in self._extract_references(policy.decision):
+            self._validate_reference(
+                reference,
+                document,
+                available_steps=set(),
+                available_variables=available_variables,
+                path=f"{path}.decision",
+                step_map=step_map,
+                precheck_map=precheck_map,
+                available_prechecks=available_prechecks,
+                local_outputs=local_outputs,
+            )
 
     def _validate_reference(
         self,

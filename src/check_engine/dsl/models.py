@@ -40,6 +40,13 @@ class FailPolicy:
 
 
 @dataclass(frozen=True)
+class PassPolicy:
+    """成功短路判定配置。"""
+
+    decision: str
+
+
+@dataclass(frozen=True)
 class SqlNode:
     """SQL 类型节点的通用字段。"""
 
@@ -86,6 +93,7 @@ class PrecheckNode(SqlNode):
 
     name: str = ""
     on_fail: Optional[FailPolicy] = None
+    on_pass: Optional[PassPolicy] = None
 
 
 @dataclass(frozen=True)

@@ -9,7 +9,7 @@ from functools import partial
 from typing import Any, Optional, TypeVar
 
 from .compiler import CompiledDsl, CompileCacheLike, DslCompiler, HashedLruCompileCache, NoopCompileCache
-from .dsl import DslDocument, PrecheckNode, SqlNode, VariableDefinition
+from .dsl import DslDocument, SqlNode, VariableDefinition
 from .expression import CompiledExpression, ExpressionEvaluator
 from .exceptions import DSLExecutionError
 from .parser import JsonDslParser
@@ -178,10 +178,11 @@ class DslEngine:
             if result is None:
                 raise RuntimeError("precheck execution result is unexpectedly None.")
             state.set_precheck_result(precheck.name, result)
-            if self._should_fail_precheck(
-                precheck,
+            precheck_fail_decision = compiled_dsl.precheck_decisions.get(precheck.name)
+            if precheck_fail_decision is not None and self._should_fail_precheck(
                 state,
-                compiled_dsl.precheck_decisions[precheck.name],
+                precheck_fail_decision,
+                precheck.name,
             ):
                 if precheck.on_fail is None:
                     raise RuntimeError("precheck.on_fail is unexpectedly None.")
@@ -198,6 +199,13 @@ class DslEngine:
                     message_en=message_en,
                     state=state,
                 )
+            precheck_pass_decision = compiled_dsl.precheck_pass_decisions.get(precheck.name)
+            if precheck_pass_decision is not None and self._should_pass_precheck(
+                state,
+                precheck_pass_decision,
+                precheck.name,
+            ):
+                return ExecutionResult.build_pass(state)
         return None
 
     def _run_steps(
@@ -294,13 +302,20 @@ class DslEngine:
 
     def _should_fail_precheck(
         self,
-        precheck: PrecheckNode,
         state: ExecutionState,
         compiled_expression: CompiledExpression,
+        precheck_name: str,
     ) -> bool:
-        if precheck.on_fail is None:
-            raise ValueError("precheck.on_fail must not be None.")
-        precheck_data = state.prechecks_data.get(precheck.name)
+        precheck_data = state.prechecks_data.get(precheck_name)
+        return self._should_fail_by_expression(compiled_expression, state, local_data=precheck_data)
+
+    def _should_pass_precheck(
+        self,
+        state: ExecutionState,
+        compiled_expression: CompiledExpression,
+        precheck_name: str,
+    ) -> bool:
+        precheck_data = state.prechecks_data.get(precheck_name)
         return self._should_fail_by_expression(compiled_expression, state, local_data=precheck_data)
 
     def _should_fail_by_expression(

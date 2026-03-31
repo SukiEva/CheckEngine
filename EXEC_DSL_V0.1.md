@@ -55,14 +55,16 @@
 2. 若存在 `context`，执行 `context`
 3. 若存在 `variables`，计算 `variables`
 4. 若存在 `prechecks`，顺序执行 `prechecks`
-5. 若某个 `precheck` 失败，立即停止并返回失败
-6. 顺序执行 `steps`
-7. 计算顶层 `on_fail.decision`
-8. 若命中则返回失败，否则返回 `pass`
+5. 若某个 `precheck.on_fail.decision` 命中，立即停止并返回失败
+6. 若某个 `precheck.on_pass.decision` 命中，立即停止并返回 `pass`
+7. 顺序执行 `steps`
+8. 计算顶层 `on_fail.decision`
+9. 若命中则返回失败，否则返回 `pass`
 
 补充规则：
 
 - `prechecks` 是短路执行，失败一个就停止
+- `prechecks` 支持短路成功，命中 `on_pass` 后立即返回 `pass`
 - 顶层 `on_fail` 只在 `steps` 全部执行完成后参与判定
 - 成功时不返回错误信息，直接视为 `pass`
 
@@ -74,7 +76,7 @@
 - `$context`
 - `$variables`
 - `$steps`
-- `$prechecks`（仅用于 `prechecks[].on_fail.decision` 引用当前 precheck 的输出）
+- `$prechecks`（用于 `prechecks[].on_fail.decision`、`prechecks[].on_pass.decision` 引用当前 precheck 的输出）
 
 标准引用形式：
 
@@ -91,7 +93,7 @@
 - 步骤输出必须通过 `$steps.<step_name>.<field>` 访问
 - 所有路径引用必须能在校验阶段静态解析，禁止悬空引用
 - `$.<field>` 表示“当前节点 `outputs` 下的 `<field>`”，用于减少在节点内部重复书写完整命名空间路径
-- `$.<field>` 仅允许在 `prechecks[].on_fail` 内使用；顶层 `on_fail`、`steps[].sql_params` 等位置禁止使用
+- `$.<field>` 仅允许在 `prechecks[].on_fail`、`prechecks[].on_pass` 内使用；顶层 `on_fail`、`steps[].sql_params` 等位置禁止使用
 
 命名硬规则：
 
@@ -276,14 +278,18 @@ FROM am
 
 - 每个 `precheck` 顺序执行
 - 若 `on_fail.decision` 命中，则立即失败返回
+- 若 `on_pass.decision` 命中，则立即成功返回
 - 不再继续执行后续 `prechecks`、`steps`、顶层 `on_fail`
 - `precheck.outputs` 用于声明该 SQL 节点可被表达式引用的输出字段
 
 硬规则：
 
-- 每个 `precheck` 必须声明 `name`、`type`、`datasource`、`result_mode`、`sql_template`、`sql_params`、`outputs`、`on_fail`
-- `prechecks[].on_fail.decision` 只允许受限表达式与 `exists($path)`，不允许裸 `exists` 与其它函数调用
+- 每个 `precheck` 必须声明 `name`、`type`、`datasource`、`result_mode`、`sql_template`、`sql_params`、`outputs`
+- `precheck` 至少要声明一个策略：`on_fail` 或 `on_pass`
+- `prechecks[].on_fail.decision` 只允许受限表达式与 `exists($path)` / `not exists($path)`，不允许裸 `exists` 与其它函数调用
 - `prechecks[].on_fail.mode` 必须是 `single`、`sub_repeat`、`full_repeat` 之一
+- `prechecks[].on_pass` 为可选对象；若声明则当前版本仅允许 `decision` 字段
+- `prechecks[].on_pass.decision` 只允许受限表达式与 `exists($path)` / `not exists($path)`，不允许裸 `exists` 与其它函数调用
 
 ### 6.4 steps[]
 
@@ -361,8 +367,8 @@ FROM am
 
 特例：
 
-- `prechecks[].on_fail.decision` 与顶层 `on_fail.decision` 都支持 `exists($path)`
-- `prechecks[].on_fail.decision` 与顶层 `on_fail.decision` 都**不支持** 裸 `exists`，必须写成 `exists($path)`
+- `prechecks[].on_fail.decision` 与顶层 `on_fail.decision` 都支持 `exists($path)`、`not exists($path)`
+- `prechecks[].on_fail.decision` 与顶层 `on_fail.decision` 都**不支持** 裸 `exists` / 裸 `not exists`，必须写成 `exists($path)` / `not exists($path)`
 
 建议约束：
 
@@ -373,7 +379,7 @@ FROM am
 
 硬规则：
 
-- 表达式中只允许使用：比较运算 `==` `!=` `>` `>=` `<` `<=`，逻辑运算 `and` `or` `not`，集合运算 `in`，空值字面量 `null`，以及内置函数 `exists($path)`
+- 表达式中只允许使用：比较运算 `==` `!=` `>` `>=` `<` `<=`，逻辑运算 `and` `or` `not`，集合运算 `in`，空值字面量 `null`，以及内置函数 `exists($path)` / `not exists($path)`
 - 除 `exists(...)` 外，禁止任意函数调用
 - 禁止任意脚本执行能力与自定义 Python 逻辑
 - 表达式中的所有路径必须能静态解析

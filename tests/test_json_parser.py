@@ -54,6 +54,16 @@ class JsonDslParserTestCase(unittest.TestCase):
         self.assertEqual(document.variables["threshold"].when, ())
         self.assertEqual(document.variables["threshold"].default, 888)
 
+    def test_parse_precheck_on_pass(self) -> None:
+        document = self.parser.parse(
+            '{"prechecks": [{"name": "p1", "type": "sql", "datasource": "db", "result_mode": "records", "sql_template": "select 1 as v", "sql_params": {}, "outputs": ["v"], "on_pass": {"decision": "not exists($prechecks.p1.v)"}}], "steps": [{"name": "s1", "type": "sql", "datasource": "db", "result_mode": "record", "sql_template": "select 1 as v", "sql_params": {}, "outputs": ["v"]}], "on_fail": {"decision": "false", "mode": "single", "message_cn": "x", "message_en": "y"}}'
+        )
+
+        if document.prechecks[0].on_pass is None:
+            self.fail("precheck on_pass should be parsed")
+        self.assertEqual(document.prechecks[0].on_pass.decision, "not exists($prechecks.p1.v)")
+        self.assertIsNone(document.prechecks[0].on_fail)
+
 
 
 if __name__ == "__main__":

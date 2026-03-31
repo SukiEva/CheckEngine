@@ -16,6 +16,7 @@ class CompiledDsl:
     document: DslDocument
     variable_conditions: dict[str, tuple[CompiledExpression, ...]]
     precheck_decisions: dict[str, CompiledExpression]
+    precheck_pass_decisions: dict[str, CompiledExpression]
     on_fail_decision: CompiledExpression
 
 
@@ -37,20 +38,24 @@ class DslCompiler:
             for variable_name, definition in document.variables.items()
         }
         precheck_decisions: dict[str, CompiledExpression] = {}
+        precheck_pass_decisions: dict[str, CompiledExpression] = {}
         for precheck in document.prechecks:
-            if precheck.on_fail is None:
-                raise DSLValidationError(
-                    f"prechecks.{precheck.name}.on_fail must be provided.",
+            if precheck.on_fail is not None:
+                precheck_decisions[precheck.name] = self._compile_expression(
+                    precheck.on_fail.decision,
+                    f"prechecks.{precheck.name}.on_fail.decision",
                 )
-            precheck_decisions[precheck.name] = self._compile_expression(
-                precheck.on_fail.decision,
-                f"prechecks.{precheck.name}.on_fail.decision",
-            )
+            if precheck.on_pass is not None:
+                precheck_pass_decisions[precheck.name] = self._compile_expression(
+                    precheck.on_pass.decision,
+                    f"prechecks.{precheck.name}.on_pass.decision",
+                )
         on_fail_decision = self._compile_expression(document.on_fail.decision, "on_fail.decision")
         return CompiledDsl(
             document=document,
             variable_conditions=variable_conditions,
             precheck_decisions=precheck_decisions,
+            precheck_pass_decisions=precheck_pass_decisions,
             on_fail_decision=on_fail_decision,
         )
 

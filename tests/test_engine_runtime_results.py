@@ -235,6 +235,65 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(logged_args[0], "DslEngine %s failed: %s\n%s")
         self.assertEqual(logged_args[1], "compile")
 
+    def test_execute_returns_pass_when_precheck_on_pass_matches(self) -> None:
+        class _PrecheckPassSqlExecutor:
+            def execute_node(
+                self,
+                node: Any,
+                state: Any,
+                datasource_registry: Any,
+                node_name: str,
+            ) -> NodeExecutionResult:
+                del node, state, datasource_registry
+                if node_name == "check_ok":
+                    return NodeExecutionResult(raw_rows=[], exported_data={"v": []}, exported_fields=["v"])
+                raise AssertionError("step should not be executed after precheck on_pass short-circuit")
+
+        engine = DslEngine()
+        engine.sql_executor = cast(SqlExecutor, _PrecheckPassSqlExecutor())
+        registry = cast(DatasourceRegistry, _UnusedRegistry())
+        dsl_text = json.dumps(
+            {
+                "prechecks": [
+                    {
+                        "name": "check_ok",
+                        "type": "sql",
+                        "datasource": "db",
+                        "result_mode": "records",
+                        "sql_template": "select 1 as v where 1 = 0",
+                        "sql_params": {},
+                        "outputs": ["v"],
+                        "on_pass": {
+                            "decision": "not exists($prechecks.check_ok.v)",
+                        },
+                    }
+                ],
+                "steps": [
+                    {
+                        "name": "step_a",
+                        "type": "sql",
+                        "datasource": "db",
+                        "result_mode": "record",
+                        "sql_template": "select 1 as v",
+                        "sql_params": {},
+                        "outputs": ["v"],
+                    }
+                ],
+                "on_fail": {
+                    "decision": "false",
+                    "mode": "single",
+                    "message_cn": "ok",
+                    "message_en": "ok",
+                },
+            }
+        )
+
+        result = engine.execute(dsl_text, {}, datasource_registry=registry)
+
+        self.assertTrue(result.passed)
+        self.assertEqual(result.phase, "pass")
+        self.assertEqual(result.steps, {})
+
     def test_execution_result_to_dict_normalizes_mapping_views(self) -> None:
         result = ExecutionResult(
             passed=False,
