@@ -173,6 +173,34 @@ class MessageRendererTestCase(unittest.TestCase):
         self.assertEqual(message_cn, "结果：1,200-5.6 | 3,000-7.0")
         self.assertEqual(message_en, "result: 1,200-5.6 | 3,000-7.0")
 
+    def test_render_single_with_multiple_formatted_placeholders(self) -> None:
+        self.state.step_data = {"exchange_rate": {"final_amount": 12345.67}}
+        self.state.variables_data = {"threshold": 1000.4}
+        policy = FailPolicy(
+            decision="$steps.exchange_rate.final_amount > $variables.threshold",
+            mode="single",
+            message_cn="金额f{$steps.exchange_rate.final_amount:,.0f}，阈值f{$variables.threshold:,.1f}",
+            message_en="Amount f{$steps.exchange_rate.final_amount:,.2f}, threshold f{$variables.threshold:,.1f}.",
+        )
+
+        message_cn, message_en = self.renderer.render(policy, self.state)
+
+        self.assertEqual(message_cn, "金额12,346，阈值1,000.4")
+        self.assertEqual(message_en, "Amount 12,345.67, threshold 1,000.4.")
+
+    def test_render_single_formatted_placeholders_keep_brace_text(self) -> None:
+        self.state.step_data = {"exchange_rate": {"token_a": "{A}", "token_b": "{B}"}}
+        policy = FailPolicy(
+            decision="true",
+            mode="single",
+            message_cn="标记f{$steps.exchange_rate.token_a:s}-f{$steps.exchange_rate.token_b:s}",
+            message_en="Token f{$steps.exchange_rate.token_a:s}-f{$steps.exchange_rate.token_b:s}",
+        )
+
+        message_cn, message_en = self.renderer.render(policy, self.state)
+
+        self.assertEqual(message_cn, "标记{A}-{B}")
+        self.assertEqual(message_en, "Token {A}-{B}")
 
 
 if __name__ == "__main__":

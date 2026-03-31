@@ -25,7 +25,10 @@ from ..exceptions import DSLValidationError
 class ReferenceValidator:
     """校验 DSL 中的作用域引用是否合法。"""
 
-    PATH_PATTERN = re.compile(r"\$(?:\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
+    PATH_PATTERN = re.compile(r"\$(?:\.(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)?|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
+    EXISTS_CALL_PATTERN = re.compile(
+        r"(?:not\s+)?exists\(\s*(\$(?:\.(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)?|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*))\s*\)"
+    )
 
     def __init__(self) -> None:
         self.step_reference_validators: dict[str, Callable[[StepNode, DslDocument, set[str], set[str], dict[str, StepNode], str], None]] = {
@@ -202,6 +205,7 @@ class ReferenceValidator:
         step_map: dict[str, StepNode],
         local_outputs: Optional[set[str]],
     ) -> None:
+        exists_argument_references = self._extract_exists_argument_references(policy.decision)
         for reference in self._extract_references(policy.decision):
             self._validate_reference(
                 reference,
@@ -211,6 +215,7 @@ class ReferenceValidator:
                 path=f"{path}.decision",
                 step_map=step_map,
                 local_outputs=local_outputs,
+                allow_sql_step_root=reference in exists_argument_references,
             )
 
         for field_name, template in (("message_cn", policy.message_cn), ("message_en", policy.message_en)):
@@ -237,6 +242,7 @@ class ReferenceValidator:
         step_map: dict[str, StepNode],
         local_outputs: Optional[set[str]],
     ) -> None:
+        exists_argument_references = self._extract_exists_argument_references(policy.decision)
         for reference in self._extract_references(policy.decision):
             self._validate_reference(
                 reference,
@@ -246,6 +252,7 @@ class ReferenceValidator:
                 path=f"{path}.decision",
                 step_map=step_map,
                 local_outputs=local_outputs,
+                allow_sql_step_root=reference in exists_argument_references,
             )
 
     def _validate_reference(
@@ -257,13 +264,20 @@ class ReferenceValidator:
         path: str,
         step_map: dict[str, StepNode],
         local_outputs: Optional[set[str]],
+        allow_sql_step_root: bool = False,
     ) -> None:
         parts = self._split_reference(reference)
         if not parts:
             self._raise(f"{path} contains invalid reference: {reference}")
 
         if parts[0] == "":
-            self._validate_local_reference(reference, parts, path, local_outputs)
+            self._validate_local_reference(
+                reference,
+                parts,
+                path,
+                local_outputs,
+                allow_local_root=allow_sql_step_root,
+            )
             return
 
         root = parts[0]
@@ -287,9 +301,16 @@ class ReferenceValidator:
                 self._raise(f"{path} references a step not available at this point: {reference}")
             step = self._find_step(step_map, step_name)
             if len(parts) == 2:
+                if step.type == NODE_TYPE_VARIABLE:
+                    return
+                if allow_sql_step_root and step.type == NODE_TYPE_SQL:
+                    if not isinstance(step, SqlStepNode):
+                        self._raise(f"{path} references an unsupported step type: {reference}")
+                    if not step.outputs:
+                        self._raise(f"{path} references step outputs that are not declared: {reference}")
+                    return
                 if step.type != NODE_TYPE_VARIABLE:
                     self._raise(f"{path} sql step reference must include exported field: {reference}")
-                return
             if step.type == NODE_TYPE_VARIABLE:
                 self._raise(f"{path} variable step reference only supports $steps.<name>: {reference}")
             if not isinstance(step, SqlStepNode):
@@ -309,9 +330,14 @@ class ReferenceValidator:
         parts: list[str],
         path: str,
         local_outputs: Optional[set[str]],
+        allow_local_root: bool = False,
     ) -> None:
         if local_outputs is None:
             self._raise(f"{path} cannot use local scope reference: {reference}")
+        if len(parts) == 2 and parts[1] == "":
+            if allow_local_root:
+                return
+            self._raise(f"{path} local reference must include a field: {reference}")
         if len(parts) < 2:
             self._raise(f"{path} local reference must include a field: {reference}")
         field_name = parts[1]
@@ -327,6 +353,9 @@ class ReferenceValidator:
 
     def _extract_references(self, text: str) -> list[str]:
         return self.PATH_PATTERN.findall(text)
+
+    def _extract_exists_argument_references(self, decision: str) -> set[str]:
+        return {match.group(1) for match in self.EXISTS_CALL_PATTERN.finditer(decision)}
 
     @staticmethod
     def _split_reference(reference: str) -> list[str]:

@@ -67,7 +67,9 @@ class _SafeExpressionValidator(ast.NodeVisitor):
 class ExpressionEvaluator:
     """求值 DSL 布尔表达式。"""
 
-    REF_PATTERN = re.compile(r"\$(?:\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
+    REF_PATTERN = re.compile(
+        r"\$(?:\.(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)?|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)"
+    )
     NULL_PATTERN = re.compile(r"\bnull\b")
 
     def __init__(self, logger: Optional[logging.Logger] = None) -> None:

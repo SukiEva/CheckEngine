@@ -141,16 +141,26 @@ class MessageRenderer(MessageRenderHelpers):
         overrides: Optional[dict[str, Any]] = None,
         local_data: Optional[Any] = None,
     ) -> str:
-        formatted_template = self.FORMAT_PLACEHOLDER_PATTERN.sub(
-            lambda match: self._render_formatted_placeholder(match, state, row, overrides, local_data),
-            template,
-        )
-        return self.PLACEHOLDER_PATTERN.sub(
+        formatted_values: dict[str, str] = {}
+        marker_index = 0
+
+        def replace_formatted(match: re.Match[str]) -> str:
+            nonlocal marker_index
+            marker = self._build_format_marker(marker_index)
+            formatted_values[marker] = self._render_formatted_placeholder(match, state, row, overrides, local_data)
+            marker_index += 1
+            return marker
+
+        formatted_template = self.FORMAT_PLACEHOLDER_PATTERN.sub(replace_formatted, template)
+        rendered_template = self.PLACEHOLDER_PATTERN.sub(
             lambda match: self._stringify(
                 self._resolve_token_value(match.group(1).strip(), state, row, overrides, local_data)
             ),
             formatted_template,
         )
+        for marker, value in formatted_values.items():
+            rendered_template = rendered_template.replace(marker, value)
+        return rendered_template
 
     def _render_formatted_placeholder(
         self,
@@ -216,6 +226,10 @@ class MessageRenderer(MessageRenderHelpers):
             return token, None
         name, format_spec = token.split(":", 1)
         return name.strip(), format_spec
+
+    @staticmethod
+    def _build_format_marker(index: int) -> str:
+        return "__CHECK_ENGINE_FMT_{0}__".format(index)
 
     @staticmethod
     def _resolve_full_repeat_divider(policy: FailPolicy, locale: str) -> str:

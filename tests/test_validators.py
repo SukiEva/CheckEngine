@@ -109,6 +109,18 @@ class ValidatorTestCase(unittest.TestCase):
         document = self.parser.parse(json.dumps(data))
         self.validator.validate(document)
 
+    def test_validate_on_fail_exists_call_supports_step_records_reference(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["on_fail"]["decision"] = "exists($steps.query_aggregate_amount)"
+        document = self.parser.parse(json.dumps(data))
+        self.validator.validate(document)
+
+    def test_validate_on_fail_not_exists_call_supports_step_records_reference(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["on_fail"]["decision"] = "not exists($steps.query_aggregate_amount)"
+        document = self.parser.parse(json.dumps(data))
+        self.validator.validate(document)
+
     def test_validate_constant_variable(self) -> None:
         data = {
             "variables": {
@@ -396,6 +408,36 @@ class ValidatorTestCase(unittest.TestCase):
         document = self.parser.parse(json.dumps(data))
 
         self.reference_validator.validate(document)
+
+    def test_step_decision_exists_can_reference_local_scope_root(self) -> None:
+        data = {
+            "steps": [
+                {
+                    "name": "check_lines",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "records",
+                    "sql_template": "select 1 as line_no",
+                    "sql_params": {},
+                    "outputs": ["line_no"],
+                    "on_fail": {
+                        "decision": "exists($.)",
+                        "mode": "single",
+                        "message_cn": "存在数据",
+                        "message_en": "Has rows",
+                    },
+                }
+            ],
+            "on_fail": {
+                "decision": "false",
+                "mode": "single",
+                "message_cn": "ok",
+                "message_en": "ok",
+            },
+        }
+        document = self.parser.parse(json.dumps(data))
+
+        self.validator.validate(document)
 
     def test_precheck_decision_can_reference_local_output(self) -> None:
         data = json.loads(json.dumps(self.example_data))
