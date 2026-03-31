@@ -20,6 +20,7 @@ from ..dsl import (
     RESULT_MODE_RECORDS,
     FailPolicy,
     PrecheckNode,
+    PassPolicy,
     SqlNode,
     StepNode,
     VariableDefinition,
@@ -37,6 +38,9 @@ class StructureValidator:
     RESERVED_NODE_NAMES = {field for field in ReservedNodeName}
     ALIAS_PATTERN = re.compile(r"^[A-Za-z_]\w*$")
     EXISTS_CALL_PATTERN = re.compile(r"^exists\(\s*\$(?:\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\)$")
+    NOT_EXISTS_CALL_PATTERN = re.compile(
+        r"^not\s+exists\(\s*\$(?:\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\)$"
+    )
 
     def validate(self, document: DslDocument) -> None:
         self._validate_top_level_fields(document.raw)
@@ -87,9 +91,12 @@ class StructureValidator:
             self._validate_sql_node(node, f"prechecks[{index}]")
             if not node.outputs:
                 self._raise(f"prechecks[{index}].outputs must not be empty.")
-            if node.on_fail is None:
-                self._raise(f"prechecks[{index}].on_fail must not be empty.")
-            self._validate_fail_policy(node.on_fail, f"prechecks[{index}].on_fail")
+            if node.on_fail is None and node.on_pass is None:
+                self._raise(f"prechecks[{index}] must provide at least one of on_fail or on_pass.")
+            if node.on_fail is not None:
+                self._validate_fail_policy(node.on_fail, f"prechecks[{index}].on_fail")
+            if node.on_pass is not None:
+                self._validate_pass_policy(node.on_pass, f"prechecks[{index}].on_pass")
 
     def _validate_steps(self, steps: Sequence[StepNode]) -> None:
         names = set()
@@ -138,8 +145,12 @@ class StructureValidator:
             self._raise(f"{path}.decision must not be empty.")
         if decision == EXISTS_DECISION:
             self._raise(f"{path}.decision does not support bare 'exists'; use exists($path) instead.")
+        if decision == "not exists":
+            self._raise(f"{path}.decision does not support bare 'not exists'; use not exists($path) instead.")
         if decision != EXISTS_DECISION and decision.startswith(EXISTS_DECISION) and not self.EXISTS_CALL_PATTERN.fullmatch(decision):
             self._raise(f"{path}.decision exists syntax is invalid: {policy.decision}")
+        if decision.startswith("not exists") and not self.NOT_EXISTS_CALL_PATTERN.fullmatch(decision):
+            self._raise(f"{path}.decision not exists syntax is invalid: {policy.decision}")
         if not policy.message_cn.strip():
             self._raise(f"{path}.message_cn must not be empty.")
         if not policy.message_en.strip():
@@ -158,6 +169,19 @@ class StructureValidator:
             self._raise(f"{path} must contain exactly one [] segment.")
         if template.index("[") > template.index("]"):
             self._raise(f"{path} has invalid [] ordering.")
+
+    def _validate_pass_policy(self, policy: PassPolicy, path: str) -> None:
+        decision = policy.decision.strip()
+        if not decision:
+            self._raise(f"{path}.decision must not be empty.")
+        if decision == EXISTS_DECISION:
+            self._raise(f"{path}.decision does not support bare 'exists'; use exists($path) instead.")
+        if decision == "not exists":
+            self._raise(f"{path}.decision does not support bare 'not exists'; use not exists($path) instead.")
+        if decision.startswith(EXISTS_DECISION) and not self.EXISTS_CALL_PATTERN.fullmatch(decision):
+            self._raise(f"{path}.decision exists syntax is invalid: {policy.decision}")
+        if decision.startswith("not exists") and not self.NOT_EXISTS_CALL_PATTERN.fullmatch(decision):
+            self._raise(f"{path}.decision not exists syntax is invalid: {policy.decision}")
 
     def _validate_node_name(self, name: str, path: str) -> None:
         if name in self.RESERVED_NODE_NAMES:

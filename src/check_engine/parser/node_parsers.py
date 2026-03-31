@@ -15,6 +15,7 @@ from ..dsl import (
     NamedNodeField,
     NodeType,
     PrecheckNode,
+    PassPolicy,
     ResultMode,
     SqlNodeField,
     StepField,
@@ -77,6 +78,11 @@ class JsonNodeParser:
                     on_fail=self.parse_fail_policy(
                         mapping.get(FailPolicyField.ON_FAIL),
                         f"{node_path}.{FailPolicyField.ON_FAIL}",
+                        required=False,
+                    ),
+                    on_pass=self.parse_pass_policy(
+                        mapping.get(FailPolicyField.ON_PASS),
+                        f"{node_path}.{FailPolicyField.ON_PASS}",
                     ),
                     **sql_node_fields,
                 )
@@ -103,7 +109,11 @@ class JsonNodeParser:
             )
         return nodes
 
-    def parse_fail_policy(self, value: Any, path: str) -> FailPolicy:
+    def parse_fail_policy(self, value: Any, path: str, required: bool = True) -> Optional[FailPolicy]:
+        if value is None:
+            if required:
+                self.helpers.expect_dict(value, path)
+            return None
         mapping = self.helpers.expect_dict(value, path)
         return FailPolicy(
             decision=self.helpers.expect_string(mapping.get(FailPolicyField.DECISION), f"{path}.{FailPolicyField.DECISION}"),
@@ -113,6 +123,14 @@ class JsonNodeParser:
             divider=self.helpers.optional_string(mapping.get(FailPolicyField.DIVIDER), f"{path}.{FailPolicyField.DIVIDER}"),
             divider_cn=self.helpers.optional_string(mapping.get(FailPolicyField.DIVIDER_CN), f"{path}.{FailPolicyField.DIVIDER_CN}"),
             divider_en=self.helpers.optional_string(mapping.get(FailPolicyField.DIVIDER_EN), f"{path}.{FailPolicyField.DIVIDER_EN}"),
+        )
+
+    def parse_pass_policy(self, value: Any, path: str) -> Optional[PassPolicy]:
+        if value is None:
+            return None
+        mapping = self.helpers.expect_dict(value, path)
+        return PassPolicy(
+            decision=self.helpers.expect_string(mapping.get(FailPolicyField.DECISION), f"{path}.{FailPolicyField.DECISION}"),
         )
 
     def parse_sql_node_fields(self, mapping: Mapping[str, Any], path: str) -> dict[str, Any]:

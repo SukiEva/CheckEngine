@@ -767,7 +767,7 @@
         return 'exists($steps.some_step.some_output)';
       }
       if (nodeType === 'precheck') {
-        return 'exists';
+        return 'exists($.ok)';
       }
       return '';
     }
@@ -789,6 +789,7 @@
         variableValue: '',
         variableDefault: '',
         failMode: 'single',
+        precheckPolicyType: 'on_fail',
         messageCn: '',
         messageEn: '',
         divider: '',
@@ -963,7 +964,9 @@
       }
 
       const showNodeTitleField = !(node.type === 'context' || node.type === 'on_fail');
-      const showDividerConfig = node.failMode === 'sub_repeat' || node.failMode === 'full_repeat';
+      const isPrecheckOnFailPolicy = node.type === 'precheck' && (node.precheckPolicyType || 'on_fail') === 'on_fail';
+      const showFailPolicyFields = node.type === 'on_fail' || isPrecheckOnFailPolicy;
+      const showDividerConfig = showFailPolicyFields && (node.failMode === 'sub_repeat' || node.failMode === 'full_repeat');
 
       editorPanel.innerHTML = `
         ${showNodeTitleField ? `
@@ -1017,6 +1020,13 @@
           <label>Outputs（逗号分隔）</label>
           <input id="f_outputs" value="${escapeAttr(node.outputs)}" />
         </div>
+        <div class="field">
+          <label>Precheck Policy</label>
+          <select id="f_precheck_policy_type">
+            <option value="on_fail" ${(node.precheckPolicyType || 'on_fail') === 'on_fail' ? 'selected' : ''}>on_fail（失败短路）</option>
+            <option value="on_pass" ${(node.precheckPolicyType || 'on_fail') === 'on_pass' ? 'selected' : ''}>on_pass（成功短路）</option>
+          </select>
+        </div>
         ` : ''}
         ${isDecisionNode(node.type) ? `
         <div class="field">
@@ -1035,7 +1045,7 @@
           <input id="f_variable_default" data-ref-autocomplete="true" value="${escapeAttr(node.variableDefault || '')}" placeholder="例如 500" />
         </div>
         ` : ''}
-        ${node.type === 'precheck' || node.type === 'on_fail' ? `
+        ${showFailPolicyFields ? `
         <div class="field">
           <label>Fail Mode</label>
           <select id="f_fail_mode">
@@ -1114,7 +1124,18 @@
             renderSqlParamRows(node, persistEditorNode);
           }
         }
-        if (node.type === 'precheck' || node.type === 'on_fail') {
+        if (node.type === 'precheck') {
+          const previousPolicyType = node.precheckPolicyType || 'on_fail';
+          node.precheckPolicyType = document.getElementById('f_precheck_policy_type').value;
+          if (previousPolicyType !== node.precheckPolicyType) {
+            if (node.precheckPolicyType === 'on_pass' && !node.decision) {
+              node.decision = 'not exists($.ok)';
+            }
+            renderEditor();
+            return;
+          }
+        }
+        if (node.type === 'on_fail' || (node.type === 'precheck' && (node.precheckPolicyType || 'on_fail') === 'on_fail')) {
           const previousFailMode = node.failMode;
           node.failMode = document.getElementById('f_fail_mode').value;
           node.messageCn = document.getElementById('f_message_cn').value;
@@ -2018,7 +2039,7 @@
         }
 
         if (node.type === 'precheck') {
-          prechecks.push({
+          const precheckPayload = {
             name: key,
             ...(node.description ? { description: node.description } : {}),
             type: 'sql',
@@ -2026,15 +2047,22 @@
             result_mode: node.resultMode || 'records',
             sql_template: node.sql,
             sql_params: sqlParams,
-            on_fail: {
-              decision: node.decision || 'exists',
+            outputs,
+          };
+          if ((node.precheckPolicyType || 'on_fail') === 'on_pass') {
+            precheckPayload.on_pass = {
+              decision: node.decision || 'not exists($.ok)',
+            };
+          } else {
+            precheckPayload.on_fail = {
+              decision: node.decision || 'exists($.ok)',
               mode: node.failMode || 'single',
               message_cn: node.messageCn || `${key} 未通过`,
               message_en: node.messageEn || `${key} failed`,
               ...buildDividerPayload(node),
-            },
-            outputs,
-          });
+            };
+          }
+          prechecks.push(precheckPayload);
         }
 
         if (node.type === 'step') {
@@ -2185,9 +2213,14 @@
       });
 
       (normalizedPayload.prechecks || []).forEach((item) => {
+        const hasOnFail = !!(item.on_fail && typeof item.on_fail === 'object');
+        const policyType = hasOnFail ? 'on_fail' : 'on_pass';
         pushNode('precheck', item.name || '', {
           sql: item.sql_template || '',
-          decision: item.on_fail && item.on_fail.decision ? item.on_fail.decision : 'exists',
+          precheckPolicyType: policyType,
+          decision: hasOnFail
+            ? (item.on_fail && item.on_fail.decision ? item.on_fail.decision : 'exists($.ok)')
+            : (item.on_pass && item.on_pass.decision ? item.on_pass.decision : 'not exists($.ok)'),
           failMode: item.on_fail && item.on_fail.mode ? item.on_fail.mode : 'single',
           messageCn: item.on_fail && item.on_fail.message_cn ? item.on_fail.message_cn : '',
           messageEn: item.on_fail && item.on_fail.message_en ? item.on_fail.message_en : '',
@@ -2519,6 +2552,7 @@
           datasource: typeof node.datasource === 'string' ? node.datasource : 'saas_db',
           resultMode: typeof node.resultMode === 'string' ? node.resultMode : (node.type === 'context' ? 'record' : 'records'),
           failMode: typeof node.failMode === 'string' ? node.failMode : 'single',
+          precheckPolicyType: typeof node.precheckPolicyType === 'string' ? node.precheckPolicyType : 'on_fail',
           messageCn: typeof node.messageCn === 'string' ? node.messageCn : '',
           messageEn: typeof node.messageEn === 'string' ? node.messageEn : '',
           divider: typeof node.divider === 'string' ? node.divider : '',
@@ -2688,7 +2722,12 @@
         name: item.name || item.id || '',
         sql_template: item.sql_template || item.sql || '',
         sql_params: item.sql_params || {},
-        on_fail: normalizeFailPolicy(item.on_fail || {}),
+        ...(item.on_fail && typeof item.on_fail === 'object' && !Array.isArray(item.on_fail)
+          ? { on_fail: normalizeFailPolicy(item.on_fail) }
+          : {}),
+        ...(item.on_pass && typeof item.on_pass === 'object' && !Array.isArray(item.on_pass)
+          ? { on_pass: { decision: item.on_pass.decision || '' } }
+          : {}),
       }));
     }
 
@@ -2773,6 +2812,14 @@
       if (payload.context && (!payload.context.type || !payload.context.datasource || !payload.context.result_mode || !payload.context.sql_template)) {
         throw new Error('context 缺少必要字段（type/datasource/result_mode/sql_template）。');
       }
+      (payload.prechecks || []).forEach((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          throw new Error(`prechecks[${index}] 必须是对象。`);
+        }
+        if (!item.on_fail && !item.on_pass) {
+          throw new Error(`prechecks[${index}] 至少需要 on_fail 或 on_pass。`);
+        }
+      });
     }
 
     function loadLocal() {

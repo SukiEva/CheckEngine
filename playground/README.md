@@ -5,6 +5,7 @@
 - 通过流程图方式生成 DSL
 - 配置真实 PostgreSQL 数据源连接
 - 直接调用 `check-engine` 运行并查看标准结果
+- Precheck 节点支持在设计器中切换 `on_fail` / `on_pass` 策略（含 `not exists($path)` 决策）
 
 ## 目录结构
 

@@ -197,6 +197,53 @@ class ValidatorTestCase(unittest.TestCase):
 
         self.structure_validator.validate(document)
 
+    def test_validate_precheck_on_pass_local_exists_syntax_is_valid(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0]["on_pass"] = {"decision": "not exists($.func)"}
+        document = self.parser.parse(json.dumps(data))
+
+        self.validator.validate(document)
+
+    def test_validate_precheck_on_pass_bare_exists_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0]["on_pass"] = {"decision": "exists"}
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.structure_validator.validate(document)
+
+    def test_validate_precheck_on_pass_bare_not_exists_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0]["on_pass"] = {"decision": "not exists"}
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.structure_validator.validate(document)
+
+    def test_validate_on_fail_not_exists_call(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["on_fail"]["decision"] = "not exists($steps.exchange_rate.final_amount)"
+        document = self.parser.parse(json.dumps(data))
+
+        self.validator.validate(document)
+
+    def test_validate_precheck_only_on_pass_is_valid(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0].pop("on_fail")
+        data["prechecks"][0]["on_pass"] = {"decision": "not exists($prechecks.check_rate_null.func)"}
+        document = self.parser.parse(json.dumps(data))
+
+        self.validator.validate(document)
+
+    def test_validate_precheck_without_on_fail_and_on_pass_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["prechecks"][0].pop("on_fail")
+        data["prechecks"][0].pop("on_pass", None)
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.structure_validator.validate(document)
+
     def test_invalid_sub_repeat_template_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["prechecks"][0]["on_fail"]["message_cn"] = "存在汇率为空的记录: 记录{func}-{txn}-{rate_date}"

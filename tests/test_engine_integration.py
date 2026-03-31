@@ -105,6 +105,18 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "final")
         self.assertEqual(result.failed_node, "on_fail")
 
+    def test_execute_on_fail_not_exists_function(self) -> None:
+        self._insert_header("PASS_NOT_EXISTS", "flow1", "scenario1")
+        self._insert_journal("PASS_NOT_EXISTS", "USD", "1", "user", "2024-01-01", 1.0, 400)
+        self._insert_rate("USD", 1.0)
+
+        dsl_data = json.loads(self.dsl_text)
+        dsl_data["on_fail"]["decision"] = "not exists($steps.exchange_rate.final_amount)"
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "PASS_NOT_EXISTS"}, self.registry)
+
+        self.assertTrue(result.passed)
+        self.assertEqual(result.phase, "pass")
+
     def test_execute_with_constant_variable(self) -> None:
         self._insert_header("FAIL_CONSTANT", "flow1", "scenario1")
         self._insert_journal("FAIL_CONSTANT", "USD", "1", "user", "2024-01-01", 1.0, 400)
@@ -176,6 +188,33 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         if result.message_en is None:
             self.fail("precheck failure should include English message")
         self.assertIn("null exchange rates", result.message_en)
+
+    def test_execute_returns_pass_when_precheck_on_pass_matches(self) -> None:
+        self._insert_header("PASS_PRECHECK_ON_PASS", "flow1", "scenario1")
+        self._insert_journal("PASS_PRECHECK_ON_PASS", "USD", "1", "user", "2024-01-01", 1.0, 100)
+
+        dsl_data = json.loads(self.dsl_text)
+        dsl_data["prechecks"] = [
+            {
+                "name": "check_no_null_rate",
+                "type": "sql",
+                "datasource": "saas_db",
+                "result_mode": "records",
+                "sql_template": "SELECT func FROM jounrnal WHERE header_id = :source_object_id AND rate is null",
+                "sql_params": {"source_object_id": "$input.source_object_id"},
+                "outputs": ["func"],
+                "on_pass": {
+                    "decision": "not exists($prechecks.check_no_null_rate.func)",
+                },
+            }
+        ]
+
+        result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "PASS_PRECHECK_ON_PASS"}, self.registry)
+
+        self.assertTrue(result.passed)
+        self.assertEqual(result.phase, "pass")
+        self.assertEqual(result.steps, {})
+        self.assertEqual([trace.node_name for trace in result.executed_nodes], ["context", "check_no_null_rate"])
 
     def test_execute_precheck_exists_path_uses_named_precheck_output(self) -> None:
         self._insert_header("FAIL_PRECHECK_PATH", "flow1", "scenario1")
