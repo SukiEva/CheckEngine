@@ -91,12 +91,24 @@
       "outputs": [
         "final_amount"
       ]
+    },
+    {
+      "name": "final_threshold",
+      "description": "步骤级变量阈值计算",
+      "type": "variable",
+      "when": [
+        {
+          "condition": "$steps.exchange_rate.final_amount > $variables.threshold",
+          "value": 900
+        }
+      ],
+      "default": 1000
     }
   ],
   "on_fail": {
-    "decision": "$steps.exchange_rate.final_amount > $variables.threshold",
+    "decision": "$steps.exchange_rate.final_amount > $steps.final_threshold",
     "mode": "single",
-    "message_cn": "金额{$steps.exchange_rate.final_amount}超过阈值{$variables.threshold}",
-    "message_en": "The amount {$steps.exchange_rate.final_amount} exceeds the threshold {$variables.threshold}."
+    "message_cn": "金额{$steps.exchange_rate.final_amount}超过阈值{$steps.final_threshold}",
+    "message_en": "The amount {$steps.exchange_rate.final_amount} exceeds the threshold {$steps.final_threshold}."
   }
 }

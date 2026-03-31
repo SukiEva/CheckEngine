@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from check_engine.dsl import SqlStepNode
 from check_engine.exceptions import DSLParseError, DSLValidationError
 from check_engine.parser import JsonDslParser
 from check_engine.validator import DslValidator, ReferenceValidator, StructureValidator
@@ -85,18 +86,20 @@ class ValidatorTestCase(unittest.TestCase):
 
     def test_structure_validator_accepts_frozen_document_collections(self) -> None:
         document = self.parser.parse(json.dumps(self.example_data))
+        first_step = cast(SqlStepNode, document.steps[0])
 
         self.assertIsInstance(document.steps, tuple)
-        self.assertIsInstance(document.steps[0].outputs, tuple)
-        self.assertIsInstance(document.steps[0].consumes, tuple)
+        self.assertIsInstance(first_step.outputs, tuple)
+        self.assertIsInstance(first_step.consumes, tuple)
 
         self.structure_validator.validate(document)
 
     def test_reference_validator_accepts_mapping_collections(self) -> None:
         document = self.parser.parse(json.dumps(self.example_data))
+        first_step = cast(SqlStepNode, document.steps[0])
 
         self.assertIsInstance(document.variables, dict)
-        self.assertIsInstance(document.steps[0].sql_params, dict)
+        self.assertIsInstance(first_step.sql_params, dict)
 
         self.reference_validator.validate(document)
 
@@ -520,6 +523,42 @@ class ValidatorTestCase(unittest.TestCase):
             "only SELECT/WITH queries are allowed." in str(ctx.exception)
             or "contains non-read-only SQL keyword." in str(ctx.exception)
         )
+
+    def test_variable_step_can_reference_previous_step_and_global_variable(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["steps"].append(
+            {
+                "name": "dynamic_threshold",
+                "type": "variable",
+                "when": [
+                    {
+                        "condition": "$steps.exchange_rate.final_amount > $variables.threshold",
+                        "value": 1200,
+                    }
+                ],
+                "default": 1000,
+            }
+        )
+        data["on_fail"]["decision"] = "$steps.dynamic_threshold > 1000"
+        document = self.parser.parse(json.dumps(data))
+
+        self.validator.validate(document)
+
+    def test_variable_step_reference_must_use_two_segments(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["steps"].append(
+            {
+                "name": "dynamic_threshold",
+                "type": "variable",
+                "when": [],
+                "default": 1000,
+            }
+        )
+        data["on_fail"]["decision"] = "$steps.dynamic_threshold.value > 1"
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError):
+            self.reference_validator.validate(document)
 
 
     def test_top_level_context_is_not_allowed(self) -> None:

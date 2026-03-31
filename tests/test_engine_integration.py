@@ -88,8 +88,8 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
         self.assertEqual(result.failed_node, "on_fail")
         if result.message_cn is None or result.message_en is None:
             self.fail("final failure should include both Chinese and English messages")
-        self.assertIn("超过阈值1000", result.message_cn)
-        self.assertIn("exceeds the threshold 1000", result.message_en)
+        self.assertIn("超过阈值900", result.message_cn)
+        self.assertIn("exceeds the threshold 900", result.message_en)
         self.assertEqual(result.steps["exchange_rate"]["final_amount"], 1300)
 
     def test_execute_returns_final_failure_with_exists_function(self) -> None:
@@ -130,13 +130,14 @@ class DslEngineIntegrationTestCase(unittest.TestCase):
                 "default": 800,
             }
         }
+        dsl_data["steps"][-1]["default"] = 800
         result = self.engine.execute(json.dumps(dsl_data), {"source_object_id": "FAIL_CONSTANT", "flow": "flow1", "scenario": "scenario1"}, self.registry)
 
         self.assertFalse(result.passed)
         self.assertEqual(result.phase, "final")
         if result.message_cn is None:
             self.fail("final failure should include Chinese message")
-        self.assertIn("阈值800", result.message_cn)
+        self.assertIn("阈值900", result.message_cn)
 
     def test_engine_allows_configuring_compile_cache_size(self) -> None:
         engine = DslEngine(compile_cache_size=1)

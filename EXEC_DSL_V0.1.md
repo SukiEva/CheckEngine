@@ -32,7 +32,12 @@
 
 ## 3. steps 说明
 
-`steps[]` 节点结构：
+`steps[]` 节点支持两种 `type`：
+
+- `sql`：与现有行为一致
+- `variable`：步骤内变量计算节点
+
+`type: sql` 结构：
 
 ```json
 {
@@ -49,10 +54,29 @@
 }
 ```
 
+`type: variable` 结构：
+
+```json
+{
+  "name": "final_threshold",
+  "type": "variable",
+  "when": [
+    {
+      "condition": "$steps.exchange_rate.final_amount > $variables.threshold",
+      "value": 900
+    }
+  ],
+  "default": 1000
+}
+```
+
 说明：
 
 - `on_fail`、`on_pass` 都是**可选**。
 - 不配置策略时，步骤只执行 SQL 并继续到下一个步骤。
+- `variable.when/default` 语义与顶层 `variables` 一致。
+- `variable.when` 可以引用已执行步骤输出与全局 `$variables`。
+- `variable` 节点执行后通过 `$steps.<step_name>` 引用，例如 `$steps.final_threshold`。
 - `on_fail` 支持消息模板渲染（`single/sub_repeat/full_repeat`）。
 - `on_pass` 当前仅使用 `decision` 做短路成功判定。
 

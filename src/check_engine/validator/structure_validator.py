@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Mapping, NoReturn, Sequence
+from collections.abc import Callable
+from typing import Any, Mapping, NoReturn, Sequence
 
 from ..dsl import (
     DslDocument,
@@ -15,12 +16,15 @@ from ..dsl import (
     FAIL_MODE_SINGLE,
     FAIL_MODE_SUB_REPEAT,
     NODE_TYPE_SQL,
+    NODE_TYPE_VARIABLE,
     RESULT_MODE_RECORD,
     RESULT_MODE_RECORDS,
     FailPolicy,
     PassPolicy,
-    SqlNode,
     StepNode,
+    SqlNode,
+    SqlStepNode,
+    VariableStepNode,
     VariableDefinition,
 )
 from ..exceptions import DSLValidationError
@@ -30,7 +34,6 @@ class StructureValidator:
     """校验 DSL 的结构与基础约束。"""
 
     VALID_TOP_LEVEL_FIELDS = {field for field in TopLevelField}
-    VALID_SQL_NODE_TYPES = {NODE_TYPE_SQL}
     VALID_RESULT_MODES = {RESULT_MODE_RECORD, RESULT_MODE_RECORDS}
     VALID_FAIL_MODES = {FAIL_MODE_SUB_REPEAT, FAIL_MODE_FULL_REPEAT, FAIL_MODE_SINGLE}
     RESERVED_NODE_NAMES = {field for field in ReservedNodeName}
@@ -40,10 +43,16 @@ class StructureValidator:
         r"^not\s+exists\(\s*\$(?:\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\)$"
     )
 
+    def __init__(self) -> None:
+        self.step_type_validators: dict[str, Callable[[StepNode, Any, str], None]] = {
+            NODE_TYPE_SQL: self._validate_sql_step_node,
+            NODE_TYPE_VARIABLE: self._validate_variable_step_node,
+        }
+
     def validate(self, document: DslDocument) -> None:
         self._validate_top_level_fields(document.raw)
         self._validate_variables(document.variables, document.raw.get(TopLevelField.VARIABLES, {}))
-        self._validate_steps(document.steps)
+        self._validate_steps(document.steps, document.raw.get(TopLevelField.STEPS, []))
         self._validate_fail_policy(document.on_fail, TopLevelField.ON_FAIL)
 
     def _validate_top_level_fields(self, raw: Mapping[str, object]) -> None:
@@ -70,15 +79,20 @@ class StructureValidator:
                 ):
                     self._raise(f"variables.{name}.when[{index}].value is required.")
 
-    def _validate_steps(self, steps: Sequence[StepNode]) -> None:
+    def _validate_steps(self, steps: Sequence[StepNode], raw_steps: Any) -> None:
+        if not isinstance(raw_steps, Sequence):
+            self._raise("steps must be a list.")
         names = set()
         for index, node in enumerate(steps):
             if node.name in names:
                 self._raise(f"steps[{index}].name is duplicated: {node.name}")
             names.add(node.name)
             self._validate_node_name(node.name, f"steps[{index}].name")
-            self._validate_sql_node(node, f"steps[{index}]")
-            self._validate_outputs(node.outputs, f"steps[{index}].outputs")
+            raw_step = raw_steps[index] if index < len(raw_steps) else {}
+            step_type_validator = self.step_type_validators.get(node.type)
+            if step_type_validator is None:
+                self._raise(f"steps[{index}].type is not supported: {node.type}")
+            step_type_validator(node, raw_step, f"steps[{index}]")
             if node.on_fail is not None:
                 self._validate_fail_policy(node.on_fail, f"steps[{index}].on_fail")
             if node.on_pass is not None:
@@ -94,10 +108,10 @@ class StructureValidator:
                 if consume.alias in aliases:
                     self._raise(f"steps[{index}].consumes[{consume_index}].alias is duplicated: {consume.alias}")
                 aliases.add(consume.alias)
+            if isinstance(node, VariableStepNode) and node.consumes:
+                self._raise(f"steps[{index}].consumes is not supported when type is variable.")
 
     def _validate_sql_node(self, node: SqlNode, path: str) -> None:
-        if node.type not in self.VALID_SQL_NODE_TYPES:
-            self._raise(f"{path}.type is not supported: {node.type}")
         if node.result_mode not in self.VALID_RESULT_MODES:
             self._raise(f"{path}.result_mode is not supported: {node.result_mode}")
         if not node.datasource.strip():
@@ -105,6 +119,33 @@ class StructureValidator:
         if not node.sql_template.strip():
             self._raise(f"{path}.sql_template must not be empty.")
         self._validate_outputs(node.outputs, f"{path}.outputs")
+
+    def _validate_sql_step_node(self, node: StepNode, _raw_step: Any, path: str) -> None:
+        if not isinstance(node, SqlStepNode):
+            self._raise(f"{path} node class does not match sql type.")
+        self._validate_sql_node(node, path)
+        self._validate_outputs(node.outputs, f"{path}.outputs")
+
+    def _validate_variable_step_node(self, node: StepNode, raw_step: Any, path: str) -> None:
+        if not isinstance(node, VariableStepNode):
+            self._raise(f"{path} node class does not match variable type.")
+        if not isinstance(raw_step, Mapping):
+            self._raise(f"{path} raw definition is invalid.")
+        if VariableField.DEFAULT not in raw_step:
+            self._raise(f"{path}.default is required.")
+        raw_when = raw_step.get(VariableField.WHEN, [])
+        if not isinstance(raw_when, Sequence):
+            self._raise(f"{path}.when must be a list.")
+        for index, condition in enumerate(node.when):
+            if not condition.condition.strip():
+                self._raise(f"{path}.when[{index}].condition must not be empty.")
+            if (
+                not isinstance(raw_when, Sequence)
+                or index >= len(raw_when)
+                or not isinstance(raw_when[index], Mapping)
+                or VariableField.VALUE not in raw_when[index]
+            ):
+                self._raise(f"{path}.when[{index}].value is required.")
 
     def _validate_outputs(self, outputs: Sequence[str], path: str) -> None:
         seen = set()

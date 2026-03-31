@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import cast
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine.exceptions import DSLParseError
+from check_engine.dsl import VariableStepNode
 from check_engine.parser import JsonDslParser
 
 
@@ -20,8 +22,9 @@ class JsonDslParserTestCase(unittest.TestCase):
     def test_parse_example_json(self) -> None:
         document = self.parser.parse(self.example_path.read_text(encoding="utf-8"))
         self.assertEqual(document.variables["threshold"].default, 500)
-        self.assertEqual(len(document.steps), 4)
+        self.assertEqual(len(document.steps), 5)
         self.assertEqual(document.steps[3].consumes[0].alias, "am")
+        self.assertEqual(document.steps[4].type, "variable")
         self.assertEqual(document.on_fail.mode, "single")
 
     def test_parse_invalid_json_raises(self) -> None:
@@ -56,6 +59,16 @@ class JsonDslParserTestCase(unittest.TestCase):
             self.fail("step on_pass should be parsed")
         self.assertEqual(document.steps[0].on_pass.decision, "not exists($.v)")
         self.assertIsNone(document.steps[0].on_fail)
+
+    def test_parse_variable_step(self) -> None:
+        document = self.parser.parse(
+            '{"steps": [{"name": "threshold_step", "type": "variable", "when": [{"condition": "$variables.base > 10", "value": 100}], "default": 50}], "variables": {"base": {"when": [], "default": 20}}, "on_fail": {"decision": "$steps.threshold_step > 90", "mode": "single", "message_cn": "x", "message_en": "y"}}'
+        )
+
+        self.assertIsInstance(document.steps[0], VariableStepNode)
+        variable_step = cast(VariableStepNode, document.steps[0])
+        self.assertEqual(variable_step.type, "variable")
+        self.assertEqual(variable_step.default, 50)
 
 
 

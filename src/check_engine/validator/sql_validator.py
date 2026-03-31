@@ -9,7 +9,7 @@ import sqlparse
 from sqlparse import tokens as sql_tokens
 from sqlparse.sql import Statement, Token
 
-from ..dsl import DslDocument, SqlNode
+from ..dsl import DslDocument, SqlNode, SqlStepNode
 from ..exceptions import DSLValidationError
 
 
@@ -37,7 +37,8 @@ class SqlSafetyValidator:
 
     def validate(self, document: DslDocument) -> None:
         for index, step in enumerate(document.steps):
-            self._validate_sql(step, "steps[{0}]".format(index))
+            if isinstance(step, SqlStepNode):
+                self._validate_sql(step, "steps[{0}]".format(index))
 
     def _validate_sql(self, node: SqlNode, path: str) -> None:
         statements = self._parse_statements(node.sql_template)
