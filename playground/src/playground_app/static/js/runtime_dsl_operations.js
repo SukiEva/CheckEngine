@@ -1,3 +1,5 @@
+import { closeDialog, openDialog, highlightCode } from "./utils/ui_utils.js";
+
 export function initRuntimeDslOperations(options) {
   const {
     runtimeDialog,
@@ -18,50 +20,30 @@ export function initRuntimeDslOperations(options) {
   } = options;
 
   function closeRuntimeDialog() {
-    if (typeof runtimeDialog.close === 'function' && runtimeDialog.hasAttribute('open')) {
-      runtimeDialog.close();
-    } else {
-      runtimeDialog.removeAttribute('open');
-    }
+    closeDialog(runtimeDialog);
   }
 
   function openRuntimeDialog() {
-    if (typeof runtimeDialog.showModal === 'function') {
-      runtimeDialog.showModal();
-    } else {
-      runtimeDialog.setAttribute('open', 'open');
-    }
+    openDialog(runtimeDialog);
   }
 
   function closeValidateDialog() {
-    if (typeof validateDialog.close === 'function' && validateDialog.hasAttribute('open')) {
-      validateDialog.close();
-    } else {
-      validateDialog.removeAttribute('open');
-    }
+    closeDialog(validateDialog);
   }
 
   function openValidateDialog() {
-    if (typeof validateDialog.showModal === 'function') {
-      validateDialog.showModal();
-    } else {
-      validateDialog.setAttribute('open', 'open');
-    }
+    openDialog(validateDialog);
   }
 
   function renderValidateResult(payload) {
     const resultJson = JSON.stringify(payload || {}, null, 2);
     validateResultCode.textContent = resultJson;
-    if (window.Prism && typeof window.Prism.highlightElement === 'function') {
-      window.Prism.highlightElement(validateResultCode);
-    }
+    highlightCode(validateResultCode);
   }
 
   function renderRuntimeResult(payload) {
     runtimeResultCode.textContent = JSON.stringify(payload, null, 2);
-    if (window.Prism && typeof window.Prism.highlightElement === 'function') {
-      window.Prism.highlightElement(runtimeResultCode);
-    }
+    highlightCode(runtimeResultCode);
   }
 
   function setRunButtonLoading(isLoading) {
