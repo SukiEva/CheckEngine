@@ -9,6 +9,7 @@ export function createAutocompleteBinder(options) {
   } = options;
 
   let runtimeAutocompleteContext = null;
+  let runtimeFallbackPanel = null;
 
   function getReferenceRange(target) {
     const cursor = target.selectionStart || 0;
@@ -153,7 +154,7 @@ export function createAutocompleteBinder(options) {
         }
         const allSuggestions = getRuntimePathSuggestions(currentNode);
         const matched = allSuggestions.filter((item) => item.toLowerCase().includes(range.keyword.toLowerCase()));
-        const panel = document.getElementById(target.id === 'f_sql' ? 'ac_sql' : 'ac_runtime_inline') || document.getElementById('ac_sql');
+        const panel = ensureRuntimePanel(target);
         runtimeAutocompleteContext = {
           target,
           panel,
@@ -194,6 +195,29 @@ export function createAutocompleteBinder(options) {
         positionRuntimeAutocomplete(runtimeAutocompleteContext.target);
       }
     }, { passive: true });
+  }
+
+  function ensureRuntimePanel(target) {
+    const inlinePanel = document.getElementById(target.id === 'f_sql' ? 'ac_sql' : 'ac_runtime_inline');
+    if (inlinePanel) {
+      return inlinePanel;
+    }
+    const sqlPanel = document.getElementById('ac_sql');
+    if (sqlPanel) {
+      return sqlPanel;
+    }
+    if (runtimeFallbackPanel) {
+      return runtimeFallbackPanel;
+    }
+    const panel = document.createElement('div');
+    panel.id = 'ac_runtime_fallback';
+    panel.className = 'autocomplete-panel';
+    panel.style.position = 'fixed';
+    panel.style.zIndex = '60';
+    panel.style.display = 'none';
+    document.body.appendChild(panel);
+    runtimeFallbackPanel = panel;
+    return panel;
   }
 
   function createAutocomplete(config) {

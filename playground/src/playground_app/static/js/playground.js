@@ -1148,9 +1148,43 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
     }
 
     function showElMessage(message, type = 'success') {
-      if (window.ElementPlus && typeof window.ElementPlus.ElMessage === 'function') {
-        window.ElementPlus.ElMessage({ message, type });
+      const maybeElementPlusMessage = window.ElementPlus && typeof window.ElementPlus.ElMessage === 'function'
+        ? window.ElementPlus.ElMessage
+        : (typeof window.ElMessage === 'function' ? window.ElMessage : null);
+      if (maybeElementPlusMessage) {
+        maybeElementPlusMessage({ message, type });
+        return;
       }
+      renderFallbackToast(message, type);
+    }
+
+    function renderFallbackToast(message, type = 'success') {
+      const toastId = 'epFallbackToast';
+      const existing = document.getElementById(toastId);
+      if (existing) {
+        existing.remove();
+      }
+      const toastEl = document.createElement('div');
+      toastEl.id = toastId;
+      const tone = type === 'error' ? '#f56c6c' : '#67c23a';
+      toastEl.style.cssText = [
+        'position:fixed',
+        'top:18px',
+        'left:50%',
+        'transform:translateX(-50%)',
+        'z-index:9999',
+        'padding:8px 12px',
+        'border-radius:6px',
+        `background:${tone}`,
+        'color:#fff',
+        'font-size:13px',
+        'box-shadow:0 2px 8px rgba(0,0,0,0.16)',
+      ].join(';');
+      toastEl.textContent = message;
+      document.body.appendChild(toastEl);
+      window.setTimeout(() => {
+        toastEl.remove();
+      }, 1800);
     }
 
     function toDslObject() {
@@ -1556,11 +1590,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
     document.getElementById('btnCopyPreview').addEventListener('click', async () => {
       const json = JSON.stringify(toDslObject(), null, 2);
       try {
-        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-          await navigator.clipboard.writeText(json);
-        } else {
-          fallbackCopyText(json);
-        }
+        await copyPreviewJson(json);
         statusText.classList.remove('status-warn');
         statusText.textContent = '已复制 DSL JSON。';
         showElMessage('复制成功', 'success');
@@ -1655,6 +1685,21 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       if (!copySuccess) {
         throw new Error('浏览器不支持自动复制，请手动复制。');
       }
+    }
+
+    async function copyPreviewJson(text) {
+      if (navigator.clipboard && typeof navigator.clipboard.write === 'function' && window.ClipboardItem) {
+        const clipboardItem = new window.ClipboardItem({
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+        });
+        await navigator.clipboard.write([clipboardItem]);
+        return;
+      }
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      fallbackCopyText(text);
     }
 
     loadLocal();
