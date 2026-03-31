@@ -964,7 +964,10 @@
       }
 
       const showNodeTitleField = !(node.type === 'context' || node.type === 'on_fail');
-      const isPrecheckOnFailPolicy = node.type === 'precheck' && (node.precheckPolicyType || 'on_fail') === 'on_fail';
+      const resolvedPrecheckPolicyType = node.type === 'precheck' && node.precheckPolicyType === 'on_pass'
+        ? 'on_pass'
+        : 'on_fail';
+      const isPrecheckOnFailPolicy = node.type === 'precheck' && resolvedPrecheckPolicyType === 'on_fail';
       const showFailPolicyFields = node.type === 'on_fail' || isPrecheckOnFailPolicy;
       const showDividerConfig = showFailPolicyFields && (node.failMode === 'sub_repeat' || node.failMode === 'full_repeat');
 
@@ -1023,8 +1026,8 @@
         <div class="field">
           <label>Precheck Policy</label>
           <select id="f_precheck_policy_type">
-            <option value="on_fail" ${(node.precheckPolicyType || 'on_fail') === 'on_fail' ? 'selected' : ''}>on_fail（失败短路）</option>
-            <option value="on_pass" ${(node.precheckPolicyType || 'on_fail') === 'on_pass' ? 'selected' : ''}>on_pass（成功短路）</option>
+            <option value="on_fail" ${resolvedPrecheckPolicyType === 'on_fail' ? 'selected' : ''}>on_fail（失败短路）</option>
+            <option value="on_pass" ${resolvedPrecheckPolicyType === 'on_pass' ? 'selected' : ''}>on_pass（成功短路）</option>
           </select>
         </div>
         ` : ''}
@@ -1125,17 +1128,23 @@
           }
         }
         if (node.type === 'precheck') {
-          const previousPolicyType = node.precheckPolicyType || 'on_fail';
+          const previousPolicyType = node.precheckPolicyType === 'on_pass' ? 'on_pass' : 'on_fail';
           node.precheckPolicyType = document.getElementById('f_precheck_policy_type').value;
           if (previousPolicyType !== node.precheckPolicyType) {
             if (node.precheckPolicyType === 'on_pass' && !node.decision) {
               node.decision = 'not exists($.ok)';
+              node.failMode = 'single';
+              node.messageCn = '';
+              node.messageEn = '';
+              node.divider = '';
+              node.dividerCn = '';
+              node.dividerEn = '';
             }
             renderEditor();
             return;
           }
         }
-        if (node.type === 'on_fail' || (node.type === 'precheck' && (node.precheckPolicyType || 'on_fail') === 'on_fail')) {
+        if (node.type === 'on_fail' || (node.type === 'precheck' && node.precheckPolicyType !== 'on_pass')) {
           const previousFailMode = node.failMode;
           node.failMode = document.getElementById('f_fail_mode').value;
           node.messageCn = document.getElementById('f_message_cn').value;
@@ -1193,6 +1202,7 @@
         'f_sql',
         'f_datasource',
         'f_result_mode',
+        'f_precheck_policy_type',
         'f_fail_mode',
         'f_message_cn',
         'f_message_en',
@@ -1204,6 +1214,9 @@
       ].forEach((elementId) => {
         const input = document.getElementById(elementId);
         if (!input) return;
+        if (elementId === 'f_precheck_policy_type') {
+          input.addEventListener('input', persistEditorNode);
+        }
         input.addEventListener('change', persistEditorNode);
       });
 
