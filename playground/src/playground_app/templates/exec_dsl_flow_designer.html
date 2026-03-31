@@ -618,7 +618,7 @@
             <div id="runtimeInputRows"></div>
             <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddInputParam" title="新增输入参数" aria-label="新增输入参数"><span class="ep-icon">add</span></button>
           </div>
-          <div class="inline-status">运行 DSL 时将使用这里的 input_data；默认包含 <code>source_object_id</code>。</div>
+          <div class="inline-status">运行 DSL 时将使用这里的 input_data；默认包含 <code>source_object_id</code>、<code>renter_id</code> 与 <code>accounting_period</code>。</div>
         </section>
       </div>
     </aside>
@@ -736,7 +736,12 @@
         db_url: 'postgresql+psycopg2://user:password@127.0.0.1:5432/data_db',
       },
     ];
-    const DEFAULT_INPUT_ROWS = [{ key: 'source_object_id', value: 'DEMO_1' }];
+    const REQUIRED_INPUT_ROWS = [
+      { key: 'source_object_id', value: 'DEMO_1' },
+      { key: 'renter_id', value: 'DEMO_RENTER_1' },
+      { key: 'accounting_period', value: '2026-01' },
+    ];
+    const DEFAULT_INPUT_ROWS = [...REQUIRED_INPUT_ROWS];
 
     const state = {
       nodes: [],
@@ -1490,10 +1495,15 @@
           key: row && typeof row.key === 'string' ? row.key.trim() : '',
           value: row && typeof row.value === 'string' ? row.value : normalizeValueToInput(row && Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : ''),
         }));
-      const hasSourceObjectId = normalized.some((row) => row.key === 'source_object_id');
-      if (!hasSourceObjectId) {
-        normalized.unshift({ key: 'source_object_id', value: 'DEMO_1' });
-      }
+      REQUIRED_INPUT_ROWS
+        .slice()
+        .reverse()
+        .forEach((requiredRow) => {
+          const hasRequiredKey = normalized.some((row) => row.key === requiredRow.key);
+          if (!hasRequiredKey) {
+            normalized.unshift({ ...requiredRow });
+          }
+        });
       return normalized.length ? normalized : [...DEFAULT_INPUT_ROWS];
     }
 
@@ -1502,7 +1512,7 @@
       runtimeInputRows = normalizeInputRows(runtimeInputRows);
       runtimeInputRowsEl.innerHTML = runtimeInputRows.map((row, index) => `
         <div class="kv-row">
-          <input data-input-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="参数名，如 source_object_id" />
+          <input data-input-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="参数名，如 source_object_id / renter_id / accounting_period" />
           <input data-input-value="${index}" value="${escapeAttr(row.value || '')}" placeholder="参数值，如 DEMO_1、100 或 true" />
           <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-input-remove="${index}" title="删除输入参数" aria-label="删除输入参数"><span aria-hidden="true">✕</span></button>
         </div>
@@ -1943,9 +1953,11 @@
       Object.keys(inputPayload).forEach((key) => {
         basics.push(`$input.${key}`);
       });
-      if (!Object.prototype.hasOwnProperty.call(inputPayload, 'source_object_id')) {
-        basics.push('$input.source_object_id');
-      }
+      REQUIRED_INPUT_ROWS.forEach((requiredRow) => {
+        if (!Object.prototype.hasOwnProperty.call(inputPayload, requiredRow.key)) {
+          basics.push(`$input.${requiredRow.key}`);
+        }
+      });
       const runtimePaths = [];
       const currentNodeOutputFields = (currentNode.outputs || '')
         .split(',')
