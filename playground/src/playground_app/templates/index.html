@@ -37,7 +37,7 @@
 
     .app {
       display: grid;
-      grid-template-columns: minmax(240px, 280px) minmax(0, 1fr) minmax(320px, 380px);
+      grid-template-columns: minmax(300px, 360px) minmax(0, 1fr) minmax(280px, 340px);
       height: calc(100vh - 28px);
       gap: 14px;
       padding: 14px;
@@ -158,12 +158,11 @@
 
     #dropZone {
       display: grid;
-      grid-template-columns: repeat(5, minmax(240px, 280px));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
       padding: 12px;
       align-items: start;
-      min-width: 100%;
-      width: max-content;
+      width: 100%;
     }
 
     .flow-lane {
@@ -575,7 +574,7 @@
 
     @media (max-width: 1500px) {
       .app {
-        grid-template-columns: 260px minmax(0, 1fr) 340px;
+        grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) minmax(260px, 320px);
       }
     }
 
@@ -759,6 +758,19 @@
 
     function isDecisionNode(nodeType) {
       return DECISION_NODE_TYPES.has(nodeType);
+    }
+
+    function shouldShowDecisionField(node) {
+      if (!node) {
+        return false;
+      }
+      if (node.type === 'on_fail') {
+        return true;
+      }
+      if (node.type !== 'step') {
+        return false;
+      }
+      return node.precheckPolicyType === 'on_fail' || node.precheckPolicyType === 'on_pass';
     }
 
     function hasOutputs(nodeType) {
@@ -963,6 +975,10 @@
       const resolvedPrecheckPolicyType = node.type === 'step' && node.precheckPolicyType === 'on_pass'
         ? 'on_pass'
         : (node.precheckPolicyType === 'none' ? 'none' : 'on_fail');
+      const shouldShowDecision = shouldShowDecisionField({
+        ...node,
+        precheckPolicyType: resolvedPrecheckPolicyType,
+      });
       const isPrecheckOnFailPolicy = node.type === 'step' && resolvedPrecheckPolicyType === 'on_fail';
       const showFailPolicyFields = node.type === 'on_fail' || isPrecheckOnFailPolicy;
       const showDividerConfig = showFailPolicyFields && (node.failMode === 'sub_repeat' || node.failMode === 'full_repeat');
@@ -984,6 +1000,15 @@
           <label>类型（只读）</label>
           <input class="editor-readonly-input" value="${node.type}" disabled />
         </div>
+        ${node.type === 'step' ? `
+        <div class="field">
+          <label>Consumes（step_name + alias）</label>
+          <div id="f_consumes_rows"></div>
+          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddConsumeRow" type="button" title="新增 consume" aria-label="新增 consume"><span class="ep-icon">add</span></button>
+          <div class="field-note">step_name 支持选择已有 step 名，也支持输入 <code>$</code> 触发运行时变量联想。</div>
+          <datalist id="consumeStepOptions"></datalist>
+        </div>
+        ` : ''}
         ${isSqlNode(node.type) ? `
         <div class="field">
           <label>Datasource</label>
@@ -1024,7 +1049,7 @@
           </select>
         </div>
         ` : ''}
-        ${isDecisionNode(node.type) ? `
+        ${shouldShowDecision ? `
         <div class="field">
           <label>Decision（用于 step/on_fail）</label>
           <input id="f_decision" data-ref-autocomplete="true" value="${escapeAttr(node.decision || '')}" />
@@ -1079,15 +1104,6 @@
           <input id="f_outputs" value="${escapeAttr(node.outputs)}" />
         </div>
         ` : ''}
-        ${node.type === 'step' ? `
-        <div class="field">
-          <label>Consumes（step_name + alias）</label>
-          <div id="f_consumes_rows"></div>
-          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddConsumeRow" type="button" title="新增 consume" aria-label="新增 consume"><span class="ep-icon">add</span></button>
-          <div class="field-note">step_name 支持选择已有 step 名，也支持输入 <code>$</code> 触发运行时变量联想。</div>
-          <datalist id="consumeStepOptions"></datalist>
-        </div>
-        ` : ''}
         `;
       renderMaterialIcons(editorPanel);
 
@@ -1097,7 +1113,7 @@
         } else {
           node.title = node.type;
         }
-        if (isDecisionNode(node.type)) {
+        if (shouldShowDecisionField(node)) {
           node.decision = document.getElementById('f_decision').value.trim();
         } else {
           node.decision = '';
