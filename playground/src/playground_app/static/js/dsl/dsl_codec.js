@@ -250,13 +250,14 @@ function buildDividerPayload(node) {
     return {};
   }
   const payload = {};
-  if (typeof node.divider === 'string') {
+  if (typeof node.divider === 'string' && node.divider !== '') {
     payload.divider = node.divider;
+    return payload;
   }
-  if (typeof node.dividerCn === 'string') {
+  if (typeof node.dividerCn === 'string' && node.dividerCn !== '') {
     payload.divider_cn = node.dividerCn;
   }
-  if (typeof node.dividerEn === 'string') {
+  if (typeof node.dividerEn === 'string' && node.dividerEn !== '') {
     payload.divider_en = node.dividerEn;
   }
   return payload;

@@ -51,6 +51,10 @@ uv run playground-server
 - 运行弹窗新增「从 SQLite 载入」「保存数据源配置」「执行当前 DSL」按钮。
 - 数据源配置会持久化到 SQLite 文件：`playground/data/playground.db`。
 - 点击「执行当前 DSL」时会使用当前页面配置作为 `datasources` 请求参数。
+- DSL JSON 生成时分隔符字段规则：
+  - 若 `divider` 为非空字符串，优先仅输出 `divider`；
+  - 仅当 `divider` 为空字符串时，才按非空值输出 `divider_cn` / `divider_en`；
+  - `divider` / `divider_cn` / `divider_en` 均不允许空字符串（允许仅空格）。
 
 ## 接口说明
 
