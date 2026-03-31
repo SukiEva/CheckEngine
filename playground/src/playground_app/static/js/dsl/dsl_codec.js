@@ -250,13 +250,13 @@ function buildDividerPayload(node) {
     return {};
   }
   const payload = {};
-  if (node.divider) {
+  if (typeof node.divider === 'string') {
     payload.divider = node.divider;
   }
-  if (node.dividerCn) {
+  if (typeof node.dividerCn === 'string') {
     payload.divider_cn = node.dividerCn;
   }
-  if (node.dividerEn) {
+  if (typeof node.dividerEn === 'string') {
     payload.divider_en = node.dividerEn;
   }
   return payload;

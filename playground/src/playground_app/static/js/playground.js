@@ -411,9 +411,9 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
           node.messageCn = document.getElementById('f_message_cn').value;
           node.messageEn = document.getElementById('f_message_en').value;
           if (node.failMode === 'sub_repeat' || node.failMode === 'full_repeat') {
-            node.divider = (document.getElementById('f_divider') || { value: '' }).value.trim();
-            node.dividerCn = (document.getElementById('f_divider_cn') || { value: '' }).value.trim();
-            node.dividerEn = (document.getElementById('f_divider_en') || { value: '' }).value.trim();
+            node.divider = (document.getElementById('f_divider') || { value: '' }).value;
+            node.dividerCn = (document.getElementById('f_divider_cn') || { value: '' }).value;
+            node.dividerEn = (document.getElementById('f_divider_en') || { value: '' }).value;
           } else {
             node.divider = '';
             node.dividerCn = '';
@@ -1134,16 +1134,22 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         return {};
       }
       const payload = {};
-      if (node.divider) {
+      if (typeof node.divider === 'string') {
         payload.divider = node.divider;
       }
-      if (node.dividerCn) {
+      if (typeof node.dividerCn === 'string') {
         payload.divider_cn = node.dividerCn;
       }
-      if (node.dividerEn) {
+      if (typeof node.dividerEn === 'string') {
         payload.divider_en = node.dividerEn;
       }
       return payload;
+    }
+
+    function showElMessage(message, type = 'success') {
+      if (window.ElementPlus && typeof window.ElementPlus.ElMessage === 'function') {
+        window.ElementPlus.ElMessage({ message, type });
+      }
     }
 
     function toDslObject() {
@@ -1556,9 +1562,11 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         }
         statusText.classList.remove('status-warn');
         statusText.textContent = '已复制 DSL JSON。';
+        showElMessage('复制成功', 'success');
       } catch (error) {
         statusText.classList.add('status-warn');
         statusText.innerHTML = `<strong>复制失败：</strong>${escapeHtml(error.message || '请手动复制预览内容')}`;
+        showElMessage('复制失败', 'error');
       }
     });
 

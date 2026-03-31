@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from collections.abc import Generator
+from decimal import Decimal
 from typing import Any, Optional, cast
 from pathlib import Path
 import unittest
@@ -162,6 +163,19 @@ class SqlExecutorTestCase(unittest.TestCase):
         )
 
         self.assertEqual(rendered, "SELECT '12.30'::numeric AS amount, 'usd' AS name")
+
+    def test_render_executed_sql_formats_decimal_without_scientific_notation(self) -> None:
+        executor = SqlExecutor()
+
+        rendered = executor._render_executed_sql(
+            "SELECT :tiny AS tiny_amount, :normal AS normal_amount",
+            {"tiny": Decimal("0.000000000000000000123456789"), "normal": Decimal("123.4500")},
+        )
+
+        self.assertEqual(
+            rendered,
+            "SELECT 0.000000000000000000123456789 AS tiny_amount, 123.4500 AS normal_amount",
+        )
 
 
 class SqlExecutorRuntimeErrorTestCase(unittest.TestCase):
