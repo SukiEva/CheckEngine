@@ -36,10 +36,20 @@ class ExpressionEvaluatorTestCase(unittest.TestCase):
         expression = "exists($steps.duplicate_lines.duplicate_entry_lines)"
         self.assertTrue(self.evaluator.evaluate(expression, self.state))
 
+    def test_evaluate_exists_function_on_step_records_object_array(self) -> None:
+        self.state.step_data["duplicate_lines"] = [{"func": "A", "amount": 10}, {"func": "B", "amount": 20}]
+        expression = "exists($steps.duplicate_lines)"
+        self.assertTrue(self.evaluator.evaluate(expression, self.state))
+
     def test_evaluate_exists_function_on_empty_list(self) -> None:
         self.state.step_data["empty_step"] = []
         expression = "exists($steps.empty_step)"
         self.assertFalse(self.evaluator.evaluate(expression, self.state))
+
+    def test_evaluate_not_exists_function_on_step_records_object_array(self) -> None:
+        self.state.step_data["duplicate_lines"] = []
+        expression = "not exists($steps.duplicate_lines)"
+        self.assertTrue(self.evaluator.evaluate(expression, self.state))
 
     def test_evaluate_final_failure_expression(self) -> None:
         expression = "$steps.exchange_rate.final_amount > $variables.threshold"
@@ -63,6 +73,12 @@ class ExpressionEvaluatorTestCase(unittest.TestCase):
     def test_evaluate_local_scope_reference(self) -> None:
         expression = "exists($.func)"
         local_data = {"func": ["USD", "CNY"]}
+
+        self.assertTrue(self.evaluator.evaluate(expression, self.state, local_data=local_data))
+
+    def test_evaluate_local_scope_root_reference(self) -> None:
+        expression = "exists($.)"
+        local_data = [{"func": "USD"}, {"func": "CNY"}]
 
         self.assertTrue(self.evaluator.evaluate(expression, self.state, local_data=local_data))
 

@@ -89,6 +89,12 @@
 
 > 不再支持 `$context`、`$prechecks`。
 
+补充约束：
+
+- `exists(...)` / `not exists(...)` 除了支持 `$steps.<step_name>.<output>`，也支持直接传入 `$steps.<step_name>`。
+- 当 `<step_name>` 是 `result_mode: records` 的 SQL 步骤时，`$steps.<step_name>` 会按“对象数组”语义参与判断（即整行对象列表），不会先打平成单字段值数组。
+- 在 step 级 `on_fail` / `on_pass` 中，`exists($.)` / `not exists($.)` 允许直接判断当前本地作用域整体（通常为当前步骤输出对象数组）。
+
 ## 5. 顶层 on_fail
 
 顶层 `on_fail` 仅在步骤全部完成后判定，结构保持不变：

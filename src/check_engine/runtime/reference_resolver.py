@@ -147,7 +147,7 @@ class RuntimeReferenceResolver:
 
         suffix = reference[2:]
         if not suffix:
-            raise DSLExecutionError(f"Invalid reference path: {reference}")
+            return local_data
 
         parts = suffix.split(".")
         current: Any = local_data
