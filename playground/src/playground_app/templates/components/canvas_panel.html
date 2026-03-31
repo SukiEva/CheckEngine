@@ -1,0 +1,14 @@
+<main class="panel canvas-wrap">
+  <div class="canvas-toolbar">
+    <button class="el-button el-button--primary" id="btnReset"><span class="ep-icon">delete_sweep</span>清空画布</button>
+    <button class="el-button el-button--default is-plain" id="btnImport"><span class="ep-icon">upload_file</span>导入 JSON</button>
+    <button class="el-button el-button--default is-plain" id="btnValidate"><span class="ep-icon">fact_check</span>校验 DSL</button>
+    <button class="el-button el-button--success is-plain" id="btnRun"><span class="ep-icon">play_circle</span>运行 DSL</button>
+    <button class="el-button el-button--default is-plain" id="btnPreview"><span class="ep-icon">visibility</span>预览 JSON</button>
+    <input type="file" id="fileImportJson" accept="application/json" style="display:none;" />
+  </div>
+  <section id="canvas">
+    <div id="dropZone"></div>
+  </section>
+  <div class="status" id="statusText">提示：按执行阶段分栏展示，支持在 Precheck / Step 栏添加多个节点。</div>
+</main>

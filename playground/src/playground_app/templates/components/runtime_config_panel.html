@@ -1,0 +1,29 @@
+<aside class="panel">
+  <div class="panel-head">
+    <h2 class="panel-title">运行配置</h2>
+    <div class="panel-sub">在同一页面维护数据源配置和 input 参数配置。</div>
+  </div>
+  <div class="panel-body">
+    <div class="tab-switch">
+      <button type="button" class="el-button el-button--default is-plain tab-btn" data-tab-target="datasource">数据源配置</button>
+      <button type="button" class="el-button el-button--default is-plain tab-btn active is-active" data-tab-target="input">输入参数</button>
+    </div>
+    <section class="tab-panel" data-tab-panel="datasource">
+      <div class="field">
+        <label>datasource（name/db_url）</label>
+      </div>
+      <div class="field-note">仅支持 PostgreSQL：<code>postgresql://</code> 或 <code>postgresql+psycopg2://</code>。</div>
+      <div class="datasource-list" id="datasourceList"></div>
+      <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnDsAdd" title="新增数据源" aria-label="新增数据源"><span class="ep-icon">add</span></button>
+      <div class="inline-status" id="datasourceStatus">尚未加载数据源配置。</div>
+    </section>
+    <section class="tab-panel active" data-tab-panel="input">
+      <div class="field">
+        <label>input_data（key/value）</label>
+        <div id="runtimeInputRows"></div>
+        <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddInputParam" title="新增输入参数" aria-label="新增输入参数"><span class="ep-icon">add</span></button>
+      </div>
+      <div class="inline-status">运行 DSL 时将使用这里的 input_data；默认包含 <code>source_object_id</code>、<code>renter_id</code> 与 <code>accounting_period</code>。</div>
+    </section>
+  </div>
+</aside>
