@@ -174,12 +174,21 @@ class StructureValidator:
             self._raise(f"{path}.message_cn must not be empty.")
         if not policy.message_en.strip():
             self._raise(f"{path}.message_en must not be empty.")
+        self._validate_optional_non_empty_string(policy.divider, f"{path}.divider")
+        self._validate_optional_non_empty_string(policy.divider_cn, f"{path}.divider_cn")
+        self._validate_optional_non_empty_string(policy.divider_en, f"{path}.divider_en")
 
         if policy.mode == FAIL_MODE_SUB_REPEAT:
             if policy.divider is None and (policy.divider_cn is None or policy.divider_en is None):
                 self._raise(f"{path} must provide divider, or provide both divider_cn and divider_en when mode is sub_repeat.")
             self._validate_repeat_segment(policy.message_cn, f"{path}.message_cn")
             self._validate_repeat_segment(policy.message_en, f"{path}.message_en")
+
+    def _validate_optional_non_empty_string(self, value: Any, path: str) -> None:
+        if value is None:
+            return
+        if value == "":
+            self._raise(f"{path} must not be an empty string.")
 
     def _validate_repeat_segment(self, template: str, path: str) -> None:
         left_count = template.count("[")

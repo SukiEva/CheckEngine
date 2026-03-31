@@ -105,3 +105,11 @@
 - `message_cn`
 - `message_en`
 - `divider` / `divider_cn` / `divider_en`（按模式可选）
+
+分隔符补充约束：
+
+- `divider`、`divider_cn`、`divider_en` 若提供，必须是**非空字符串**（`""` 非法）。
+- 允许仅包含空格的字符串（例如 `" "`、`"  |  "`）。
+- `sub_repeat` 模式下：
+  - 优先使用 `divider`；
+  - 若未提供 `divider`，则必须同时提供 `divider_cn` 与 `divider_en`。
