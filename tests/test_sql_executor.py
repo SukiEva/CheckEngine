@@ -141,6 +141,19 @@ class SqlExecutorTestCase(unittest.TestCase):
 
         self.assertTrue(merged.startswith("/* leading comment */\nWITH RECURSIVE ctx(amount) AS (VALUES (:v)), base AS"))
 
+    def test_merge_with_clause_supports_existing_with(self) -> None:
+        executor = SqlExecutor()
+
+        merged = executor._merge_with_clause(
+            "WITH ctx(amount) AS (VALUES (:v))",
+            "WITH source AS (SELECT 1 AS amount) SELECT amount FROM source",
+        )
+
+        self.assertEqual(
+            merged,
+            "WITH ctx(amount) AS (VALUES (:v)), source AS (SELECT 1 AS amount) SELECT amount FROM source",
+        )
+
     def test_render_executed_sql_replaces_named_parameters(self) -> None:
         executor = SqlExecutor()
 
