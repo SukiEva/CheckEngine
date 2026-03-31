@@ -27,6 +27,7 @@ class JsonDslParser:
                 expect_list=self._expect_list,
                 expect_string=self._expect_string,
                 optional_string=self._optional_string,
+                optional_string_allow_empty=self._optional_string_allow_empty,
                 parse_string_list=self._parse_string_list,
             )
         )
@@ -84,3 +85,11 @@ class JsonDslParser:
         if value is None:
             return None
         return self._expect_string(value, path)
+
+    @staticmethod
+    def _optional_string_allow_empty(value: Any, path: str) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise DSLParseError(f"{path} must be a string.")
+        return value

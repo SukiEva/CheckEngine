@@ -260,6 +260,22 @@ class ValidatorTestCase(unittest.TestCase):
 
         self.structure_validator.validate(document)
 
+    def test_sub_repeat_with_empty_divider_string_is_valid(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["steps"][0]["on_fail"]["divider"] = ""
+        document = self.parser.parse(json.dumps(data))
+
+        self.structure_validator.validate(document)
+
+    def test_sub_repeat_with_whitespace_divider_cn_en_is_valid(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["steps"][0]["on_fail"].pop("divider", None)
+        data["steps"][0]["on_fail"]["divider_cn"] = "   "
+        data["steps"][0]["on_fail"]["divider_en"] = "  "
+        document = self.parser.parse(json.dumps(data))
+
+        self.structure_validator.validate(document)
+
     def test_sub_repeat_missing_divider_en_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["steps"][0]["on_fail"].pop("divider", None)

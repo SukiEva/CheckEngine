@@ -38,6 +38,7 @@ class ParserHelpers:
     expect_list: Callable[[Any, str], Sequence[Any]]
     expect_string: Callable[[Any, str], str]
     optional_string: Callable[[Any, str], Optional[str]]
+    optional_string_allow_empty: Callable[[Any, str], Optional[str]]
     parse_string_list: Callable[[Any, str], Sequence[str]]
 
 
@@ -98,9 +99,9 @@ class JsonNodeParser:
             mode=cast(FailMode, self.helpers.expect_string(mapping.get(FailPolicyField.MODE), f"{path}.{FailPolicyField.MODE}")),
             message_cn=self.helpers.expect_string(mapping.get(FailPolicyField.MESSAGE_CN), f"{path}.{FailPolicyField.MESSAGE_CN}"),
             message_en=self.helpers.expect_string(mapping.get(FailPolicyField.MESSAGE_EN), f"{path}.{FailPolicyField.MESSAGE_EN}"),
-            divider=self.helpers.optional_string(mapping.get(FailPolicyField.DIVIDER), f"{path}.{FailPolicyField.DIVIDER}"),
-            divider_cn=self.helpers.optional_string(mapping.get(FailPolicyField.DIVIDER_CN), f"{path}.{FailPolicyField.DIVIDER_CN}"),
-            divider_en=self.helpers.optional_string(mapping.get(FailPolicyField.DIVIDER_EN), f"{path}.{FailPolicyField.DIVIDER_EN}"),
+            divider=self.helpers.optional_string_allow_empty(mapping.get(FailPolicyField.DIVIDER), f"{path}.{FailPolicyField.DIVIDER}"),
+            divider_cn=self.helpers.optional_string_allow_empty(mapping.get(FailPolicyField.DIVIDER_CN), f"{path}.{FailPolicyField.DIVIDER_CN}"),
+            divider_en=self.helpers.optional_string_allow_empty(mapping.get(FailPolicyField.DIVIDER_EN), f"{path}.{FailPolicyField.DIVIDER_EN}"),
         )
 
     def parse_pass_policy(self, value: Any, path: str) -> Optional[PassPolicy]:

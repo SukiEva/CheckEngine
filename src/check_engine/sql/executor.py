@@ -6,6 +6,7 @@ import logging
 import re
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
+from decimal import Decimal
 from typing import Any, Optional, Protocol, cast
 
 from ..dsl import RESULT_MODE_RECORD, RESULT_MODE_RECORDS, SqlNode, SqlStepNode
@@ -120,6 +121,8 @@ class SqlExecutor:
             return "NULL"
         if isinstance(value, bool):
             return "TRUE" if value else "FALSE"
+        if isinstance(value, Decimal):
+            return "{:f}".format(value)
         if isinstance(value, (int, float)):
             return str(value)
         escaped = str(value).replace("'", "''")
