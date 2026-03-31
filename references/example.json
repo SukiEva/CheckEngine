@@ -1,33 +1,20 @@
 {
-  "context": {
-    "type": "sql",
-    "datasource": "saas_db",
-    "result_mode": "record",
-    "sql_template": "SELECT flow, scenario FROM header WHERE header_id = :source_object_id",
-    "sql_params": {
-      "source_object_id": "$input.source_object_id"
-    },
-    "outputs": [
-      "flow",
-      "scenario"
-    ]
-  },
   "variables": {
     "threshold": {
       "when": [
         {
-          "condition": "$context.flow == 'flow1' and $context.scenario in ('scenario1', 'scenario2')",
+          "condition": "$input.flow == 'flow1' and $input.scenario in ('scenario1', 'scenario2')",
           "value": 1000
         },
         {
-          "condition": "$context.flow == 'flow2' and $context.scenario == 'scenario2'",
+          "condition": "$input.flow == 'flow2' and $input.scenario == 'scenario2'",
           "value": 800
         }
       ],
       "default": 500
     }
   },
-  "prechecks": [
+  "steps": [
     {
       "name": "check_rate_null",
       "description": "检查是否存在汇率为空的记录",
@@ -45,7 +32,7 @@
         "rate_date"
       ],
       "on_fail": {
-        "decision": "exists($prechecks.check_rate_null.func)",
+        "decision": "exists($.func)",
         "mode": "sub_repeat",
         "divider": ",",
         "message_cn": "存在汇率为空的记录: [记录{func}-{txn}-{rate_date}]",
@@ -66,14 +53,12 @@
         "rate_type"
       ],
       "on_fail": {
-        "decision": "exists($prechecks.check_rate_wrong.rate_type)",
+        "decision": "exists($.rate_type)",
         "mode": "full_repeat",
         "message_cn": "汇率类型{rate_type}错误",
         "message_en": "Exchange rate type {rate_type} is incorrect."
       }
-    }
-  ],
-  "steps": [
+    },
     {
       "name": "query_aggregate_amount",
       "description": "查询汇总金额",

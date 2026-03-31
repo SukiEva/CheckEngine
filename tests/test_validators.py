@@ -87,7 +87,6 @@ class ValidatorTestCase(unittest.TestCase):
         document = self.parser.parse(json.dumps(self.example_data))
 
         self.assertIsInstance(document.steps, tuple)
-        self.assertIsInstance(document.prechecks, tuple)
         self.assertIsInstance(document.steps[0].outputs, tuple)
         self.assertIsInstance(document.steps[0].consumes, tuple)
 
@@ -98,8 +97,6 @@ class ValidatorTestCase(unittest.TestCase):
 
         self.assertIsInstance(document.variables, dict)
         self.assertIsInstance(document.steps[0].sql_params, dict)
-        if document.prechecks:
-            self.assertIsInstance(document.prechecks[0].sql_params, dict)
 
         self.reference_validator.validate(document)
 
@@ -176,7 +173,7 @@ class ValidatorTestCase(unittest.TestCase):
 
     def test_validate_precheck_on_fail_bare_exists_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["prechecks"][0]["on_fail"]["decision"] = "exists"
+        data["steps"][0]["on_fail"]["decision"] = "exists"
         document = self.parser.parse(json.dumps(data))
 
         with self.assertRaises(DSLValidationError):
@@ -192,21 +189,21 @@ class ValidatorTestCase(unittest.TestCase):
 
     def test_validate_precheck_on_fail_local_exists_syntax_is_valid(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["prechecks"][0]["on_fail"]["decision"] = "exists($.func)"
+        data["steps"][0]["on_fail"]["decision"] = "exists($.func)"
         document = self.parser.parse(json.dumps(data))
 
         self.structure_validator.validate(document)
 
     def test_validate_precheck_on_pass_local_exists_syntax_is_valid(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["prechecks"][0]["on_pass"] = {"decision": "not exists($.func)"}
+        data["steps"][0]["on_pass"] = {"decision": "not exists($.func)"}
         document = self.parser.parse(json.dumps(data))
 
         self.validator.validate(document)
 
     def test_validate_precheck_on_pass_bare_exists_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["prechecks"][0]["on_pass"] = {"decision": "exists"}
+        data["steps"][0]["on_pass"] = {"decision": "exists"}
         document = self.parser.parse(json.dumps(data))
 
         with self.assertRaises(DSLValidationError):
@@ -214,7 +211,7 @@ class ValidatorTestCase(unittest.TestCase):
 
     def test_validate_precheck_on_pass_bare_not_exists_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["prechecks"][0]["on_pass"] = {"decision": "not exists"}
+        data["steps"][0]["on_pass"] = {"decision": "not exists"}
         document = self.parser.parse(json.dumps(data))
 
         with self.assertRaises(DSLValidationError):
@@ -229,24 +226,23 @@ class ValidatorTestCase(unittest.TestCase):
 
     def test_validate_precheck_only_on_pass_is_valid(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["prechecks"][0].pop("on_fail")
-        data["prechecks"][0]["on_pass"] = {"decision": "not exists($prechecks.check_rate_null.func)"}
+        data["steps"][0].pop("on_fail")
+        data["steps"][0]["on_pass"] = {"decision": "not exists($.func)"}
         document = self.parser.parse(json.dumps(data))
 
         self.validator.validate(document)
 
     def test_validate_precheck_without_on_fail_and_on_pass_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["prechecks"][0].pop("on_fail")
-        data["prechecks"][0].pop("on_pass", None)
+        data["steps"][0].pop("on_fail")
+        data["steps"][0].pop("on_pass", None)
         document = self.parser.parse(json.dumps(data))
 
-        with self.assertRaises(DSLValidationError):
-            self.structure_validator.validate(document)
+        self.structure_validator.validate(document)
 
     def test_invalid_sub_repeat_template_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["prechecks"][0]["on_fail"]["message_cn"] = "存在汇率为空的记录: 记录{func}-{txn}-{rate_date}"
+        data["steps"][0]["on_fail"]["message_cn"] = "存在汇率为空的记录: 记录{func}-{txn}-{rate_date}"
         document = self.parser.parse(json.dumps(data))
 
         with self.assertRaises(DSLValidationError):
@@ -254,18 +250,18 @@ class ValidatorTestCase(unittest.TestCase):
 
     def test_sub_repeat_with_divider_cn_en_is_valid(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["prechecks"][0]["on_fail"].pop("divider", None)
-        data["prechecks"][0]["on_fail"]["divider_cn"] = "；"
-        data["prechecks"][0]["on_fail"]["divider_en"] = " | "
+        data["steps"][0]["on_fail"].pop("divider", None)
+        data["steps"][0]["on_fail"]["divider_cn"] = "；"
+        data["steps"][0]["on_fail"]["divider_en"] = " | "
         document = self.parser.parse(json.dumps(data))
 
         self.structure_validator.validate(document)
 
     def test_sub_repeat_missing_divider_en_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["prechecks"][0]["on_fail"].pop("divider", None)
-        data["prechecks"][0]["on_fail"]["divider_cn"] = "；"
-        data["prechecks"][0]["on_fail"].pop("divider_en", None)
+        data["steps"][0]["on_fail"].pop("divider", None)
+        data["steps"][0]["on_fail"]["divider_cn"] = "；"
+        data["steps"][0]["on_fail"].pop("divider_en", None)
         document = self.parser.parse(json.dumps(data))
 
         with self.assertRaises(DSLValidationError):
@@ -352,9 +348,9 @@ class ValidatorTestCase(unittest.TestCase):
             self.structure_validator.validate(document)
         self.assertIn("when[0].value is required", str(ctx.exception))
 
-    def test_precheck_decision_can_reference_named_precheck_output(self) -> None:
+    def test_step_decision_can_reference_local_output(self) -> None:
         data = {
-            "prechecks": [
+            "steps": [
                 {
                     "name": "check_lines",
                     "type": "sql",
@@ -364,22 +360,11 @@ class ValidatorTestCase(unittest.TestCase):
                     "sql_params": {},
                     "outputs": ["line_no"],
                     "on_fail": {
-                        "decision": "exists($prechecks.check_lines.line_no)",
+                        "decision": "exists($.line_no)",
                         "mode": "single",
                         "message_cn": "存在数据",
                         "message_en": "Has rows",
                     },
-                }
-            ],
-            "steps": [
-                {
-                    "name": "s1",
-                    "type": "sql",
-                    "datasource": "db",
-                    "result_mode": "record",
-                    "sql_template": "select 1 as v",
-                    "sql_params": {},
-                    "outputs": ["v"],
                 }
             ],
             "on_fail": {
@@ -395,7 +380,7 @@ class ValidatorTestCase(unittest.TestCase):
 
     def test_precheck_decision_can_reference_local_output(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["prechecks"][0]["on_fail"]["decision"] = "exists($.func)"
+        data["steps"][0]["on_fail"]["decision"] = "exists($.func)"
         document = self.parser.parse(json.dumps(data))
 
         self.reference_validator.validate(document)
@@ -408,9 +393,9 @@ class ValidatorTestCase(unittest.TestCase):
         with self.assertRaises(DSLValidationError):
             self.reference_validator.validate(document)
 
-    def test_precheck_decision_reference_without_outputs_raises(self) -> None:
+    def test_step_decision_reference_without_outputs_raises(self) -> None:
         data = {
-            "prechecks": [
+            "steps": [
                 {
                     "name": "check_lines",
                     "type": "sql",
@@ -419,22 +404,11 @@ class ValidatorTestCase(unittest.TestCase):
                     "sql_template": "select 1 as line_no",
                     "sql_params": {},
                     "on_fail": {
-                        "decision": "exists($prechecks.check_lines.line_no)",
+                        "decision": "exists($.line_no)",
                         "mode": "single",
                         "message_cn": "存在数据",
                         "message_en": "Has rows",
                     },
-                }
-            ],
-            "steps": [
-                {
-                    "name": "s1",
-                    "type": "sql",
-                    "datasource": "db",
-                    "result_mode": "record",
-                    "sql_template": "select 1 as v",
-                    "sql_params": {},
-                    "outputs": ["v"],
                 }
             ],
             "on_fail": {
@@ -448,7 +422,7 @@ class ValidatorTestCase(unittest.TestCase):
 
         with self.assertRaises(DSLValidationError) as ctx:
             self.reference_validator.validate(document)
-        self.assertIn("non-exported precheck field", str(ctx.exception))
+        self.assertIn("non-exported local field", str(ctx.exception))
 
     def test_variable_cannot_reference_later_variable(self) -> None:
         data = {
@@ -488,7 +462,7 @@ class ValidatorTestCase(unittest.TestCase):
 
     def test_consumed_step_without_outputs_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["steps"][0].pop("outputs")
+        data["steps"][2].pop("outputs")
         document = self.parser.parse(json.dumps(data))
 
         with self.assertRaises(DSLValidationError) as ctx:
@@ -497,7 +471,7 @@ class ValidatorTestCase(unittest.TestCase):
 
     def test_duplicate_consume_alias_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
-        data["steps"][1]["consumes"].append(
+        data["steps"][3]["consumes"].append(
             {
                 "from": "$steps.query_aggregate_amount",
                 "alias": "am",
@@ -548,7 +522,7 @@ class ValidatorTestCase(unittest.TestCase):
         )
 
 
-    def test_context_sql_params_invalid_reference_raises(self) -> None:
+    def test_top_level_context_is_not_allowed(self) -> None:
         data = {
             "context": {
                 "type": "sql",
@@ -579,46 +553,8 @@ class ValidatorTestCase(unittest.TestCase):
         document = self.parser.parse(json.dumps(data))
 
         with self.assertRaises(DSLValidationError) as ctx:
-            self.reference_validator.validate(document)
-        self.assertIn("references a step not available", str(ctx.exception))
-
-    def test_context_sql_params_only_allow_input_scope(self) -> None:
-        data = {
-            "context": {
-                "type": "sql",
-                "datasource": "db",
-                "result_mode": "record",
-                "sql_template": "select 1 as flow",
-                "sql_params": {"source_object_id": "$input.source_object_id"},
-                "outputs": ["flow"],
-            },
-            "variables": {
-                "threshold": {
-                    "when": [],
-                    "default": 1,
-                }
-            },
-            "steps": [
-                {
-                    "name": "step_a",
-                    "type": "sql",
-                    "datasource": "db",
-                    "result_mode": "record",
-                    "sql_template": "select 1 as v",
-                    "sql_params": {},
-                    "outputs": ["v"],
-                }
-            ],
-            "on_fail": {
-                "decision": "false",
-                "mode": "single",
-                "message_cn": "ok",
-                "message_en": "ok",
-            },
-        }
-        document = self.parser.parse(json.dumps(data))
-
-        self.reference_validator.validate(document)
+            self.structure_validator.validate(document)
+        self.assertIn("Unknown top-level fields", str(ctx.exception))
 
     def test_compile_invalid_expression_returns_validation_error(self) -> None:
         data = {

@@ -97,9 +97,7 @@ class RuntimeReferenceResolver:
     """运行时引用解析入口，使用策略模式分发到不同作用域。"""
 
     input_data: Mapping[str, Any]
-    context_data: Mapping[str, Any]
     variables_data: Mapping[str, Any]
-    prechecks_data: MutableMapping[str, Any] = field(default_factory=dict)
     step_data: MutableMapping[str, Any] = field(default_factory=dict)
     _resolvers: dict[str, ScopeResolver] = field(init=False)
 
@@ -110,33 +108,25 @@ class RuntimeReferenceResolver:
         self,
         *,
         input_data: Mapping[str, Any],
-        context_data: Mapping[str, Any],
         variables_data: Mapping[str, Any],
-        prechecks_data: MutableMapping[str, Any],
         step_data: MutableMapping[str, Any],
     ) -> None:
         if (
             self.input_data is input_data
-            and self.context_data is context_data
             and self.variables_data is variables_data
-            and self.prechecks_data is prechecks_data
             and self.step_data is step_data
         ):
             return
 
         self.input_data = input_data
-        self.context_data = context_data
         self.variables_data = variables_data
-        self.prechecks_data = prechecks_data
         self.step_data = step_data
         self._resolvers = self._build_resolvers()
 
     def _build_resolvers(self) -> dict[str, ScopeResolver]:
         return {
             "input": MappingScopeResolver(self.input_data),
-            "context": MappingScopeResolver(self.context_data),
             "variables": MappingScopeResolver(self.variables_data),
-            "prechecks": StepScopeResolver(self.prechecks_data),
             "steps": StepScopeResolver(self.step_data),
         }
 

@@ -125,41 +125,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(result.error_message, "Message render failed")
         self.assertTrue(result.runtime_exception)
 
-    def test_set_context_result_accepts_mapping_view(self) -> None:
-        from check_engine.runtime.state import ExecutionState
-
-        state = ExecutionState.new({})
-        result = NodeExecutionResult(
-            raw_rows=[{"v": 1}],
-            exported_data=MappingProxyType({"v": 1}),
-            exported_fields=["v"],
-        )
-
-        state.set_context_result(result)
-
-        self.assertEqual(state.resolve_reference("$context.v"), 1)
-
-    def test_set_context_result_reuses_resolver_after_context_update(self) -> None:
-        from check_engine.runtime.state import ExecutionState
-
-        state = ExecutionState.new({})
-        first = NodeExecutionResult(
-            raw_rows=[{"v": 1}],
-            exported_data={"v": 1},
-            exported_fields=["v"],
-        )
-        second = NodeExecutionResult(
-            raw_rows=[{"v": 2}],
-            exported_data={"v": 2},
-            exported_fields=["v"],
-        )
-
-        state.set_context_result(first)
-        self.assertEqual(state.resolve_reference("$context.v"), 1)
-
-        state.set_context_result(second)
-        self.assertEqual(state.resolve_reference("$context.v"), 2)
-
     def test_execute_pass_result_has_empty_runtime_error_fields(self) -> None:
         engine = DslEngine()
         engine.sql_executor = cast(SqlExecutor, _PassingSqlExecutor())
@@ -235,7 +200,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(logged_args[0], "DslEngine %s failed: %s\n%s")
         self.assertEqual(logged_args[1], "compile")
 
-    def test_execute_returns_pass_when_precheck_on_pass_matches(self) -> None:
+    def test_execute_returns_pass_when_step_on_pass_matches(self) -> None:
         class _PrecheckPassSqlExecutor:
             def execute_node(
                 self,
@@ -245,18 +210,18 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 node_name: str,
             ) -> NodeExecutionResult:
                 del node, state, datasource_registry
-                if node_name == "check_ok":
+                if node_name == "step_a":
                     return NodeExecutionResult(raw_rows=[], exported_data={"v": []}, exported_fields=["v"])
-                raise AssertionError("step should not be executed after precheck on_pass short-circuit")
+                raise AssertionError("step_b should not be executed after step_a on_pass short-circuit")
 
         engine = DslEngine()
         engine.sql_executor = cast(SqlExecutor, _PrecheckPassSqlExecutor())
         registry = cast(DatasourceRegistry, _UnusedRegistry())
         dsl_text = json.dumps(
             {
-                "prechecks": [
+                "steps": [
                     {
-                        "name": "check_ok",
+                        "name": "step_a",
                         "type": "sql",
                         "datasource": "db",
                         "result_mode": "records",
@@ -264,13 +229,11 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                         "sql_params": {},
                         "outputs": ["v"],
                         "on_pass": {
-                            "decision": "not exists($prechecks.check_ok.v)",
+                            "decision": "not exists($.v)",
                         },
-                    }
-                ],
-                "steps": [
+                    },
                     {
-                        "name": "step_a",
+                        "name": "step_b",
                         "type": "sql",
                         "datasource": "db",
                         "result_mode": "record",
@@ -292,7 +255,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
 
         self.assertTrue(result.passed)
         self.assertEqual(result.phase, "pass")
-        self.assertEqual(result.steps, {})
+        self.assertEqual(result.steps, {"step_a": {"v": []}})
 
     def test_execution_result_to_dict_normalizes_mapping_views(self) -> None:
         result = ExecutionResult(
@@ -304,7 +267,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             error_message=None,
             runtime_exception=False,
             input=MappingProxyType({"source_object_id": "SO-1"}),
-            context=MappingProxyType({"flow": "f1"}),
             variables=MappingProxyType({"threshold": 1000}),
             steps=MappingProxyType({"step_a": MappingProxyType({"values": (1, 2)})}),
         )
@@ -322,7 +284,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 "error_message": None,
                 "runtime_exception": False,
                 "input": {"source_object_id": "SO-1"},
-                "context": {"flow": "f1"},
                 "variables": {"threshold": 1000},
                 "steps": {"step_a": {"values": [1, 2]}},
                 "executed_nodes": [],
@@ -339,7 +300,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             error_message=None,
             runtime_exception=False,
             input=MappingProxyType({"source_object_id": "SO-1"}),
-            context=MappingProxyType({"flow": "f1"}),
             variables=MappingProxyType({"threshold": 1000}),
             steps=MappingProxyType({"step_a": MappingProxyType({"values": (1, 2)})}),
         )
@@ -357,7 +317,6 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
                 "error_message": None,
                 "runtime_exception": False,
                 "input": {"source_object_id": "SO-1"},
-                "context": {"flow": "f1"},
                 "variables": {"threshold": 1000},
                 "steps": {"step_a": {"values": [1, 2]}},
                 "executed_nodes": [],

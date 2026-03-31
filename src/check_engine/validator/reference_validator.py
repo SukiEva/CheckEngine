@@ -6,17 +6,7 @@ import re
 from collections.abc import Mapping
 from typing import NoReturn, Optional
 
-from ..dsl import (
-    ContextNode,
-    DslDocument,
-    FAIL_MODE_SINGLE,
-    PrecheckNode,
-    PassPolicy,
-    RESULT_MODE_RECORDS,
-    FailPolicy,
-    StepNode,
-    VariableDefinition,
-)
+from ..dsl import DslDocument, FAIL_MODE_SINGLE, PassPolicy, RESULT_MODE_RECORDS, FailPolicy, StepNode, VariableDefinition
 from ..exceptions import DSLValidationError
 
 
@@ -28,42 +18,12 @@ class ReferenceValidator:
     def validate(self, document: DslDocument) -> None:
         step_names = tuple(step.name for step in document.steps)
         step_map = {step.name: step for step in document.steps}
-        precheck_map = {precheck.name: precheck for precheck in document.prechecks}
         available_variables: set[str] = set()
         all_variables = set(document.variables.keys())
-
-        if document.context is not None:
-            self._validate_context(document.context, document, step_map)
 
         for variable_name, definition in document.variables.items():
             self._validate_variable_definition(variable_name, definition, document, available_variables, step_map)
             available_variables.add(variable_name)
-
-        for index, precheck in enumerate(document.prechecks):
-            self._validate_sql_params(precheck.sql_params, document, available_steps=set(), available_variables=all_variables, step_map=step_map)
-            if precheck.on_fail is not None:
-                self._validate_fail_policy(
-                    precheck.on_fail,
-                    document,
-                    available_steps=set(),
-                    available_variables=all_variables,
-                    path=f"prechecks[{index}].on_fail",
-                    step_map=step_map,
-                    precheck_map=precheck_map,
-                    available_prechecks={precheck.name},
-                    local_outputs=set(precheck.outputs),
-                )
-            if precheck.on_pass is not None:
-                self._validate_pass_policy(
-                    precheck.on_pass,
-                    document,
-                    available_variables=all_variables,
-                    path=f"prechecks[{index}].on_pass",
-                    step_map=step_map,
-                    precheck_map=precheck_map,
-                    available_prechecks={precheck.name},
-                    local_outputs=set(precheck.outputs),
-                )
 
         available_steps: set[str] = set()
         for index, step in enumerate(document.steps):
@@ -73,8 +33,29 @@ class ReferenceValidator:
                 available_steps=available_steps,
                 available_variables=all_variables,
                 step_map=step_map,
+                path_prefix=f"steps[{index}].sql_params",
             )
             self._validate_consumes(step, available_steps, document, step_map)
+            if step.on_fail is not None:
+                self._validate_fail_policy(
+                    step.on_fail,
+                    document,
+                    available_steps=available_steps,
+                    available_variables=all_variables,
+                    path=f"steps[{index}].on_fail",
+                    step_map=step_map,
+                    local_outputs=set(step.outputs),
+                )
+            if step.on_pass is not None:
+                self._validate_pass_policy(
+                    step.on_pass,
+                    document,
+                    available_steps=available_steps,
+                    available_variables=all_variables,
+                    path=f"steps[{index}].on_pass",
+                    step_map=step_map,
+                    local_outputs=set(step.outputs),
+                )
             available_steps.add(step.name)
 
         self._validate_fail_policy(
@@ -84,19 +65,7 @@ class ReferenceValidator:
             available_variables=all_variables,
             path="on_fail",
             step_map=step_map,
-            precheck_map=precheck_map,
-            available_prechecks=set(),
             local_outputs=None,
-        )
-
-    def _validate_context(self, context: ContextNode, document: DslDocument, step_map: dict[str, StepNode]) -> None:
-        self._validate_sql_params(
-            context.sql_params,
-            document,
-            available_steps=set(),
-            available_variables=set(),
-            step_map=step_map,
-            path_prefix="context.sql_params",
         )
 
     def _validate_variable_definition(
@@ -116,8 +85,6 @@ class ReferenceValidator:
                     available_variables=available_variables,
                     path=f"variables.{variable_name}.when[{index}].condition",
                     step_map=step_map,
-                    precheck_map={},
-                    available_prechecks=set(),
                     local_outputs=None,
                 )
 
@@ -139,20 +106,17 @@ class ReferenceValidator:
                     available_variables=available_variables,
                     path=f"{path_prefix}.{key}",
                     step_map=step_map,
-                    precheck_map={},
-                    available_prechecks=set(),
                     local_outputs=None,
                 )
 
-    def _validate_consumes(self, step: StepNode, available_steps: set[str], document: DslDocument, step_map: dict[str, StepNode]) -> None:
+    def _validate_consumes(
+        self,
+        step: StepNode,
+        available_steps: set[str],
+        _document: DslDocument,
+        step_map: dict[str, StepNode],
+    ) -> None:
         for consume in step.consumes:
-            if consume.from_path == "$context":
-                if document.context is None:
-                    self._raise("consumes.from references $context but context block is not defined.")
-                if not document.context.outputs:
-                    self._raise("consumes.from references $context but context.outputs are not declared.")
-                continue
-
             parts = self._split_reference(consume.from_path)
             if len(parts) != 2 or parts[0] != "steps":
                 self._raise(f"Invalid consumes.from reference: {consume.from_path}")
@@ -170,8 +134,6 @@ class ReferenceValidator:
         available_variables: set[str],
         path: str,
         step_map: dict[str, StepNode],
-        precheck_map: dict[str, PrecheckNode],
-        available_prechecks: set[str],
         local_outputs: Optional[set[str]],
     ) -> None:
         for reference in self._extract_references(policy.decision):
@@ -182,15 +144,10 @@ class ReferenceValidator:
                 available_variables=available_variables,
                 path=f"{path}.decision",
                 step_map=step_map,
-                precheck_map=precheck_map,
-                available_prechecks=available_prechecks,
                 local_outputs=local_outputs,
             )
 
-        for field_name, template in (
-            ("message_cn", policy.message_cn),
-            ("message_en", policy.message_en),
-        ):
+        for field_name, template in (("message_cn", policy.message_cn), ("message_en", policy.message_en)):
             for reference in self._extract_references(template):
                 self._validate_reference(
                     reference,
@@ -199,34 +156,29 @@ class ReferenceValidator:
                     available_variables=available_variables,
                     path=f"{path}.{field_name}",
                     step_map=step_map,
-                    precheck_map=precheck_map,
-                    available_prechecks=available_prechecks,
                     local_outputs=local_outputs,
                 )
-                if path == "on_fail" and policy.mode == FAIL_MODE_SINGLE:
+                if policy.mode == FAIL_MODE_SINGLE:
                     self._validate_single_mode_message_reference(reference, step_map, f"{path}.{field_name}")
 
     def _validate_pass_policy(
         self,
         policy: PassPolicy,
         document: DslDocument,
+        available_steps: set[str],
         available_variables: set[str],
         path: str,
         step_map: dict[str, StepNode],
-        precheck_map: dict[str, PrecheckNode],
-        available_prechecks: set[str],
         local_outputs: Optional[set[str]],
     ) -> None:
         for reference in self._extract_references(policy.decision):
             self._validate_reference(
                 reference,
                 document,
-                available_steps=set(),
+                available_steps=available_steps,
                 available_variables=available_variables,
                 path=f"{path}.decision",
                 step_map=step_map,
-                precheck_map=precheck_map,
-                available_prechecks=available_prechecks,
                 local_outputs=local_outputs,
             )
 
@@ -238,8 +190,6 @@ class ReferenceValidator:
         available_variables: set[str],
         path: str,
         step_map: dict[str, StepNode],
-        precheck_map: dict[str, PrecheckNode],
-        available_prechecks: set[str],
         local_outputs: Optional[set[str]],
     ) -> None:
         parts = self._split_reference(reference)
@@ -254,15 +204,6 @@ class ReferenceValidator:
         if root == "input":
             if len(parts) < 2:
                 self._raise(f"{path} input reference must include a field: {reference}")
-            return
-
-        if root == "context":
-            if document.context is None:
-                self._raise(f"{path} references $context but context block is not defined: {reference}")
-            if len(parts) != 2:
-                self._raise(f"{path} context reference has invalid depth: {reference}")
-            if parts[1] not in document.context.outputs:
-                self._raise(f"{path} references a non-exported context field: {reference}")
             return
 
         if root == "variables":
@@ -284,18 +225,6 @@ class ReferenceValidator:
                 self._raise(f"{path} references step outputs that are not declared: {reference}")
             if field_name not in step.outputs:
                 self._raise(f"{path} references a non-exported step field: {reference}")
-            return
-
-        if root == "prechecks":
-            if len(parts) != 3:
-                self._raise(f"{path} prechecks reference has invalid depth: {reference}")
-            precheck_name = parts[1]
-            field_name = parts[2]
-            if precheck_name not in available_prechecks:
-                self._raise(f"{path} references a precheck not available at this point: {reference}")
-            precheck = self._find_precheck(precheck_map, precheck_name)
-            if field_name not in precheck.outputs:
-                self._raise(f"{path} references a non-exported precheck field: {reference}")
             return
 
         self._raise(f"{path} contains unknown scope: {reference}")
@@ -333,12 +262,6 @@ class ReferenceValidator:
         if step_name in step_map:
             return step_map[step_name]
         self._raise(f"Step not found: {step_name}")
-        raise AssertionError("unreachable")
-
-    def _find_precheck(self, precheck_map: dict[str, PrecheckNode], precheck_name: str) -> PrecheckNode:
-        if precheck_name in precheck_map:
-            return precheck_map[precheck_name]
-        self._raise(f"Precheck not found: {precheck_name}")
         raise AssertionError("unreachable")
 
     @staticmethod

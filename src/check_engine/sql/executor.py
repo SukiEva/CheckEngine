@@ -28,7 +28,7 @@ class ExecutionStateLike(Protocol):
 
 
 class SqlExecutor:
-    """执行 context、precheck、step 中的 SQL 节点。"""
+    """执行 context 与 step 中的 SQL 节点。"""
 
     def __init__(
         self,

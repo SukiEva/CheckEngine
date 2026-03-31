@@ -75,7 +75,7 @@ class ExpressionEvaluator:
 
     def compile(self, expression: str) -> CompiledExpression:
         if expression == "exists":
-            raise DSLExecutionError("Keyword 'exists' is only valid for precheck failure decision and must not be evaluated directly.")
+            raise DSLExecutionError("Keyword 'exists' must be used as exists($path) and cannot be evaluated directly.")
 
         references: list[str] = []
         ref_names: dict[str, str] = {}

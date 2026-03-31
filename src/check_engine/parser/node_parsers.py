@@ -14,7 +14,6 @@ from ..dsl import (
     FailMode,
     NamedNodeField,
     NodeType,
-    PrecheckNode,
     PassPolicy,
     ResultMode,
     SqlNodeField,
@@ -62,33 +61,6 @@ class JsonNodeParser:
 
         return variables
 
-    def parse_prechecks(self, value: Any, path: str) -> Sequence[PrecheckNode]:
-        items = self.helpers.expect_list(value, path)
-        nodes: list[PrecheckNode] = []
-        for index, item in enumerate(items):
-            node_path = f"{path}[{index}]"
-            mapping = self.helpers.expect_dict(item, node_path)
-            sql_node_fields = self.parse_sql_node_fields(mapping, node_path)
-            nodes.append(
-                PrecheckNode(
-                    name=self.helpers.expect_string(
-                        mapping.get(NamedNodeField.NAME),
-                        f"{node_path}.{NamedNodeField.NAME}",
-                    ),
-                    on_fail=self.parse_fail_policy(
-                        mapping.get(FailPolicyField.ON_FAIL),
-                        f"{node_path}.{FailPolicyField.ON_FAIL}",
-                        required=False,
-                    ),
-                    on_pass=self.parse_pass_policy(
-                        mapping.get(FailPolicyField.ON_PASS),
-                        f"{node_path}.{FailPolicyField.ON_PASS}",
-                    ),
-                    **sql_node_fields,
-                )
-            )
-        return nodes
-
     def parse_steps(self, value: Any, path: str) -> Sequence[StepNode]:
         items = self.helpers.expect_list(value, path)
         nodes: list[StepNode] = []
@@ -104,6 +76,15 @@ class JsonNodeParser:
                         f"{node_path}.{NamedNodeField.NAME}",
                     ),
                     consumes=consumes,
+                    on_fail=self.parse_fail_policy(
+                        mapping.get(FailPolicyField.ON_FAIL),
+                        f"{node_path}.{FailPolicyField.ON_FAIL}",
+                        required=False,
+                    ),
+                    on_pass=self.parse_pass_policy(
+                        mapping.get(FailPolicyField.ON_PASS),
+                        f"{node_path}.{FailPolicyField.ON_PASS}",
+                    ),
                     **sql_node_fields,
                 )
             )

@@ -700,9 +700,7 @@
     }
 
     const NODE_DEF_MAP = {
-      context: { type: 'context', label: 'Context 节点', defaultTitle: '加载上下文' },
       variable: { type: 'variable', label: 'Variable 节点', defaultTitle: '计算变量' },
-      precheck: { type: 'precheck', label: 'Precheck 节点', defaultTitle: '前置检查' },
       step: { type: 'step', label: 'Step 节点', defaultTitle: '执行步骤' },
       on_fail: { type: 'on_fail', label: 'On Fail 节点', defaultTitle: '最终失败判定' },
     };
@@ -750,10 +748,10 @@
     let datasourceNameOptions = [];
     let runtimeInputRows = [...DEFAULT_INPUT_ROWS];
 
-    const FIXED_TYPES = new Set(['context', 'on_fail']);
-    const SQL_NODE_TYPES = new Set(['context', 'precheck', 'step']);
-    const DECISION_NODE_TYPES = new Set(['precheck', 'on_fail']);
-    const OUTPUT_NODE_TYPES = new Set(['context', 'precheck', 'step']);
+    const FIXED_TYPES = new Set(['on_fail']);
+    const SQL_NODE_TYPES = new Set(['step']);
+    const DECISION_NODE_TYPES = new Set(['step', 'on_fail']);
+    const OUTPUT_NODE_TYPES = new Set(['step']);
 
     function isSqlNode(nodeType) {
       return SQL_NODE_TYPES.has(nodeType);
@@ -771,9 +769,6 @@
       if (nodeType === 'on_fail') {
         return 'exists($steps.some_step.some_output)';
       }
-      if (nodeType === 'precheck') {
-        return 'exists($.ok)';
-      }
       return '';
     }
 
@@ -788,13 +783,13 @@
         sqlParamsText: '{}',
         sqlParams: [{ key: '', value: '' }],
         datasource: 'saas_db',
-        resultMode: def.type === 'context' ? 'record' : 'records',
+        resultMode: 'records',
         decision: getDefaultDecisionByNodeType(def.type),
         variableWhenRows: [{ condition: '', value: '' }],
         variableValue: '',
         variableDefault: '',
         failMode: 'single',
-        precheckPolicyType: 'on_fail',
+        precheckPolicyType: 'none',
         messageCn: '',
         messageEn: '',
         divider: '',
@@ -813,11 +808,9 @@
     }
 
     const CANVAS_LANE_DEFS = [
-      { type: 'context', label: '1) Context' },
-      { type: 'variable', label: '2) Variables' },
-      { type: 'precheck', label: '3) Prechecks' },
-      { type: 'step', label: '4) Steps' },
-      { type: 'on_fail', label: '5) On Fail' },
+      { type: 'variable', label: '1) Variables' },
+      { type: 'step', label: '2) Steps' },
+      { type: 'on_fail', label: '3) On Fail' },
     ];
 
     const CanvasComponents = {
@@ -843,15 +836,13 @@
       },
       resolveLaneNodes() {
         return {
-          context: state.nodes.filter((item) => item.type === 'context'),
           variable: state.nodes.filter((item) => item.type === 'variable'),
-          precheck: state.nodes.filter((item) => item.type === 'precheck'),
           step: getSortedSteps(),
           on_fail: state.nodes.filter((item) => item.type === 'on_fail'),
         };
       },
       buildActionButtons(node) {
-        const canMove = node.type === 'precheck' || node.type === 'step';
+        const canMove = node.type === 'step';
         if (!canMove) {
           return '';
         }
@@ -862,7 +853,7 @@
       },
       renderNodeCard(node, index) {
         const nodeRank = node.type === 'step' ? `S${node.stepOrder || index + 1}` : `#${index + 1}`;
-        const nodeTitle = (node.type === 'context' || node.type === 'on_fail')
+        const nodeTitle = node.type === 'on_fail'
           ? node.type
           : (node.title || '(未命名节点)');
         const nodeEl = document.createElement('article');
@@ -879,7 +870,7 @@
           </div>
           <div class="node-body">
             <strong>${escapeHtml(nodeTitle)}</strong>
-            ${(node.type === 'precheck' || node.type === 'step') && node.description
+            ${node.type === 'step' && node.description
               ? `<div class="muted">description: ${escapeHtml(node.description)}</div>`
               : ''}
             <div class="muted">ds: ${escapeHtml(node.datasource || '-')} / mode: ${escapeHtml(node.resultMode || '-')}</div>
@@ -968,11 +959,11 @@
         return;
       }
 
-      const showNodeTitleField = !(node.type === 'context' || node.type === 'on_fail');
-      const resolvedPrecheckPolicyType = node.type === 'precheck' && node.precheckPolicyType === 'on_pass'
+      const showNodeTitleField = node.type !== 'on_fail';
+      const resolvedPrecheckPolicyType = node.type === 'step' && node.precheckPolicyType === 'on_pass'
         ? 'on_pass'
-        : 'on_fail';
-      const isPrecheckOnFailPolicy = node.type === 'precheck' && resolvedPrecheckPolicyType === 'on_fail';
+        : (node.precheckPolicyType === 'none' ? 'none' : 'on_fail');
+      const isPrecheckOnFailPolicy = node.type === 'step' && resolvedPrecheckPolicyType === 'on_fail';
       const showFailPolicyFields = node.type === 'on_fail' || isPrecheckOnFailPolicy;
       const showDividerConfig = showFailPolicyFields && (node.failMode === 'sub_repeat' || node.failMode === 'full_repeat');
 
@@ -983,10 +974,10 @@
           <input id="f_title" value="${escapeAttr(node.title)}" />
         </div>
         ` : ''}
-        ${node.type === 'precheck' || node.type === 'step' ? `
+        ${node.type === 'step' ? `
         <div class="field">
           <label>Description</label>
-          <input id="f_description" value="${escapeAttr(node.description || '')}" placeholder="可选：用于 precheck/step 的说明" />
+          <input id="f_description" value="${escapeAttr(node.description || '')}" placeholder="可选：用于 step 的说明" />
         </div>
         ` : ''}
         <div class="field">
@@ -1023,14 +1014,11 @@
           <div class="field-note">变量名从 SQL 中自动提取并只读，仅需输入变量值。</div>
         </div>
         ` : ''}
-        ${node.type === 'precheck' ? `
+        ${node.type === 'step' ? `
         <div class="field">
-          <label>Outputs（逗号分隔）</label>
-          <input id="f_outputs" value="${escapeAttr(node.outputs)}" />
-        </div>
-        <div class="field">
-          <label>Precheck Policy</label>
+          <label>Step Policy（可选）</label>
           <select id="f_precheck_policy_type">
+            <option value="none" ${resolvedPrecheckPolicyType === 'none' ? 'selected' : ''}>none（不短路）</option>
             <option value="on_fail" ${resolvedPrecheckPolicyType === 'on_fail' ? 'selected' : ''}>on_fail（失败短路）</option>
             <option value="on_pass" ${resolvedPrecheckPolicyType === 'on_pass' ? 'selected' : ''}>on_pass（成功短路）</option>
           </select>
@@ -1038,7 +1026,7 @@
         ` : ''}
         ${isDecisionNode(node.type) ? `
         <div class="field">
-          <label>Decision（用于 precheck/on_fail/variable）</label>
+          <label>Decision（用于 step/on_fail）</label>
           <input id="f_decision" data-ref-autocomplete="true" value="${escapeAttr(node.decision || '')}" />
         </div>
         ` : ''}
@@ -1085,7 +1073,7 @@
         </div>
         ` : ''}
         ` : ''}
-        ${hasOutputs(node.type) && node.type !== 'precheck' ? `
+        ${hasOutputs(node.type) ? `
         <div class="field">
           <label>Outputs（逗号分隔）</label>
           <input id="f_outputs" value="${escapeAttr(node.outputs)}" />
@@ -1132,8 +1120,10 @@
             renderSqlParamRows(node, persistEditorNode);
           }
         }
-        if (node.type === 'precheck') {
-          const previousPolicyType = node.precheckPolicyType === 'on_pass' ? 'on_pass' : 'on_fail';
+        if (node.type === 'step') {
+          const previousPolicyType = node.precheckPolicyType === 'on_pass'
+            ? 'on_pass'
+            : (node.precheckPolicyType === 'none' ? 'none' : 'on_fail');
           node.precheckPolicyType = document.getElementById('f_precheck_policy_type').value;
           if (previousPolicyType !== node.precheckPolicyType) {
             if (node.precheckPolicyType === 'on_pass' && !node.decision) {
@@ -1144,12 +1134,22 @@
               node.divider = '';
               node.dividerCn = '';
               node.dividerEn = '';
+            } else if (node.precheckPolicyType === 'none') {
+              node.decision = '';
+              node.failMode = 'single';
+              node.messageCn = '';
+              node.messageEn = '';
+              node.divider = '';
+              node.dividerCn = '';
+              node.dividerEn = '';
+            } else if (node.precheckPolicyType === 'on_fail' && !node.decision) {
+              node.decision = 'exists($.ok)';
             }
             renderEditor();
             return;
           }
         }
-        if (node.type === 'on_fail' || (node.type === 'precheck' && node.precheckPolicyType !== 'on_pass')) {
+        if (node.type === 'on_fail' || (node.type === 'step' && node.precheckPolicyType === 'on_fail')) {
           const previousFailMode = node.failMode;
           node.failMode = document.getElementById('f_fail_mode').value;
           node.messageCn = document.getElementById('f_message_cn').value;
@@ -1180,7 +1180,7 @@
           node.consumeRows = [{ stepName: '', alias: '' }];
           node.consumes = '';
         }
-        if (node.type === 'precheck' || node.type === 'step') {
+        if (node.type === 'step') {
           node.description = document.getElementById('f_description').value.trim();
         } else {
           node.description = '';
@@ -1608,35 +1608,11 @@
       statusText.innerHTML = `<strong>已调整 Step 顺序：</strong>${escapeHtml(currentStep.title || currentStep.id)}`;
     }
 
-    function movePrecheckOrder(nodeId, offset) {
-      const precheckIndexes = state.nodes
-        .map((item, index) => ({ item, index }))
-        .filter(({ item }) => item.type === 'precheck');
-      const currentIndex = precheckIndexes.findIndex(({ item }) => item.id === nodeId);
-      if (currentIndex < 0) return;
-      const targetIndex = currentIndex + offset;
-      if (targetIndex < 0 || targetIndex >= precheckIndexes.length) return;
-      const sourceNodeIndex = precheckIndexes[currentIndex].index;
-      const targetNodeIndex = precheckIndexes[targetIndex].index;
-      const temp = state.nodes[sourceNodeIndex];
-      state.nodes[sourceNodeIndex] = state.nodes[targetNodeIndex];
-      state.nodes[targetNodeIndex] = temp;
-      renderCanvas();
-      renderEditor();
-      saveLocal();
-      statusText.classList.remove('status-warn');
-      statusText.innerHTML = `<strong>已调整 Precheck 顺序：</strong>${escapeHtml(precheckIndexes[currentIndex].item.title || precheckIndexes[currentIndex].item.id)}`;
-    }
-
     function moveNodeInLane(nodeId, offset) {
       const node = state.nodes.find((item) => item.id === nodeId);
       if (!node) return;
       if (node.type === 'step') {
         moveStepOrder(nodeId, offset);
-        return;
-      }
-      if (node.type === 'precheck') {
-        movePrecheckOrder(nodeId, offset);
       }
     }
 
@@ -1945,7 +1921,6 @@
     function getRuntimePathSuggestions(currentNode) {
       const basics = [
         '$input',
-        '$context',
         '$variables',
         '$steps',
       ];
@@ -1971,10 +1946,6 @@
           .split(',')
           .map((value) => value.trim())
           .filter(Boolean);
-        if (item.type === 'context') {
-          runtimePaths.push(`$context.${nodeKey}`);
-          outputFields.forEach((field) => runtimePaths.push(`$context.${nodeKey}.${field}`));
-        }
         if (item.type === 'variable') {
           runtimePaths.push(`$variables.${nodeKey}`);
         }
@@ -2015,9 +1986,7 @@
     }
 
     function toDslObject() {
-      let context = null;
       const variables = {};
-      const prechecks = [];
       const steps = [];
       let onFail = null;
 
@@ -2030,17 +1999,6 @@
         const sqlParams = Array.isArray(node.sqlParams)
           ? sqlParamsRowsToObject(node.sqlParams)
           : parseJsonObjectOrEmpty(node.sqlParamsText || '{}');
-
-        if (node.type === 'context') {
-          context = {
-            type: 'sql',
-            datasource: node.datasource || 'saas_db',
-            result_mode: node.resultMode || 'record',
-            sql_template: node.sql,
-            sql_params: sqlParams,
-            outputs,
-          };
-        }
 
         if (node.type === 'variable') {
           const variableDefault = parseInputValue(node.variableDefault);
@@ -2063,35 +2021,8 @@
           };
         }
 
-        if (node.type === 'precheck') {
-          const precheckPayload = {
-            name: key,
-            ...(node.description ? { description: node.description } : {}),
-            type: 'sql',
-            datasource: node.datasource || 'saas_db',
-            result_mode: node.resultMode || 'records',
-            sql_template: node.sql,
-            sql_params: sqlParams,
-            outputs,
-          };
-          if ((node.precheckPolicyType || 'on_fail') === 'on_pass') {
-            precheckPayload.on_pass = {
-              decision: node.decision || 'not exists($.ok)',
-            };
-          } else {
-            precheckPayload.on_fail = {
-              decision: node.decision || 'exists($.ok)',
-              mode: node.failMode || 'single',
-              message_cn: node.messageCn || `${key} 未通过`,
-              message_en: node.messageEn || `${key} failed`,
-              ...buildDividerPayload(node),
-            };
-          }
-          prechecks.push(precheckPayload);
-        }
-
         if (node.type === 'step') {
-          steps.push({
+          const stepPayload = {
             name: key,
             ...(node.description ? { description: node.description } : {}),
             type: 'sql',
@@ -2102,7 +2033,21 @@
             consumes: parseConsumesRows(node.consumeRows),
             outputs,
             _step_order: node.stepOrder || 0,
-          });
+          };
+          if (node.precheckPolicyType === 'on_pass') {
+            stepPayload.on_pass = {
+              decision: node.decision || 'not exists($.ok)',
+            };
+          } else if (node.precheckPolicyType === 'on_fail') {
+            stepPayload.on_fail = {
+              decision: node.decision || 'exists($.ok)',
+              mode: node.failMode || 'single',
+              message_cn: node.messageCn || `${key} 未通过`,
+              message_en: node.messageEn || `${key} failed`,
+              ...buildDividerPayload(node),
+            };
+          }
+          steps.push(stepPayload);
         }
 
         if (node.type === 'on_fail') {
@@ -2124,11 +2069,7 @@
         });
 
       const result = {};
-      if (context) {
-        result.context = context;
-      }
       result.variables = variables;
-      result.prechecks = prechecks;
       result.steps = sortedSteps;
       result.on_fail = onFail || {
         decision: 'exists($steps.some_step.some_output)',
@@ -2189,7 +2130,7 @@
           sqlParamsText: extra.sqlParamsText || '{}',
           sqlParams: Array.isArray(extra.sqlParams) ? extra.sqlParams : objectToSqlParamsRows(parseJsonObjectOrEmpty(extra.sqlParamsText || '{}')),
           datasource: extra.datasource || 'saas_db',
-          resultMode: extra.resultMode || (nodeType === 'context' ? 'record' : 'records'),
+          resultMode: extra.resultMode || 'records',
           decision: typeof extra.decision === 'string' ? extra.decision : getDefaultDecisionByNodeType(nodeType),
           variableWhenRows: Array.isArray(extra.variableWhenRows) ? extra.variableWhenRows : [],
           variableValue: extra.variableValue || '',
@@ -2210,18 +2151,6 @@
         });
       };
 
-      const contextValue = normalizedPayload.context || null;
-      if (contextValue) {
-        pushNode('context', 'context', {
-          sql: contextValue.sql_template || '',
-          outputs: Array.isArray(contextValue.outputs) ? contextValue.outputs.join(', ') : '',
-          datasource: contextValue.datasource || 'saas_db',
-          resultMode: contextValue.result_mode || 'record',
-          sqlParamsText: JSON.stringify(contextValue.sql_params || {}, null, 2),
-          sqlParams: objectToSqlParamsRows(contextValue.sql_params || {}),
-        });
-      }
-
       const variableMap = normalizedPayload.variables || {};
       Object.entries(variableMap).forEach(([key, value]) => {
         const whenItems = Array.isArray(value.when) ? value.when : [];
@@ -2237,33 +2166,23 @@
         });
       });
 
-      (normalizedPayload.prechecks || []).forEach((item) => {
+      (normalizedPayload.steps || []).forEach((item) => {
+        const hasStepPolicy = !!(item.on_fail || item.on_pass);
         const hasOnFail = !!(item.on_fail && typeof item.on_fail === 'object');
-        const policyType = hasOnFail ? 'on_fail' : 'on_pass';
-        pushNode('precheck', item.name || '', {
+        pushNode('step', item.name || '', {
           sql: item.sql_template || '',
-          precheckPolicyType: policyType,
-          decision: hasOnFail
-            ? (item.on_fail && item.on_fail.decision ? item.on_fail.decision : 'exists($.ok)')
-            : (item.on_pass && item.on_pass.decision ? item.on_pass.decision : 'not exists($.ok)'),
+          precheckPolicyType: hasStepPolicy ? (hasOnFail ? 'on_fail' : 'on_pass') : 'none',
+          decision: hasStepPolicy
+            ? (hasOnFail
+              ? (item.on_fail && item.on_fail.decision ? item.on_fail.decision : 'exists($.ok)')
+              : (item.on_pass && item.on_pass.decision ? item.on_pass.decision : 'not exists($.ok)'))
+            : '',
           failMode: item.on_fail && item.on_fail.mode ? item.on_fail.mode : 'single',
           messageCn: item.on_fail && item.on_fail.message_cn ? item.on_fail.message_cn : '',
           messageEn: item.on_fail && item.on_fail.message_en ? item.on_fail.message_en : '',
           divider: item.on_fail && item.on_fail.divider ? item.on_fail.divider : '',
           dividerCn: item.on_fail && item.on_fail.divider_cn ? item.on_fail.divider_cn : '',
           dividerEn: item.on_fail && item.on_fail.divider_en ? item.on_fail.divider_en : '',
-          datasource: item.datasource || 'saas_db',
-          resultMode: item.result_mode || 'records',
-          sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
-          sqlParams: objectToSqlParamsRows(item.sql_params || {}),
-          outputs: Array.isArray(item.outputs) ? item.outputs.join(', ') : '',
-          description: item.description || '',
-        });
-      });
-
-      (normalizedPayload.steps || []).forEach((item) => {
-        pushNode('step', item.name || '', {
-          sql: item.sql_template || '',
           outputs: Array.isArray(item.outputs) ? item.outputs.join(', ') : '',
           consumes: formatConsumesText(item.consumes),
           datasource: item.datasource || 'saas_db',
@@ -2575,9 +2494,9 @@
           sqlParamsText: typeof node.sqlParamsText === 'string' ? node.sqlParamsText : '{}',
           sqlParams: Array.isArray(node.sqlParams) ? node.sqlParams : objectToSqlParamsRows(parseJsonObjectOrEmpty(typeof node.sqlParamsText === 'string' ? node.sqlParamsText : '{}')),
           datasource: typeof node.datasource === 'string' ? node.datasource : 'saas_db',
-          resultMode: typeof node.resultMode === 'string' ? node.resultMode : (node.type === 'context' ? 'record' : 'records'),
+          resultMode: typeof node.resultMode === 'string' ? node.resultMode : 'records',
           failMode: typeof node.failMode === 'string' ? node.failMode : 'single',
-          precheckPolicyType: typeof node.precheckPolicyType === 'string' ? node.precheckPolicyType : 'on_fail',
+          precheckPolicyType: typeof node.precheckPolicyType === 'string' ? node.precheckPolicyType : 'none',
           messageCn: typeof node.messageCn === 'string' ? node.messageCn : '',
           messageEn: typeof node.messageEn === 'string' ? node.messageEn : '',
           divider: typeof node.divider === 'string' ? node.divider : '',
@@ -2686,22 +2605,7 @@
         throw new Error('DSL 顶层必须是对象。');
       }
       const normalized = { ...payload };
-      const context = normalized.context;
-      if (context && typeof context === 'object' && !Array.isArray(context) && !Object.prototype.hasOwnProperty.call(context, 'sql_template')) {
-        const contextValues = Object.values(context);
-        if (contextValues.length && contextValues[0] && typeof contextValues[0] === 'object') {
-          normalized.context = contextValues[0];
-        }
-      }
-      if (normalized.context && typeof normalized.context === 'object' && !Array.isArray(normalized.context)) {
-        normalized.context = {
-          ...normalized.context,
-          sql_template: normalized.context.sql_template || normalized.context.sql || '',
-          sql_params: normalized.context.sql_params || {},
-        };
-      }
       normalized.variables = normalizeVariables(normalized.variables || {});
-      normalized.prechecks = normalizePrechecks(normalized.prechecks || []);
       normalized.steps = normalizeSteps(normalized.steps || []);
       normalized.on_fail = normalizeFailPolicy(normalized.on_fail || {});
       return normalized;
@@ -2740,22 +2644,6 @@
       return normalized;
     }
 
-    function normalizePrechecks(rawPrechecks) {
-      if (!Array.isArray(rawPrechecks)) return [];
-      return rawPrechecks.map((item) => ({
-        ...item,
-        name: item.name || item.id || '',
-        sql_template: item.sql_template || item.sql || '',
-        sql_params: item.sql_params || {},
-        ...(item.on_fail && typeof item.on_fail === 'object' && !Array.isArray(item.on_fail)
-          ? { on_fail: normalizeFailPolicy(item.on_fail) }
-          : {}),
-        ...(item.on_pass && typeof item.on_pass === 'object' && !Array.isArray(item.on_pass)
-          ? { on_pass: { decision: item.on_pass.decision || '' } }
-          : {}),
-      }));
-    }
-
     function normalizeSteps(rawSteps) {
       if (!Array.isArray(rawSteps)) return [];
       return rawSteps.map((item) => ({
@@ -2764,6 +2652,12 @@
         sql_template: item.sql_template || item.sql || '',
         sql_params: item.sql_params || {},
         consumes: normalizeConsumes(item.consumes),
+        ...(item.on_fail && typeof item.on_fail === 'object' && !Array.isArray(item.on_fail)
+          ? { on_fail: normalizeFailPolicy(item.on_fail) }
+          : {}),
+        ...(item.on_pass && typeof item.on_pass === 'object' && !Array.isArray(item.on_pass)
+          ? { on_pass: { decision: item.on_pass.decision || '' } }
+          : {}),
       }));
     }
 
@@ -2823,7 +2717,7 @@
     }
 
     function validateDslPayload(payload) {
-      const allowedTopFields = ['context', 'variables', 'prechecks', 'steps', 'on_fail'];
+      const allowedTopFields = ['variables', 'steps', 'on_fail'];
       const unknownTopFields = Object.keys(payload).filter((key) => !allowedTopFields.includes(key));
       if (unknownTopFields.length) {
         throw new Error(`存在未知顶层字段: ${unknownTopFields.join(', ')}`);
@@ -2834,17 +2728,6 @@
       if (!payload.on_fail || typeof payload.on_fail !== 'object' || Array.isArray(payload.on_fail)) {
         throw new Error('on_fail 必须是对象。');
       }
-      if (payload.context && (!payload.context.type || !payload.context.datasource || !payload.context.result_mode || !payload.context.sql_template)) {
-        throw new Error('context 缺少必要字段（type/datasource/result_mode/sql_template）。');
-      }
-      (payload.prechecks || []).forEach((item, index) => {
-        if (!item || typeof item !== 'object' || Array.isArray(item)) {
-          throw new Error(`prechecks[${index}] 必须是对象。`);
-        }
-        if (!item.on_fail && !item.on_pass) {
-          throw new Error(`prechecks[${index}] 至少需要 on_fail 或 on_pass。`);
-        }
-      });
     }
 
     function loadLocal() {

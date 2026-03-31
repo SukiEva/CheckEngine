@@ -4,25 +4,23 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from types import MappingProxyType
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from check_engine.expression import ExpressionEvaluator
-from check_engine.runtime.state import ExecutionState, NodeExecutionResult
+from check_engine.runtime.state import ExecutionState
 
 
 class ExpressionEvaluatorTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.evaluator = ExpressionEvaluator()
-        self.state = ExecutionState.new({"source_object_id": "HDR001"})
-        self.state.context_data = {"flow": "flow1", "scenario": "scenario1"}
+        self.state = ExecutionState.new({"source_object_id": "HDR001", "flow": "flow1", "scenario": "scenario1"})
         self.state.variables_data = {"threshold": 1000}
         self.state.step_data = {"exchange_rate": {"final_amount": 1200}}
 
     def test_evaluate_boolean_expression(self) -> None:
-        expression = "$context.flow == 'flow1' and $context.scenario in ('scenario1', 'scenario2')"
+        expression = "$input.flow == 'flow1' and $input.scenario in ('scenario1', 'scenario2')"
         self.assertTrue(self.evaluator.evaluate(expression, self.state))
 
     def test_evaluate_with_null(self) -> None:
@@ -41,19 +39,6 @@ class ExpressionEvaluatorTestCase(unittest.TestCase):
     def test_evaluate_exists_function_on_empty_list(self) -> None:
         self.state.step_data["empty_step"] = []
         expression = "exists($steps.empty_step)"
-        self.assertFalse(self.evaluator.evaluate(expression, self.state))
-
-    def test_evaluate_exists_function_on_empty_mapping_proxy(self) -> None:
-        self.state.set_context_result(
-            NodeExecutionResult(
-                raw_rows=[],
-                exported_data=MappingProxyType({}),
-                exported_fields=[],
-            )
-        )
-
-        expression = "exists($context)"
-
         self.assertFalse(self.evaluator.evaluate(expression, self.state))
 
     def test_evaluate_final_failure_expression(self) -> None:

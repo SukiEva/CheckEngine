@@ -36,10 +36,6 @@ class SqlSafetyValidator:
     ALLOWED_LEADING_KEYWORDS = frozenset({"SELECT", "WITH"})
 
     def validate(self, document: DslDocument) -> None:
-        if document.context is not None:
-            self._validate_sql(document.context, "context")
-        for index, precheck in enumerate(document.prechecks):
-            self._validate_sql(precheck, "prechecks[{0}]".format(index))
         for index, step in enumerate(document.steps):
             self._validate_sql(step, "steps[{0}]".format(index))
 
