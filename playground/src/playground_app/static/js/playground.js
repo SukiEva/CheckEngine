@@ -1,17 +1,12 @@
 import { createCanvasNodeController, createCanvasRenderer } from "./components/canvas_components.js";
 import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
+import { createDslCodec, formatConsumesTextFromRows as codecFormatConsumesTextFromRows, formatOutputsText as codecFormatOutputsText, formatVariableWhenSummary as codecFormatVariableWhenSummary, getOutputFields as codecGetOutputFields, normalizeOutputRows as codecNormalizeOutputRows, normalizeValueToInput as codecNormalizeValueToInput, parseInputValue as codecParseInputValue, parseJsonObjectOrEmpty as codecParseJsonObjectOrEmpty } from "./dsl/dsl_codec.js";
+import { createAutocompleteBinder } from "./editor/autocomplete.js";
+import { createDatasourceStore } from "./stores/datasource_store.js";
+import { createRuntimeInputStore } from "./stores/runtime_input_store.js";
+import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as uiEscapeHtml, highlightCode as uiHighlightCode, openDialog as uiOpenDialog, renderMaterialIcons as uiRenderMaterialIcons } from "./utils/ui_utils.js";
 
-    function renderMaterialIcons(root = document) {
-      const iconElements = root.querySelectorAll('.ep-icon');
-      iconElements.forEach((iconElement) => {
-        const iconName = (iconElement.dataset.iconName || iconElement.textContent || '').trim();
-        if (!iconName) return;
-        iconElement.dataset.iconName = iconName;
-        iconElement.textContent = iconName;
-        iconElement.classList.add('material-icons-outlined');
-        iconElement.setAttribute('aria-hidden', 'true');
-      });
-    }
+    const renderMaterialIcons = uiRenderMaterialIcons;
 
     const NODE_DEF_MAP = {
       variable: { type: 'variable', label: 'Variable 节点', defaultTitle: '计算变量' },
@@ -59,8 +54,6 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
       nodes: [],
       selectedId: null,
     };
-    let datasourceNameOptions = [];
-    let runtimeInputRows = [...DEFAULT_INPUT_ROWS];
 
     const FIXED_TYPES = new Set(['on_fail']);
     const SQL_NODE_TYPES = new Set(['step']);
@@ -147,7 +140,18 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
       { type: 'on_fail', label: '3) On Fail' },
     ];
 
+    const runtimeInputStore = createRuntimeInputStore({
+      runtimeInputRowsEl,
+      storageKey: INPUT_CONFIG_STORAGE_KEY,
+      requiredRows: REQUIRED_INPUT_ROWS,
+      defaultRows: DEFAULT_INPUT_ROWS,
+      parseInputValue: codecParseInputValue,
+    });
+
     let canvasNodeController = null;
+    let datasourceStore = null;
+    let autocompleteBinder = null;
+    let dslCodec = null;
     const renderCanvas = createCanvasRenderer({
       dropZone,
       fixedTypes: FIXED_TYPES,
@@ -483,13 +487,16 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
       bindAutocompletes(node);
     }
 
+    datasourceStore = createDatasourceStore({
+      datasourceList,
+      datasourceStatus,
+      storageKey: DATASOURCE_CONFIG_STORAGE_KEY,
+      defaultConfigs: DEFAULT_DATASOURCE_CONFIGS,
+      renderEditor,
+    });
+
     function renderDatasourceOptionsHtml() {
-      if (!datasourceNameOptions.length) {
-        return '';
-      }
-      return datasourceNameOptions
-        .map((name) => `<option value="${escapeAttr(name)}"></option>`)
-        .join('');
+      return datasourceStore.renderDatasourceOptionsHtml(escapeAttr);
     }
 
     function getNextStepOrder() {
@@ -775,100 +782,27 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
     }
 
     function normalizeInputRows(rows) {
-      if (!Array.isArray(rows)) {
-        return [...DEFAULT_INPUT_ROWS];
-      }
-      const normalized = rows
-        .map((row) => ({
-          key: row && typeof row.key === 'string' ? row.key.trim() : '',
-          value: row && typeof row.value === 'string' ? row.value : normalizeValueToInput(row && Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : ''),
-        }));
-      REQUIRED_INPUT_ROWS
-        .slice()
-        .reverse()
-        .forEach((requiredRow) => {
-          const hasRequiredKey = normalized.some((row) => row.key === requiredRow.key);
-          if (!hasRequiredKey) {
-            normalized.unshift({ ...requiredRow });
-          }
-        });
-      return normalized.length ? normalized : [...DEFAULT_INPUT_ROWS];
+      return rows;
     }
 
     function renderRuntimeInputRows() {
-      if (!runtimeInputRowsEl) return;
-      runtimeInputRows = normalizeInputRows(runtimeInputRows);
-      runtimeInputRowsEl.innerHTML = runtimeInputRows.map((row, index) => `
-        <div class="kv-row">
-          <input data-input-key="${index}" value="${escapeAttr(row.key || '')}" placeholder="参数名，如 source_object_id / renter_id / accounting_period" />
-          <input data-input-value="${index}" value="${escapeAttr(row.value || '')}" placeholder="参数值，如 DEMO_1、100 或 true" />
-          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-input-remove="${index}" title="删除输入参数" aria-label="删除输入参数"><span aria-hidden="true">✕</span></button>
-        </div>
-      `).join('');
-      runtimeInputRowsEl.querySelectorAll('[data-input-remove]').forEach((button) => {
-        button.addEventListener('click', () => {
-          const removeIndex = Number(button.getAttribute('data-input-remove'));
-          runtimeInputRows.splice(removeIndex, 1);
-          runtimeInputRows = normalizeInputRows(runtimeInputRows);
-          renderRuntimeInputRows();
-          saveInputConfigLocal();
-          renderEditor();
-        });
-      });
-      runtimeInputRowsEl.querySelectorAll('[data-input-key], [data-input-value]').forEach((inputEl) => {
-        inputEl.addEventListener('change', () => {
-          runtimeInputRows = readRuntimeInputRows();
-          saveInputConfigLocal();
-          renderEditor();
-        });
-      });
+      runtimeInputStore.renderRuntimeInputRows();
     }
 
     function readRuntimeInputRows() {
-      if (!runtimeInputRowsEl) return normalizeInputRows(runtimeInputRows);
-      const keyInputs = Array.from(runtimeInputRowsEl.querySelectorAll('[data-input-key]'));
-      const valueInputs = Array.from(runtimeInputRowsEl.querySelectorAll('[data-input-value]'));
-      const rows = keyInputs.map((keyInput, index) => ({
-        key: keyInput.value.trim(),
-        value: valueInputs[index] ? valueInputs[index].value : '',
-      }));
-      return normalizeInputRows(rows);
+      return runtimeInputStore.readRuntimeInputRows();
     }
 
     function readRuntimeInputPayload() {
-      const rows = readRuntimeInputRows();
-      const payload = {};
-      rows.forEach((row) => {
-        if (!row.key) return;
-        payload[row.key] = parseInputValue(row.value);
-      });
-      return payload;
+      return runtimeInputStore.readRuntimeInputPayload();
     }
 
     function saveInputConfigLocal() {
-      const currentRows = readRuntimeInputRows();
-      runtimeInputRows = currentRows;
-      localStorage.setItem(INPUT_CONFIG_STORAGE_KEY, JSON.stringify(currentRows));
+      runtimeInputStore.saveInputConfigLocal();
     }
 
     function loadInputConfigLocal() {
-      const raw = localStorage.getItem(INPUT_CONFIG_STORAGE_KEY);
-      if (!raw) {
-        runtimeInputRows = normalizeInputRows(DEFAULT_INPUT_ROWS);
-        localStorage.setItem(INPUT_CONFIG_STORAGE_KEY, JSON.stringify(runtimeInputRows));
-        return;
-      }
-      try {
-        const parsed = JSON.parse(raw);
-        const normalized = normalizeInputRows(parsed);
-        runtimeInputRows = normalized;
-        if (!Array.isArray(parsed) || parsed.length !== normalized.length) {
-          localStorage.setItem(INPUT_CONFIG_STORAGE_KEY, JSON.stringify(normalized));
-        }
-      } catch (_error) {
-        runtimeInputRows = normalizeInputRows(DEFAULT_INPUT_ROWS);
-        localStorage.setItem(INPUT_CONFIG_STORAGE_KEY, JSON.stringify(runtimeInputRows));
-      }
+      runtimeInputStore.loadInputConfigLocal();
     }
 
     function applyStepVerticalLayout() {
@@ -882,42 +816,16 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
       });
     }
 
+    autocompleteBinder = createAutocompleteBinder({
+      state,
+      requiredInputRows: REQUIRED_INPUT_ROWS,
+      readRuntimeInputPayload,
+      getOutputFields,
+      normalizeValueToInput,
+    });
+
     function bindAutocompletes(node) {
-      const sqlTextarea = document.getElementById('f_sql');
-      const sqlPanel = document.getElementById('ac_sql');
-
-      if (sqlTextarea && sqlPanel) {
-        createAutocomplete({
-          inputEl: sqlTextarea,
-          panelEl: sqlPanel,
-          getKeyword: () => {
-            const cursor = sqlTextarea.selectionStart || 0;
-            const beforeCursor = sqlTextarea.value.slice(0, cursor);
-            const matched = beforeCursor.match(/[$][a-zA-Z0-9_.]*$/);
-            return matched ? matched[0] : '';
-          },
-          buildOptions: (keyword) => {
-            const suggestionPool = getRuntimePathSuggestions(node);
-            if (!keyword) return [];
-            return suggestionPool.filter((item) => item.toLowerCase().includes(keyword.toLowerCase()));
-          },
-          applySuggestion: (value) => {
-            const cursor = sqlTextarea.selectionStart || 0;
-            const beforeCursor = sqlTextarea.value.slice(0, cursor);
-            const afterCursor = sqlTextarea.value.slice(cursor);
-            const matched = beforeCursor.match(/[$][a-zA-Z0-9_.]*$/);
-            if (!matched) return;
-            const start = cursor - matched[0].length;
-            sqlTextarea.value = `${beforeCursor.slice(0, start)}${value}${afterCursor}`;
-            const nextCursor = start + value.length;
-            sqlTextarea.selectionStart = nextCursor;
-            sqlTextarea.selectionEnd = nextCursor;
-            sqlTextarea.focus();
-          },
-        });
-      }
-
-      bindRuntimeAutocomplete(node);
+      autocompleteBinder.bindAutocompletes(node);
     }
 
     const runtimeAutocompleteEl = document.createElement('div');
@@ -1239,107 +1147,7 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
     }
 
     function toDslObject() {
-      const variables = {};
-      const steps = [];
-      let onFail = null;
-
-      state.nodes.forEach((node, index) => {
-        const key = normalizeNodeKey(node, index + 1);
-        const outputs = getOutputFields(node);
-        const sqlParams = Array.isArray(node.sqlParams)
-          ? sqlParamsRowsToObject(node.sqlParams)
-          : parseJsonObjectOrEmpty(node.sqlParamsText || '{}');
-        const currentStepOrder = Number.isFinite(node.stepOrder) ? Number(node.stepOrder) : index + 1;
-
-        if (node.type === 'variable') {
-          const variableDefault = parseInputValue(node.variableDefault);
-          const variableWhenRows = Array.isArray(node.variableWhenRows)
-            ? node.variableWhenRows
-              .map((whenRow) => {
-                const safeWhenRow = whenRow && typeof whenRow === 'object' ? whenRow : {};
-                const safeCondition = typeof safeWhenRow.condition === 'string' ? safeWhenRow.condition.trim() : '';
-                const safeValue = Object.prototype.hasOwnProperty.call(safeWhenRow, 'value') ? safeWhenRow.value : '';
-                return {
-                  condition: safeCondition,
-                  value: parseInputValue(typeof safeValue === 'string' ? safeValue : normalizeValueToInput(safeValue)),
-                };
-              })
-              .filter((whenRow) => whenRow.condition)
-            : [];
-          if (Number.isFinite(node.stepOrder)) {
-            steps.push({
-              name: key,
-              ...(node.description ? { description: node.description } : {}),
-              type: 'variable',
-              when: variableWhenRows,
-              default: variableDefault,
-              _step_order: currentStepOrder,
-            });
-          } else {
-            variables[key] = {
-              when: variableWhenRows,
-              default: variableDefault,
-            };
-          }
-        }
-
-        if (node.type === 'step') {
-          const stepPayload = {
-            name: key,
-            ...(node.description ? { description: node.description } : {}),
-            type: 'sql',
-            datasource: node.datasource || 'saas_db',
-            result_mode: node.resultMode || 'records',
-            sql_template: node.sql,
-            sql_params: sqlParams,
-            consumes: parseConsumesRows(node.consumeRows),
-            outputs,
-            _step_order: currentStepOrder,
-          };
-          if (node.precheckPolicyType === 'on_pass') {
-            stepPayload.on_pass = {
-              decision: node.decision || 'not exists($.ok)',
-            };
-          } else if (node.precheckPolicyType === 'on_fail') {
-            stepPayload.on_fail = {
-              decision: node.decision || 'exists($.ok)',
-              mode: node.failMode || 'single',
-              message_cn: node.messageCn || `${key} 未通过`,
-              message_en: node.messageEn || `${key} failed`,
-              ...buildDividerPayload(node),
-            };
-          }
-          steps.push(stepPayload);
-        }
-
-        if (node.type === 'on_fail') {
-          onFail = {
-            decision: node.decision || 'exists($steps.some_step.some_output)',
-            mode: node.failMode || 'single',
-            message_cn: node.messageCn || `${key} 命中失败条件`,
-            message_en: node.messageEn || `${key} failure condition matched`,
-            ...buildDividerPayload(node),
-          };
-        }
-      });
-
-      const sortedSteps = steps
-        .sort((left, right) => left._step_order - right._step_order)
-        .map((item) => {
-          const { _step_order, ...stepPayload } = item;
-          return stepPayload;
-        });
-
-      const result = {};
-      result.variables = variables;
-      result.steps = sortedSteps;
-      result.on_fail = onFail || {
-        decision: 'exists($steps.some_step.some_output)',
-        mode: 'single',
-        message_cn: '默认失败',
-        message_en: 'default failure',
-      };
-      return result;
+      return dslCodec.toDslObject();
     }
 
     function renderDslPreview() {
@@ -1347,261 +1155,48 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
       const jsonText = JSON.stringify(payload, null, 2);
       if (!dslPreviewCode) return;
       dslPreviewCode.textContent = jsonText;
-      if (window.Prism && typeof window.Prism.highlightElement === 'function') {
-        window.Prism.highlightElement(dslPreviewCode);
-      }
+      uiHighlightCode(dslPreviewCode);
     }
 
     function openDslPreview() {
       renderDslPreview();
-      if (typeof jsonPreviewDialog.showModal === 'function') {
-        jsonPreviewDialog.showModal();
-      } else {
-        jsonPreviewDialog.setAttribute('open', 'open');
-      }
+      uiOpenDialog(jsonPreviewDialog);
     }
 
     function closeDslPreview() {
-      if (typeof jsonPreviewDialog.close === 'function' && jsonPreviewDialog.hasAttribute('open')) {
-        jsonPreviewDialog.close();
-      } else {
-        jsonPreviewDialog.removeAttribute('open');
-      }
+      uiCloseDialog(jsonPreviewDialog);
     }
 
     function fromDslObject(payload) {
-      const normalizedPayload = normalizeDslPayload(payload);
-      validateDslPayload(normalizedPayload);
-      const nextNodes = [];
-      const pushNode = (nodeType, title, extra) => {
-        nextNodes.push({
-          id: makeNodeId(),
-          type: nodeType,
-          title: title || `${nodeType}_${nextNodes.length + 1}`,
-          x: 0,
-          y: 0,
-          sql: extra.sql || 'SELECT 1 AS ok;',
-          sqlParamsText: extra.sqlParamsText || '{}',
-          sqlParams: Array.isArray(extra.sqlParams) ? extra.sqlParams : objectToSqlParamsRows(parseJsonObjectOrEmpty(extra.sqlParamsText || '{}')),
-          datasource: extra.datasource || 'saas_db',
-          resultMode: extra.resultMode || 'records',
-          decision: typeof extra.decision === 'string' ? extra.decision : getDefaultDecisionByNodeType(nodeType),
-          variableWhenRows: Array.isArray(extra.variableWhenRows) ? extra.variableWhenRows : [],
-          variableValue: extra.variableValue || '',
-          variableDefault: extra.variableDefault || '',
-          failMode: extra.failMode || 'single',
-          messageCn: extra.messageCn || '',
-          messageEn: extra.messageEn || '',
-          divider: extra.divider || '',
-          dividerCn: extra.dividerCn || '',
-          dividerEn: extra.dividerEn || '',
-          outputRows: normalizeOutputRows(extra.outputRows),
-          consumes: extra.consumes || '',
-          consumeRows: Array.isArray(extra.consumeRows) ? extra.consumeRows : consumesTextToRows(extra.consumes || ''),
-          description: extra.description || '',
-          stepOrder: Object.prototype.hasOwnProperty.call(extra, 'stepOrder')
-            ? extra.stepOrder
-            : (nodeType === 'step' ? nextNodes.filter((node) => node.type === 'step').length + 1 : null),
-        });
-      };
-
-      const variableMap = normalizedPayload.variables || {};
-      Object.entries(variableMap).forEach(([key, value]) => {
-        const whenItems = Array.isArray(value.when) ? value.when : [];
-        const variableDefault = normalizeValueToInput(value.default);
-        pushNode('variable', key, {
-          variableWhenRows: whenItems.length
-            ? whenItems.map((whenItem) => ({
-              condition: normalizeValueToInput(whenItem.condition),
-              value: normalizeValueToInput(whenItem.value),
-            }))
-            : [],
-          variableDefault,
-        });
-      });
-
-      (normalizedPayload.steps || []).forEach((item) => {
-        if (item.type === 'variable') {
-          const variableWhenItems = Array.isArray(item.when) ? item.when : [];
-          pushNode('variable', item.name || '', {
-            variableWhenRows: variableWhenItems.length
-              ? variableWhenItems.map((whenItem) => ({
-                condition: normalizeValueToInput(whenItem.condition),
-                value: normalizeValueToInput(whenItem.value),
-              }))
-              : [],
-            variableDefault: normalizeValueToInput(item.default),
-            consumes: formatConsumesText(item.consumes),
-            stepOrder: nextNodes.filter((node) => node.type === 'step' || node.type === 'variable').length + 1,
-            consumeRows: normalizeConsumes(item.consumes).map((consume) => ({
-              stepName: (consume.from || '').replace(/^\$steps\./, ''),
-              alias: consume.alias || '',
-            })),
-            description: item.description || '',
-          });
-          return;
-        }
-
-        const hasStepPolicy = !!(item.on_fail || item.on_pass);
-        const hasOnFail = !!(item.on_fail && typeof item.on_fail === 'object');
-        pushNode('step', item.name || '', {
-          sql: item.sql_template || '',
-          precheckPolicyType: hasStepPolicy ? (hasOnFail ? 'on_fail' : 'on_pass') : 'none',
-          decision: hasStepPolicy
-            ? (hasOnFail
-              ? (item.on_fail && item.on_fail.decision ? item.on_fail.decision : 'exists($.ok)')
-              : (item.on_pass && item.on_pass.decision ? item.on_pass.decision : 'not exists($.ok)'))
-            : '',
-          failMode: item.on_fail && item.on_fail.mode ? item.on_fail.mode : 'single',
-          messageCn: item.on_fail && item.on_fail.message_cn ? item.on_fail.message_cn : '',
-          messageEn: item.on_fail && item.on_fail.message_en ? item.on_fail.message_en : '',
-          divider: item.on_fail && item.on_fail.divider ? item.on_fail.divider : '',
-          dividerCn: item.on_fail && item.on_fail.divider_cn ? item.on_fail.divider_cn : '',
-          dividerEn: item.on_fail && item.on_fail.divider_en ? item.on_fail.divider_en : '',
-          outputRows: normalizeOutputRows(Array.isArray(item.outputs) ? item.outputs : []),
-          consumes: formatConsumesText(item.consumes),
-          datasource: item.datasource || 'saas_db',
-          resultMode: item.result_mode || 'records',
-          sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
-          sqlParams: objectToSqlParamsRows(item.sql_params || {}),
-          stepOrder: nextNodes.filter((node) => node.type === 'step' || node.type === 'variable').length + 1,
-          consumeRows: normalizeConsumes(item.consumes).map((consume) => ({
-            stepName: (consume.from || '').replace(/^\$steps\./, ''),
-            alias: consume.alias || '',
-          })),
-          description: item.description || '',
-        });
-      });
-
-      if (normalizedPayload.on_fail) {
-        pushNode('on_fail', 'on_fail', {
-          decision: normalizedPayload.on_fail.decision || 'exists($steps.some_step.some_output)',
-          failMode: normalizedPayload.on_fail.mode || 'single',
-          messageCn: normalizedPayload.on_fail.message_cn || '',
-          messageEn: normalizedPayload.on_fail.message_en || '',
-          divider: normalizedPayload.on_fail.divider || '',
-          dividerCn: normalizedPayload.on_fail.divider_cn || '',
-          dividerEn: normalizedPayload.on_fail.divider_en || '',
-        });
-      }
-
-      const stepNodes = nextNodes
-        .filter((item) => item.type === 'step')
-        .sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
-      stepNodes.forEach((stepNode, index) => {
-        stepNode.stepOrder = index + 1;
-      });
-      return nextNodes;
+      return dslCodec.fromDslObject(payload);
     }
 
     function updateDatasourceOptions(datasourceConfigs) {
-      if (!Array.isArray(datasourceConfigs)) {
-        datasourceNameOptions = [];
-        return;
-      }
-      datasourceNameOptions = datasourceConfigs
-        .map((item) => (item && typeof item.name === 'string' ? item.name.trim() : ''))
-        .filter((name) => name.length > 0);
+      return datasourceConfigs;
     }
 
     function createDatasourceCard(data) {
-      const card = document.createElement('div');
-      card.className = 'datasource-card';
-      card.innerHTML = `
-        <div class="kv-row">
-          <input data-role="name" placeholder="datasource 名称，例如 saas_db" />
-          <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" />
-          <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span aria-hidden="true">✕</span></button>
-        </div>
-      `;
-      card.querySelector('[data-role="name"]').value = data && data.name ? data.name : '';
-      card.querySelector('[data-role="db_url"]').value = data && data.db_url ? data.db_url : '';
-      card.querySelector('[data-role="remove"]').addEventListener('click', () => {
-        card.remove();
-        saveDatasourceConfigLocal();
-      });
-      card.querySelectorAll('[data-role="name"], [data-role="db_url"]').forEach((input) => {
-        input.addEventListener('change', () => {
-          saveDatasourceConfigLocal();
-          renderEditor();
-        });
-      });
-      return card;
+      return data;
     }
 
     function readDatasourceConfigRows() {
-      return Array.from(datasourceList.children)
-        .map((card) => ({
-          name: card.querySelector('[data-role="name"]').value.trim(),
-          db_url: card.querySelector('[data-role="db_url"]').value.trim(),
-        }))
-        .filter((item) => item.name || item.db_url);
+      return datasourceStore.readDatasourceConfigRows();
     }
 
     function renderDatasourceCards(datasourceItems) {
-      datasourceList.innerHTML = '';
-      datasourceItems.forEach((item) => datasourceList.appendChild(createDatasourceCard(item)));
-      updateDatasourceOptions(datasourceItems);
+      return datasourceItems;
     }
 
     function normalizeDatasourceConfigs(rawDatasourceConfigs) {
-      if (!Array.isArray(rawDatasourceConfigs)) {
-        return [];
-      }
-      return rawDatasourceConfigs
-        .map((item) => {
-          if (!item || typeof item !== 'object' || Array.isArray(item)) {
-            return null;
-          }
-          const name = typeof item.name === 'string' ? item.name.trim() : '';
-          const dbUrl = typeof item.db_url === 'string' ? item.db_url.trim() : '';
-          if (!name && !dbUrl) {
-            return null;
-          }
-          return { name, db_url: dbUrl };
-        })
-        .filter(Boolean);
+      return rawDatasourceConfigs;
     }
 
     function loadDatasourceConfigLocal() {
-      datasourceStatus.textContent = '正在载入本地数据源配置...';
-      try {
-        const rawLocalValue = localStorage.getItem(DATASOURCE_CONFIG_STORAGE_KEY);
-        if (!rawLocalValue) {
-          renderDatasourceCards(DEFAULT_DATASOURCE_CONFIGS);
-          localStorage.setItem(DATASOURCE_CONFIG_STORAGE_KEY, JSON.stringify(DEFAULT_DATASOURCE_CONFIGS));
-          datasourceStatus.textContent = `未找到本地配置，已初始化默认 ${DEFAULT_DATASOURCE_CONFIGS.length} 个数据源。`;
-          renderEditor();
-          return;
-        }
-        const parsed = JSON.parse(rawLocalValue);
-        const datasourceConfigs = normalizeDatasourceConfigs(parsed);
-        if (!datasourceConfigs.length) {
-          renderDatasourceCards(DEFAULT_DATASOURCE_CONFIGS);
-          localStorage.setItem(DATASOURCE_CONFIG_STORAGE_KEY, JSON.stringify(DEFAULT_DATASOURCE_CONFIGS));
-          datasourceStatus.textContent = `本地配置为空，已恢复默认 ${DEFAULT_DATASOURCE_CONFIGS.length} 个数据源。`;
-          renderEditor();
-          return;
-        }
-        renderDatasourceCards(datasourceConfigs);
-        datasourceStatus.textContent = `已从本地载入 ${datasourceConfigs.length} 个数据源。`;
-        renderEditor();
-      } catch (error) {
-        renderDatasourceCards(DEFAULT_DATASOURCE_CONFIGS);
-        localStorage.setItem(DATASOURCE_CONFIG_STORAGE_KEY, JSON.stringify(DEFAULT_DATASOURCE_CONFIGS));
-        datasourceStatus.textContent = `本地配置读取失败，已加载默认数据源。错误: ${error.message || '未知错误'}`;
-        renderEditor();
-      }
+      datasourceStore.loadDatasourceConfigLocal();
     }
 
     function saveDatasourceConfigLocal() {
-      const datasourcePayload = normalizeDatasourceConfigs(readDatasourceConfigRows());
-      localStorage.setItem(DATASOURCE_CONFIG_STORAGE_KEY, JSON.stringify(datasourcePayload));
-      datasourceStatus.textContent = datasourcePayload.length
-        ? `已保存 ${datasourcePayload.length} 个数据源到本地浏览器。`
-        : '已清空本地数据源配置。';
-      updateDatasourceOptions(datasourcePayload);
-      renderEditor();
+      datasourceStore.saveDatasourceConfigLocal();
     }
 
     function saveLocal() {
@@ -1658,12 +1253,7 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
     }
 
     function parseJsonObjectOrEmpty(rawText) {
-      if (!rawText || !rawText.trim()) return {};
-      const parsed = JSON.parse(rawText);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error('sql_params 必须是 JSON 对象。');
-      }
-      return parsed;
+      return codecParseJsonObjectOrEmpty(rawText);
     }
 
     function parseConsumesRows(rows) {
@@ -1684,62 +1274,19 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
     }
 
     function normalizeOutputRows(outputRows) {
-      if (Array.isArray(outputRows)) {
-        const normalizedFromRows = outputRows
-          .map((row) => {
-            if (typeof row === 'string') {
-              return row.trim();
-            }
-            return row && typeof row.field === 'string' ? row.field.trim() : '';
-          })
-          .filter(Boolean)
-          .map((field) => ({ field }));
-        return normalizedFromRows.length ? normalizedFromRows : [{ field: '' }];
-      }
-      return [{ field: '' }];
+      return codecNormalizeOutputRows(outputRows);
     }
 
     function formatOutputsText(rowsOrFields) {
-      if (!Array.isArray(rowsOrFields) || !rowsOrFields.length) return '';
-      if (typeof rowsOrFields[0] === 'string') {
-        return rowsOrFields
-          .map((field) => field.trim())
-          .filter(Boolean)
-          .join(', ');
-      }
-      return rowsOrFields
-        .map((row) => (row && typeof row.field === 'string' ? row.field.trim() : ''))
-        .filter(Boolean)
-        .join(', ');
+      return codecFormatOutputsText(rowsOrFields);
     }
 
     function getOutputFields(node) {
-      if (!node || typeof node !== 'object') return [];
-      const rows = normalizeOutputRows(node.outputRows);
-      return rows
-        .map((row) => row.field)
-        .filter(Boolean);
+      return codecGetOutputFields(node);
     }
 
     function formatVariableWhenSummary(variableWhenRows) {
-      if (!Array.isArray(variableWhenRows) || !variableWhenRows.length) {
-        return '无';
-      }
-      const normalizedRows = variableWhenRows
-        .filter((row) => row && typeof row === 'object')
-        .map((row) => ({
-          condition: typeof row.condition === 'string' ? row.condition.trim() : '',
-          value: normalizeValueToInput(Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : ''),
-        }))
-        .filter((row) => row.condition);
-      if (!normalizedRows.length) {
-        return '无';
-      }
-      const [firstRow] = normalizedRows;
-      if (normalizedRows.length === 1) {
-        return `${firstRow.condition} => ${firstRow.value || '(空)'}`;
-      }
-      return `${firstRow.condition} => ${firstRow.value || '(空)'} 等 ${normalizedRows.length} 条`;
+      return codecFormatVariableWhenSummary(variableWhenRows);
     }
 
     function formatConsumesText(consumes) {
@@ -1775,17 +1322,7 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
     }
 
     function formatConsumesTextFromRows(rows) {
-      if (!Array.isArray(rows) || !rows.length) return '';
-      return rows
-        .map((row) => {
-          if (!row || typeof row !== 'object') return '';
-          const stepName = typeof row.stepName === 'string' ? row.stepName.trim() : '';
-          const alias = typeof row.alias === 'string' ? row.alias.trim() : '';
-          if (!stepName) return '';
-          return alias ? `${stepName}:${alias}` : stepName;
-        })
-        .filter(Boolean)
-        .join(', ');
+      return codecFormatConsumesTextFromRows(rows);
     }
 
     function normalizeDslPayload(payload) {
@@ -1870,38 +1407,11 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
     }
 
     function normalizeValueToInput(value) {
-      if (value === null || typeof value === 'undefined') {
-        return '';
-      }
-      if (typeof value === 'string') {
-        return value;
-      }
-      return JSON.stringify(value);
+      return codecNormalizeValueToInput(value);
     }
 
     function parseInputValue(rawText) {
-      if (!rawText || !rawText.trim()) {
-        return '';
-      }
-      const trimmed = rawText.trim();
-      const integerLiteralMatch = /^-?\d+$/.test(trimmed);
-      if (integerLiteralMatch) {
-        try {
-          const parsedInteger = BigInt(trimmed);
-          const maxSafeInteger = BigInt(Number.MAX_SAFE_INTEGER);
-          const minSafeInteger = BigInt(Number.MIN_SAFE_INTEGER);
-          if (parsedInteger > maxSafeInteger || parsedInteger < minSafeInteger) {
-            return trimmed;
-          }
-        } catch (_error) {
-          return trimmed;
-        }
-      }
-      try {
-        return JSON.parse(trimmed);
-      } catch (_error) {
-        return trimmed;
-      }
+      return codecParseInputValue(rawText);
     }
 
     function validateDslPayload(payload) {
@@ -1933,17 +1443,21 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
     }
 
     function escapeHtml(value) {
-      return (value || '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
+      return uiEscapeHtml(value);
     }
 
     function escapeAttr(value) {
-      return escapeHtml(value).replaceAll('\n', '&#10;');
+      return uiEscapeAttr(value);
     }
+
+    dslCodec = createDslCodec({
+      state,
+      validateDslPayload,
+      makeNodeId,
+      getDefaultDecisionByNodeType,
+      sqlParamsRowsToObject,
+      objectToSqlParamsRows,
+    });
 
     canvasNodeController = createCanvasNodeController({
       state,
@@ -2099,17 +1613,12 @@ import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
     });
 
     document.getElementById('btnDsAdd').addEventListener('click', () => {
-      datasourceList.appendChild(createDatasourceCard({ name: '', db_url: '' }));
-      saveDatasourceConfigLocal();
-      renderEditor();
+      datasourceStore.appendDatasourceCard();
     });
 
     if (addInputParamButton) {
       addInputParamButton.addEventListener('click', () => {
-        runtimeInputRows = readRuntimeInputRows();
-        runtimeInputRows.push({ key: '', value: '' });
-        renderRuntimeInputRows();
-        saveInputConfigLocal();
+        runtimeInputStore.appendInputRow();
       });
     }
 
