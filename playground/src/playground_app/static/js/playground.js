@@ -1,4 +1,5 @@
-import { createCanvasRenderer } from "./components/canvas_components.js";
+import { createCanvasNodeController, createCanvasRenderer } from "./components/canvas_components.js";
+import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
 
     function renderMaterialIcons(root = document) {
       const iconElements = root.querySelectorAll('.ep-icon');
@@ -146,6 +147,7 @@ import { createCanvasRenderer } from "./components/canvas_components.js";
       { type: 'on_fail', label: '3) On Fail' },
     ];
 
+    let canvasNodeController = null;
     const renderCanvas = createCanvasRenderer({
       dropZone,
       fixedTypes: FIXED_TYPES,
@@ -157,39 +159,12 @@ import { createCanvasRenderer } from "./components/canvas_components.js";
       getOutputFields,
       formatVariableWhenSummary,
       normalizeValueToInput,
-      getSortedSteps,
-      addNodeByType,
-      selectNode,
-      deleteNodeById,
-      moveNodeInLane,
+      getSortedSteps: () => canvasNodeController.getSortedSteps(),
+      addNodeByType: (nodeType) => canvasNodeController.addNodeByType(nodeType),
+      selectNode: (nodeId) => canvasNodeController.selectNode(nodeId),
+      deleteNodeById: (nodeId) => canvasNodeController.deleteNodeById(nodeId),
+      moveNodeInLane: (nodeId, offset) => canvasNodeController.moveNodeInLane(nodeId, offset),
     });
-
-    function addNodeByType(nodeType) {
-      const def = NODE_DEF_MAP[nodeType] || null;
-      if (!def) return;
-      if (FIXED_TYPES.has(nodeType) && state.nodes.some((item) => item.type === nodeType)) {
-        statusText.classList.add('status-warn');
-        statusText.innerHTML = `<strong>${escapeHtml(nodeType)}</strong> 顶层仅允许 1 个节点。`;
-        return;
-      }
-      const node = makeNode(def, 0, 0);
-      state.nodes.push(node);
-      if (node.type === 'step') {
-        applyStepVerticalLayout();
-      }
-      state.selectedId = node.id;
-      renderCanvas();
-      renderEditor();
-      saveLocal();
-      statusText.classList.remove('status-warn');
-      statusText.innerHTML = `<strong>已添加节点：</strong>${escapeHtml(def.label)}`;
-    }
-
-    function selectNode(nodeId) {
-      state.selectedId = nodeId;
-      renderCanvas();
-      renderEditor();
-    }
 
     function renderEditor() {
       const node = state.nodes.find((item) => item.id === state.selectedId);
@@ -515,19 +490,6 @@ import { createCanvasRenderer } from "./components/canvas_components.js";
       return datasourceNameOptions
         .map((name) => `<option value="${escapeAttr(name)}"></option>`)
         .join('');
-    }
-
-    function deleteNodeById(nodeId) {
-      state.nodes = state.nodes.filter((item) => item.id !== nodeId);
-      applyStepVerticalLayout();
-      if (state.selectedId === nodeId) {
-        state.selectedId = null;
-      }
-      renderCanvas();
-      renderEditor();
-      saveLocal();
-      statusText.classList.remove('status-warn');
-      statusText.innerHTML = '已删除节点。';
     }
 
     function getNextStepOrder() {
@@ -909,41 +871,12 @@ import { createCanvasRenderer } from "./components/canvas_components.js";
       }
     }
 
-    function getSortedSteps() {
-      return state.nodes
-        .filter((item) => item.type === 'step')
-        .sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
-    }
-
-    function moveStepOrder(nodeId, offset) {
-      const steps = getSortedSteps();
-      const currentIndex = steps.findIndex((item) => item.id === nodeId);
-      if (currentIndex < 0) return;
-      const targetIndex = currentIndex + offset;
-      if (targetIndex < 0 || targetIndex >= steps.length) return;
-      const currentStep = steps[currentIndex];
-      const targetStep = steps[targetIndex];
-      const temp = currentStep.stepOrder;
-      currentStep.stepOrder = targetStep.stepOrder;
-      targetStep.stepOrder = temp;
-      applyStepVerticalLayout();
-      renderCanvas();
-      renderEditor();
-      saveLocal();
-      statusText.classList.remove('status-warn');
-      statusText.innerHTML = `<strong>已调整 Step 顺序：</strong>${escapeHtml(currentStep.title || currentStep.id)}`;
-    }
-
-    function moveNodeInLane(nodeId, offset) {
-      const node = state.nodes.find((item) => item.id === nodeId);
-      if (!node) return;
-      if (node.type === 'step') {
-        moveStepOrder(nodeId, offset);
-      }
-    }
-
     function applyStepVerticalLayout() {
-      const steps = getSortedSteps();
+      const steps = canvasNodeController
+        ? canvasNodeController.getSortedSteps()
+        : state.nodes
+          .filter((item) => item.type === 'step')
+          .sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
       steps.forEach((stepNode, index) => {
         stepNode.stepOrder = index + 1;
       });
@@ -1333,15 +1266,21 @@ import { createCanvasRenderer } from "./components/canvas_components.js";
               })
               .filter((whenRow) => whenRow.condition)
             : [];
-          steps.push({
-            name: key,
-            ...(node.description ? { description: node.description } : {}),
-            type: 'variable',
-            when: variableWhenRows,
-            default: variableDefault,
-            consumes: parseConsumesRows(node.consumeRows),
-            _step_order: currentStepOrder,
-          });
+          if (Number.isFinite(node.stepOrder)) {
+            steps.push({
+              name: key,
+              ...(node.description ? { description: node.description } : {}),
+              type: 'variable',
+              when: variableWhenRows,
+              default: variableDefault,
+              _step_order: currentStepOrder,
+            });
+          } else {
+            variables[key] = {
+              when: variableWhenRows,
+              default: variableDefault,
+            };
+          }
         }
 
         if (node.type === 'step') {
@@ -1410,14 +1349,6 @@ import { createCanvasRenderer } from "./components/canvas_components.js";
       dslPreviewCode.textContent = jsonText;
       if (window.Prism && typeof window.Prism.highlightElement === 'function') {
         window.Prism.highlightElement(dslPreviewCode);
-      }
-    }
-
-    function renderRuntimeResult(payload) {
-      if (!runtimeResultCode) return;
-      runtimeResultCode.textContent = JSON.stringify(payload, null, 2);
-      if (window.Prism && typeof window.Prism.highlightElement === 'function') {
-        window.Prism.highlightElement(runtimeResultCode);
       }
     }
 
@@ -1673,168 +1604,6 @@ import { createCanvasRenderer } from "./components/canvas_components.js";
       renderEditor();
     }
 
-    function closeRuntimeDialog() {
-      if (typeof runtimeDialog.close === 'function' && runtimeDialog.hasAttribute('open')) {
-        runtimeDialog.close();
-      } else {
-        runtimeDialog.removeAttribute('open');
-      }
-    }
-
-    function openRuntimeDialog() {
-      if (typeof runtimeDialog.showModal === 'function') {
-        runtimeDialog.showModal();
-      } else {
-        runtimeDialog.setAttribute('open', 'open');
-      }
-    }
-
-    function closeValidateDialog() {
-      if (typeof validateDialog.close === 'function' && validateDialog.hasAttribute('open')) {
-        validateDialog.close();
-      } else {
-        validateDialog.removeAttribute('open');
-      }
-    }
-
-    function openValidateDialog() {
-      if (typeof validateDialog.showModal === 'function') {
-        validateDialog.showModal();
-      } else {
-        validateDialog.setAttribute('open', 'open');
-      }
-    }
-
-    function renderValidateResult(payload) {
-      const resultJson = JSON.stringify(payload || {}, null, 2);
-      validateResultCode.textContent = resultJson;
-      if (window.Prism && typeof window.Prism.highlightElement === 'function') {
-        window.Prism.highlightElement(validateResultCode);
-      }
-    }
-
-    function setRunButtonLoading(isLoading) {
-      if (isLoading) {
-        runButton.classList.add('btn-loading', 'is-loading');
-        runButton.disabled = true;
-        runButton.innerHTML = '<span class="ep-icon">hourglass_top</span>运行中';
-        renderMaterialIcons(runButton);
-        return;
-      }
-      runButton.classList.remove('btn-loading', 'is-loading');
-      runButton.disabled = false;
-      runButton.innerHTML = '<span class="ep-icon">play_circle</span>运行 DSL';
-      renderMaterialIcons(runButton);
-    }
-
-    function setValidateButtonLoading(isLoading) {
-      if (isLoading) {
-        validateButton.classList.add('btn-loading', 'is-loading');
-        validateButton.disabled = true;
-        validateButton.innerHTML = '<span class="ep-icon">hourglass_top</span>校验中';
-        renderMaterialIcons(validateButton);
-        return;
-      }
-      validateButton.classList.remove('btn-loading', 'is-loading');
-      validateButton.disabled = false;
-      validateButton.innerHTML = '<span class="ep-icon">fact_check</span>校验 DSL';
-      renderMaterialIcons(validateButton);
-    }
-
-    async function validateDslNow() {
-      const dslPayload = toDslObject();
-      setValidateButtonLoading(true);
-      openValidateDialog();
-      validateStatus.textContent = '校验中...';
-      renderValidateResult({});
-      try {
-        const response = await fetch('/api/validate-dsl', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dsl_text: JSON.stringify(dslPayload, null, 2),
-          }),
-        });
-        const payload = await parseApiPayload(response);
-        if (!response.ok) {
-          statusText.classList.add('status-warn');
-          statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(payload.detail || payload.error || '未知错误')}`;
-          validateStatus.textContent = `校验失败: ${payload.detail || payload.error || '未知错误'}`;
-          renderValidateResult(payload);
-          return;
-        }
-        statusText.classList.remove('status-warn');
-        statusText.textContent = 'DSL 校验通过。';
-        validateStatus.textContent = 'DSL 校验通过。';
-        renderValidateResult(payload);
-      } catch (error) {
-        statusText.classList.add('status-warn');
-        statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(error.message || '网络错误')}`;
-        validateStatus.textContent = `校验失败: ${error.message || '网络错误'}`;
-        renderValidateResult({
-          error: error.message || '网络错误',
-        });
-      } finally {
-        setValidateButtonLoading(false);
-      }
-    }
-
-    async function runDslNow() {
-      const dslPayload = toDslObject();
-      let datasourcePayload = readDatasourceConfigRows();
-      if (!datasourcePayload.length) {
-        loadDatasourceConfigLocal();
-        datasourcePayload = readDatasourceConfigRows();
-      }
-      if (!datasourcePayload.length) {
-        statusText.classList.add('status-warn');
-        statusText.textContent = '运行失败：请先在“数据源配置”页签中维护至少一个数据源。';
-        return;
-      }
-      const inputPayload = readRuntimeInputPayload();
-      setRunButtonLoading(true);
-      openRuntimeDialog();
-      runtimeStatus.textContent = '执行中...';
-      renderRuntimeResult({});
-      try {
-        const response = await fetch('/api/run-dsl', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dsl_text: JSON.stringify(dslPayload, null, 2),
-            input_data: inputPayload,
-            datasources: datasourcePayload,
-          }),
-        });
-        const payload = await parseApiPayload(response);
-        if (!response.ok) {
-          runtimeStatus.textContent = `执行失败: ${payload.detail || payload.error || '未知错误'}`;
-          renderRuntimeResult(payload);
-          return;
-        }
-        runtimeStatus.textContent = '执行成功。';
-        renderRuntimeResult(payload.result);
-        statusText.classList.remove('status-warn');
-        statusText.textContent = '运行完成。';
-      } catch (error) {
-        runtimeStatus.textContent = `请求失败: ${error.message || '网络错误'}`;
-      } finally {
-        setRunButtonLoading(false);
-      }
-    }
-
-    async function parseApiPayload(response) {
-      const responseText = await response.text();
-      if (!responseText.trim()) {
-        return {};
-      }
-      try {
-        return JSON.parse(responseText);
-      } catch (_error) {
-        return { error: responseText };
-      }
-    }
-
     function saveLocal() {
       localStorage.setItem('execdsl_flow_designer_state_v1', JSON.stringify(state.nodes));
     }
@@ -1877,7 +1646,11 @@ import { createCanvasRenderer } from "./components/canvas_components.js";
         }
         return normalized;
       });
-      const sortedSteps = getSortedSteps();
+      const sortedSteps = canvasNodeController
+        ? canvasNodeController.getSortedSteps()
+        : state.nodes
+          .filter((item) => item.type === 'step')
+          .sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
       sortedSteps.forEach((item, index) => {
         item.stepOrder = index + 1;
       });
@@ -2171,6 +1944,44 @@ import { createCanvasRenderer } from "./components/canvas_components.js";
     function escapeAttr(value) {
       return escapeHtml(value).replaceAll('\n', '&#10;');
     }
+
+    canvasNodeController = createCanvasNodeController({
+      state,
+      nodeDefMap: NODE_DEF_MAP,
+      fixedTypes: FIXED_TYPES,
+      makeNode,
+      getNextStepOrder,
+      applyStepVerticalLayout,
+      renderCanvas,
+      renderEditor,
+      saveLocal,
+      statusText,
+      escapeHtml,
+    });
+
+    const {
+      closeRuntimeDialog,
+      closeValidateDialog,
+      validateDslNow,
+      runDslNow,
+      setRunButtonLoading,
+    } = initRuntimeDslOperations({
+      runtimeDialog,
+      validateDialog,
+      runtimeStatus,
+      runtimeResultCode,
+      validateStatus,
+      validateResultCode,
+      statusText,
+      validateButton,
+      runButton,
+      renderMaterialIcons,
+      escapeHtml,
+      toDslObject,
+      readDatasourceConfigRows,
+      loadDatasourceConfigLocal,
+      readRuntimeInputPayload,
+    });
 
     document.getElementById('btnReset').addEventListener('click', () => {
       state.nodes = [];

@@ -239,3 +239,102 @@ export function createCanvasRenderer(options) {
     renderMaterialIcons(dropZone);
   };
 }
+
+export function createCanvasNodeController(options) {
+  const {
+    state,
+    nodeDefMap,
+    fixedTypes,
+    makeNode,
+    getNextStepOrder,
+    applyStepVerticalLayout,
+    renderCanvas,
+    renderEditor,
+    saveLocal,
+    statusText,
+    escapeHtml,
+  } = options;
+
+  function addNodeByType(nodeType) {
+    const def = nodeDefMap[nodeType] || null;
+    if (!def) return;
+    if (fixedTypes.has(nodeType) && state.nodes.some((item) => item.type === nodeType)) {
+      statusText.classList.add('status-warn');
+      statusText.innerHTML = `<strong>${escapeHtml(nodeType)}</strong> 顶层仅允许 1 个节点。`;
+      return;
+    }
+    const node = makeNode(def, 0, 0);
+    state.nodes.push(node);
+    if (node.type === 'step') {
+      applyStepVerticalLayout();
+    }
+    state.selectedId = node.id;
+    renderCanvas();
+    renderEditor();
+    saveLocal();
+    statusText.classList.remove('status-warn');
+    statusText.innerHTML = `<strong>已添加节点：</strong>${escapeHtml(def.label)}`;
+  }
+
+  function selectNode(nodeId) {
+    state.selectedId = nodeId;
+    renderCanvas();
+    renderEditor();
+  }
+
+  function deleteNodeById(nodeId) {
+    const targetNode = state.nodes.find((item) => item.id === nodeId);
+    state.nodes = state.nodes.filter((item) => item.id !== nodeId);
+    if (!state.nodes.find((item) => item.id === state.selectedId)) {
+      state.selectedId = state.nodes.length ? state.nodes[0].id : null;
+    }
+    applyStepVerticalLayout();
+    renderCanvas();
+    renderEditor();
+    saveLocal();
+    const label = targetNode && targetNode.title ? targetNode.title : nodeId;
+    statusText.innerHTML = `<strong>已删除节点：</strong>${escapeHtml(label)}`;
+  }
+
+  function getSortedSteps() {
+    return state.nodes
+      .filter((item) => item.type === 'step')
+      .sort((left, right) => (left.stepOrder || 0) - (right.stepOrder || 0));
+  }
+
+  function moveStepOrder(nodeId, offset) {
+    const steps = getSortedSteps();
+    const currentIndex = steps.findIndex((item) => item.id === nodeId);
+    if (currentIndex < 0) return;
+    const targetIndex = currentIndex + offset;
+    if (targetIndex < 0 || targetIndex >= steps.length) return;
+    const currentStep = steps[currentIndex];
+    const targetStep = steps[targetIndex];
+    const temp = currentStep.stepOrder;
+    currentStep.stepOrder = targetStep.stepOrder;
+    targetStep.stepOrder = temp;
+    applyStepVerticalLayout();
+    renderCanvas();
+    renderEditor();
+    saveLocal();
+    statusText.classList.remove('status-warn');
+    statusText.innerHTML = `<strong>已调整 Step 顺序：</strong>${escapeHtml(currentStep.title || currentStep.id)}`;
+  }
+
+  function moveNodeInLane(nodeId, offset) {
+    const node = state.nodes.find((item) => item.id === nodeId);
+    if (!node) return;
+    if (node.type === 'step') {
+      moveStepOrder(nodeId, offset);
+    }
+  }
+
+  return {
+    addNodeByType,
+    selectNode,
+    deleteNodeById,
+    moveNodeInLane,
+    getSortedSteps,
+    getNextStepOrder,
+  };
+}
