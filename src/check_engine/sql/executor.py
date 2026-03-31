@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any, Optional, Protocol, cast
 
-from ..dsl import RESULT_MODE_RECORD, RESULT_MODE_RECORDS, SqlNode, StepNode
+from ..dsl import RESULT_MODE_RECORD, RESULT_MODE_RECORDS, SqlNode, SqlStepNode
 from ..exceptions import DSLExecutionError
 from ..runtime import NodeExecutionResult
 from .cte_builder import CteBuilder
@@ -46,7 +46,7 @@ class SqlExecutor:
         node_name: str,
     ) -> NodeExecutionResult:
         resolved_params = self._resolve_sql_params(node.sql_params, state)
-        consumes = node.consumes if isinstance(node, StepNode) else ()
+        consumes = node.consumes if isinstance(node, SqlStepNode) else ()
         cte_sql, cte_params = self.cte_builder.build(consumes, state)
         final_sql = self._merge_with_clause(cte_sql, node.sql_template)
         final_params = {**cte_params, **resolved_params}

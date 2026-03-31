@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
-from typing import Any, Mapping, NoReturn, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, NoReturn
 
 from ..dsl import (
     DslDocument,
