@@ -76,6 +76,26 @@ class _StaticRegistry(DatasourceRegistry):
         return self._mapping[name]
 
 
+class _NoopState:
+    def resolve_reference(self, reference: str) -> Any:
+        del reference
+        raise AssertionError("context 节点不应触发引用解析")
+
+    def get_consumable_rows(self, from_path: str) -> tuple[list[dict[str, Any]], list[str]]:
+        del from_path
+        raise AssertionError("context 节点不应读取 consumes")
+
+
+class _RecordingCteBuilder:
+    def __init__(self) -> None:
+        self.received_consumes: Any = None
+
+    def build(self, consumes: Any, state: Any) -> tuple[str, dict[str, Any]]:
+        del state
+        self.received_consumes = consumes
+        return "", {}
+
+
 class _FailingSqlExecutor(SqlExecutor):
     def _run_sql(self, datasource: Any, sql: str, params: dict[str, Any], result_mode: str = "records") -> list[dict[str, Any]]:
         raise RuntimeError("boom")
@@ -206,6 +226,28 @@ class SqlExecutorRuntimeErrorTestCase(unittest.TestCase):
         with self.assertRaises(DSLExecutionError) as ctx:
             executor.execute_node(node, state=cast(Any, object()), datasource_registry=registry, node_name="step_a")
         self.assertIn("SQL node execution failed", str(ctx.exception))
+
+    def test_execute_context_sql_node_does_not_use_step_union_for_isinstance(self) -> None:
+        cte_builder = _RecordingCteBuilder()
+        executor = SqlExecutor(cte_builder=cast(Any, cte_builder))
+        node = SqlNode(
+            type="sql",
+            datasource="db",
+            result_mode="records",
+            sql_template="select 1 as amount",
+            outputs=["amount"],
+        )
+        registry = _StaticRegistry({"db": _FakeDatasource([{"amount": 1}])})
+
+        result = executor.execute_node(
+            node,
+            state=cast(Any, _NoopState()),
+            datasource_registry=registry,
+            node_name="context",
+        )
+
+        self.assertEqual(cte_builder.received_consumes, ())
+        self.assertEqual(result.exported_data, [{"amount": 1}])
 
 
 if __name__ == "__main__":
