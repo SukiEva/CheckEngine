@@ -777,6 +777,13 @@
       return OUTPUT_NODE_TYPES.has(nodeType);
     }
 
+    function nodeTypeToEditorKind(nodeType) {
+      if (nodeType === 'step') {
+        return 'sql';
+      }
+      return 'variable';
+    }
+
     function getDefaultDecisionByNodeType(nodeType) {
       if (nodeType === 'on_fail') {
         return 'exists($steps.some_step.some_output)';
@@ -881,15 +888,21 @@
           ? `<div class="muted">decision: ${escapeHtml(node.decision || '无')}</div>`
           : '';
         const variableExtraInfo = node.type === 'variable'
-          ? `<div class="muted">when: ${escapeHtml(formatVariableWhenSummary(node.variableWhenRows))}</div>`
+          ? `
+            <div class="muted">when: ${escapeHtml(formatVariableWhenSummary(node.variableWhenRows))}</div>
+            <div class="muted">default: ${escapeHtml(normalizeValueToInput(node.variableDefault) || '(空)')}</div>
+          `
           : '';
+        const showDeleteAction = node.type !== 'on_fail';
         nodeEl.innerHTML = `
           <div class="node-head">
             <span>${node.type}</span>
             <span class="node-head-actions">
               <span class="node-rank-chip">${nodeRank}</span>
               ${CanvasComponents.buildActionButtons(node)}
-              <button class="node-action-btn node-action-danger" type="button" data-node-action="delete" title="删除节点" aria-label="删除节点"><span class="ep-icon">delete</span></button>
+              ${showDeleteAction
+                ? '<button class="node-action-btn node-action-danger" type="button" data-node-action="delete" title="删除节点" aria-label="删除节点"><span class="ep-icon">delete</span></button>'
+                : ''}
             </span>
           </div>
           <div class="node-body">
@@ -1009,10 +1022,20 @@
           <input id="f_description" value="${escapeAttr(node.description || '')}" placeholder="可选：用于 step 的说明" />
         </div>
         ` : ''}
+        ${node.type !== 'on_fail' ? `
+        <div class="field">
+          <label>类型</label>
+          <select id="f_node_kind">
+            <option value="sql" ${nodeTypeToEditorKind(node.type) === 'sql' ? 'selected' : ''}>sql</option>
+            <option value="variable" ${nodeTypeToEditorKind(node.type) === 'variable' ? 'selected' : ''}>variable</option>
+          </select>
+        </div>
+        ` : `
         <div class="field">
           <label>类型（只读）</label>
           <input class="editor-readonly-input" value="${node.type}" disabled />
         </div>
+        `}
         ${node.type === 'step' ? `
         <div class="field">
           <label>Consumes（step_name + alias）</label>
@@ -1123,6 +1146,26 @@
       renderMaterialIcons(editorPanel);
 
       const persistEditorNode = () => {
+        if (node.type !== 'on_fail') {
+          const nodeKindSelect = document.getElementById('f_node_kind');
+          if (nodeKindSelect) {
+            const nextType = nodeKindSelect.value === 'sql' ? 'step' : 'variable';
+            if (nextType !== node.type) {
+              node.type = nextType;
+              if (nextType === 'step' && !Number.isFinite(node.stepOrder)) {
+                node.stepOrder = getNextStepOrder();
+              }
+              if (nextType !== 'step') {
+                node.stepOrder = null;
+              }
+              applyStepVerticalLayout();
+              renderCanvas();
+              renderEditor();
+              saveLocal();
+              return;
+            }
+          }
+        }
         if (showNodeTitleField) {
           node.title = document.getElementById('f_title').value.trim();
         } else {
@@ -1236,6 +1279,7 @@
       }
       [
         'f_title',
+        'f_node_kind',
         'f_decision',
         'f_variable_default',
         'f_sql',
@@ -1376,7 +1420,7 @@
         rowsContainer.innerHTML = rows.map((row, index) => `
           <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
             <input data-variable-condition="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.condition || '')}" placeholder="条件，如 $input.amount > 1000" />
-            <input data-variable-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.value || '')}" placeholder="赋值，如 1000 或 \"PASS\"" />
+            <input data-variable-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(normalizeValueToInput(Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : ''))}" placeholder="赋值，如 1000 或 \"PASS\"" />
             <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="ep-icon">delete</span></button>
           </div>
         `).join('');
@@ -1401,6 +1445,7 @@
       addButton.addEventListener('click', () => {
         rows.push({ condition: '', value: '' });
         drawRows();
+        if (typeof onChanged === 'function') onChanged();
       });
     }
 
@@ -1462,7 +1507,7 @@
         rowsContainer.innerHTML = rows.map((row, index) => `
           <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:6px; margin-bottom:6px;">
             <input data-consume-step="${index}" data-ref-autocomplete="true" list="consumeStepOptions" value="${escapeAttr(row.stepName || '')}" placeholder="step_name 或 $steps.xxx" />
-            <input data-consume-alias="${index}" value="${escapeAttr(row.alias || '')}" placeholder="alias（可选）" />
+            <input data-consume-alias="${index}" value="${escapeAttr(row.alias || '')}" placeholder="alias（必填）" />
             <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="ep-icon">delete</span></button>
           </div>
         `).join('');
@@ -1521,7 +1566,7 @@
             value: parseInputValue(valueText),
           };
         })
-        .filter(Boolean);
+        .filter((row) => row !== null);
     }
 
     function readConsumeRows() {
@@ -1532,7 +1577,7 @@
           stepName: input.value.trim(),
           alias: aliasInputs[index] ? aliasInputs[index].value.trim() : '',
         }))
-        .filter((row) => row.stepName || row.alias);
+        .filter((row) => row.stepName && row.alias);
     }
 
     function readOutputRows() {
@@ -2613,12 +2658,11 @@
         .map((row) => {
           const stepName = typeof row.stepName === 'string' ? row.stepName.trim() : '';
           const alias = typeof row.alias === 'string' ? row.alias.trim() : '';
-          if (!stepName) return null;
+          if (!stepName || !alias) return null;
           const fromPath = stepName.startsWith('$') ? stepName : `$steps.${stepName}`;
-          const fallbackAlias = stepName.replace(/^\$steps\./, '').replace(/[^a-zA-Z0-9_]/g, '_');
           return {
             from: fromPath,
-            alias: alias || fallbackAlias || 'cte_alias',
+            alias,
           };
         })
         .filter(Boolean);
