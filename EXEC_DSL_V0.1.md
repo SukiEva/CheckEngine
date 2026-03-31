@@ -78,6 +78,7 @@
 - `variable.when` 可以引用已执行步骤输出与全局 `$variables`。
 - `variable` 节点执行后通过 `$steps.<step_name>` 引用，例如 `$steps.final_threshold`。
 - `on_fail` 支持消息模板渲染（`single/sub_repeat/full_repeat`）。
+- 消息模板中的 `f{...}` 支持在同一条模板中出现多个，占位符会按各自 `format_spec` 独立格式化。
 - `on_pass` 当前仅使用 `decision` 做短路成功判定。
 
 ## 4. 运行时作用域
