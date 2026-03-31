@@ -807,7 +807,7 @@
         divider: '',
         dividerCn: '',
         dividerEn: '',
-        outputs: 'ok',
+        outputRows: [{ field: 'ok' }],
         consumes: '',
         consumeRows: [{ stepName: '', alias: '' }],
         description: '',
@@ -871,6 +871,18 @@
         const nodeEl = document.createElement('article');
         nodeEl.className = `flow-node${state.selectedId === node.id ? ' selected' : ''}`;
         nodeEl.dataset.nodeId = node.id;
+        const stepExtraInfo = node.type === 'step'
+          ? `
+            <div class="muted">ds: ${escapeHtml(node.datasource || '-')} / mode: ${escapeHtml(node.resultMode || '-')}</div>
+            <div class="muted">outputs: ${escapeHtml(formatOutputsText(getOutputFields(node)) || '无')}</div>
+          `
+          : '';
+        const onFailExtraInfo = node.type === 'on_fail'
+          ? `<div class="muted">decision: ${escapeHtml(node.decision || '无')}</div>`
+          : '';
+        const variableExtraInfo = node.type === 'variable'
+          ? `<div class="muted">when: ${escapeHtml(formatVariableWhenSummary(node.variableWhenRows))}</div>`
+          : '';
         nodeEl.innerHTML = `
           <div class="node-head">
             <span>${node.type}</span>
@@ -885,8 +897,9 @@
             ${node.type === 'step' && node.description
               ? `<div class="muted">description: ${escapeHtml(node.description)}</div>`
               : ''}
-            <div class="muted">ds: ${escapeHtml(node.datasource || '-')} / mode: ${escapeHtml(node.resultMode || '-')}</div>
-            <div class="muted">outputs: ${escapeHtml(node.outputs || '无')}</div>
+            ${stepExtraInfo}
+            ${onFailExtraInfo}
+            ${variableExtraInfo}
           </div>
         `;
         nodeEl.addEventListener('click', (event) => CanvasComponents.handleNodeCardClick(event, node.id));
@@ -1038,6 +1051,14 @@
           <div id="f_sql_params_rows"></div>
           <div class="field-note">变量名从 SQL 中自动提取并只读，仅需输入变量值。</div>
         </div>
+        ${hasOutputs(node.type) ? `
+        <div class="field">
+          <label>Outputs（与 Consumes 一样按行维护）</label>
+          <div id="f_outputs_rows"></div>
+          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddOutputRow" type="button" title="新增 output" aria-label="新增 output"><span class="ep-icon">add</span></button>
+          <div class="field-note">每行一个输出字段，不使用逗号分隔。</div>
+        </div>
+        ` : ''}
         ` : ''}
         ${node.type === 'step' ? `
         <div class="field">
@@ -1097,12 +1118,6 @@
           <input id="f_divider_en" value="${escapeAttr(node.dividerEn || '')}" />
         </div>
         ` : ''}
-        ` : ''}
-        ${hasOutputs(node.type) ? `
-        <div class="field">
-          <label>Outputs（逗号分隔）</label>
-          <input id="f_outputs" value="${escapeAttr(node.outputs)}" />
-        </div>
         ` : ''}
         `;
       renderMaterialIcons(editorPanel);
@@ -1185,9 +1200,9 @@
           }
         }
         if (hasOutputs(node.type)) {
-          node.outputs = document.getElementById('f_outputs').value.trim();
+          node.outputRows = readOutputRows();
         } else {
-          node.outputs = '';
+          node.outputRows = [{ field: '' }];
         }
         if (node.type === 'step') {
           node.consumeRows = readConsumeRows();
@@ -1210,6 +1225,9 @@
       if (isSqlNode(node.type)) {
         renderSqlParamRows(node, persistEditorNode);
       }
+      if (hasOutputs(node.type)) {
+        renderOutputRows(node, persistEditorNode);
+      }
       if (node.type === 'step') {
         renderConsumeRows(node, persistEditorNode);
       }
@@ -1230,7 +1248,6 @@
         'f_divider',
         'f_divider_cn',
         'f_divider_en',
-        'f_outputs',
         'f_description',
       ].forEach((elementId) => {
         const input = document.getElementById(elementId);
@@ -1387,6 +1404,42 @@
       });
     }
 
+    function renderOutputRows(node, onChanged) {
+      const rowsContainer = document.getElementById('f_outputs_rows');
+      const addButton = document.getElementById('btnAddOutputRow');
+      if (!rowsContainer || !addButton) return;
+      const rows = normalizeOutputRows(node.outputRows);
+      const drawRows = () => {
+        rowsContainer.innerHTML = rows.map((row, index) => `
+          <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; margin-bottom:6px;">
+            <input data-output-field="${index}" value="${escapeAttr(row.field || '')}" placeholder="输出字段名，如 final_amount" />
+            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-output-remove="${index}" title="删除 output" aria-label="删除 output"><span class="ep-icon">delete</span></button>
+          </div>
+        `).join('');
+        renderMaterialIcons(rowsContainer);
+        rowsContainer.querySelectorAll('[data-output-remove]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const removeIndex = Number(button.getAttribute('data-output-remove'));
+            rows.splice(removeIndex, 1);
+            if (!rows.length) rows.push({ field: '' });
+            drawRows();
+            if (typeof onChanged === 'function') onChanged();
+          });
+        });
+        rowsContainer.querySelectorAll('[data-output-field]').forEach((input) => {
+          input.addEventListener('change', () => {
+            if (typeof onChanged === 'function') onChanged();
+          });
+        });
+      };
+      drawRows();
+      addButton.addEventListener('click', () => {
+        rows.push({ field: '' });
+        drawRows();
+        if (typeof onChanged === 'function') onChanged();
+      });
+    }
+
     function renderConsumeRows(node, onChanged) {
       const rowsContainer = document.getElementById('f_consumes_rows');
       const addButton = document.getElementById('btnAddConsumeRow');
@@ -1480,6 +1533,15 @@
           alias: aliasInputs[index] ? aliasInputs[index].value.trim() : '',
         }))
         .filter((row) => row.stepName || row.alias);
+    }
+
+    function readOutputRows() {
+      const outputInputs = Array.from(document.querySelectorAll('[data-output-field]'));
+      return outputInputs
+        .map((input) => ({
+          field: input.value.trim(),
+        }))
+        .filter((row) => row.field);
     }
 
     function sqlParamsRowsToObject(rows) {
@@ -1950,18 +2012,12 @@
         }
       });
       const runtimePaths = [];
-      const currentNodeOutputFields = (currentNode.outputs || '')
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean);
+      const currentNodeOutputFields = getOutputFields(currentNode);
       const currentNodeLocalPaths = currentNodeOutputFields.map((field) => `$.${field}`);
 
       state.nodes.forEach((item, index) => {
         const nodeKey = normalizeNodeKey(item, index + 1);
-        const outputFields = (item.outputs || '')
-          .split(',')
-          .map((value) => value.trim())
-          .filter(Boolean);
+        const outputFields = getOutputFields(item);
         if (item.type === 'variable') {
           runtimePaths.push(`$variables.${nodeKey}`);
         }
@@ -2008,10 +2064,7 @@
 
       state.nodes.forEach((node, index) => {
         const key = normalizeNodeKey(node, index + 1);
-        const outputs = node.outputs
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean);
+        const outputs = getOutputFields(node);
         const sqlParams = Array.isArray(node.sqlParams)
           ? sqlParamsRowsToObject(node.sqlParams)
           : parseJsonObjectOrEmpty(node.sqlParamsText || '{}');
@@ -2157,7 +2210,7 @@
           divider: extra.divider || '',
           dividerCn: extra.dividerCn || '',
           dividerEn: extra.dividerEn || '',
-          outputs: extra.outputs || '',
+          outputRows: normalizeOutputRows(extra.outputRows),
           consumes: extra.consumes || '',
           consumeRows: Array.isArray(extra.consumeRows) ? extra.consumeRows : consumesTextToRows(extra.consumes || ''),
           description: extra.description || '',
@@ -2199,7 +2252,7 @@
           divider: item.on_fail && item.on_fail.divider ? item.on_fail.divider : '',
           dividerCn: item.on_fail && item.on_fail.divider_cn ? item.on_fail.divider_cn : '',
           dividerEn: item.on_fail && item.on_fail.divider_en ? item.on_fail.divider_en : '',
-          outputs: Array.isArray(item.outputs) ? item.outputs.join(', ') : '',
+          outputRows: normalizeOutputRows(Array.isArray(item.outputs) ? item.outputs : []),
           consumes: formatConsumesText(item.consumes),
           datasource: item.datasource || 'saas_db',
           resultMode: item.result_mode || 'records',
@@ -2519,6 +2572,7 @@
           dividerCn: typeof node.dividerCn === 'string' ? node.dividerCn : '',
           dividerEn: typeof node.dividerEn === 'string' ? node.dividerEn : '',
           description: typeof node.description === 'string' ? node.description : '',
+          outputRows: normalizeOutputRows(node.outputRows),
           variableValue: typeof node.variableValue === 'string' ? node.variableValue : '',
           variableWhenRows: Array.isArray(node.variableWhenRows)
             ? node.variableWhenRows
@@ -2568,6 +2622,65 @@
           };
         })
         .filter(Boolean);
+    }
+
+    function normalizeOutputRows(outputRows) {
+      if (Array.isArray(outputRows)) {
+        const normalizedFromRows = outputRows
+          .map((row) => {
+            if (typeof row === 'string') {
+              return row.trim();
+            }
+            return row && typeof row.field === 'string' ? row.field.trim() : '';
+          })
+          .filter(Boolean)
+          .map((field) => ({ field }));
+        return normalizedFromRows.length ? normalizedFromRows : [{ field: '' }];
+      }
+      return [{ field: '' }];
+    }
+
+    function formatOutputsText(rowsOrFields) {
+      if (!Array.isArray(rowsOrFields) || !rowsOrFields.length) return '';
+      if (typeof rowsOrFields[0] === 'string') {
+        return rowsOrFields
+          .map((field) => field.trim())
+          .filter(Boolean)
+          .join(', ');
+      }
+      return rowsOrFields
+        .map((row) => (row && typeof row.field === 'string' ? row.field.trim() : ''))
+        .filter(Boolean)
+        .join(', ');
+    }
+
+    function getOutputFields(node) {
+      if (!node || typeof node !== 'object') return [];
+      const rows = normalizeOutputRows(node.outputRows);
+      return rows
+        .map((row) => row.field)
+        .filter(Boolean);
+    }
+
+    function formatVariableWhenSummary(variableWhenRows) {
+      if (!Array.isArray(variableWhenRows) || !variableWhenRows.length) {
+        return '无';
+      }
+      const normalizedRows = variableWhenRows
+        .filter((row) => row && typeof row === 'object')
+        .map((row) => ({
+          condition: typeof row.condition === 'string' ? row.condition.trim() : '',
+          value: normalizeValueToInput(Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : ''),
+        }))
+        .filter((row) => row.condition);
+      if (!normalizedRows.length) {
+        return '无';
+      }
+      const [firstRow] = normalizedRows;
+      if (normalizedRows.length === 1) {
+        return `${firstRow.condition} => ${firstRow.value || '(空)'}`;
+      }
+      return `${firstRow.condition} => ${firstRow.value || '(空)'} 等 ${normalizedRows.length} 条`;
     }
 
     function formatConsumesText(consumes) {
