@@ -79,13 +79,7 @@ class MessageRenderer(MessageRenderHelpers):
         if not array_tokens:
             return []
 
-        token_lengths = {len(values) for values in array_tokens.values()}
-        if len(token_lengths) != 1:
-            raise DSLExecutionError(
-                "sub_repeat list placeholders must have the same length.",
-            )
-
-        token_size = token_lengths.pop()
+        token_size = self._validate_and_get_array_token_size(array_tokens)
         rendered: list[str] = []
         for index in range(token_size):
             overrides = {token: values[index] for token, values in array_tokens.items()}
@@ -108,6 +102,15 @@ class MessageRenderer(MessageRenderHelpers):
                 token_map[reference_token] = list(value)
         return token_map
 
+    @staticmethod
+    def _validate_and_get_array_token_size(array_tokens: Mapping[str, list[Any]]) -> int:
+        token_lengths = {len(values) for values in array_tokens.values()}
+        if len(token_lengths) != 1:
+            raise DSLExecutionError(
+                "sub_repeat/full_repeat list placeholders must have the same length.",
+            )
+        return token_lengths.pop()
+
 
     def render_once(
         self,
@@ -126,6 +129,31 @@ class MessageRenderer(MessageRenderHelpers):
         local_data: Optional[Any] = None,
     ) -> list[str]:
         return self._render_sub_repeat_segments(segment, state, rows, local_data=local_data)
+
+    def render_full_repeat_messages(
+        self,
+        template: str,
+        state: ExecutionState,
+        rows: Sequence[Mapping[str, Any]],
+        local_data: Optional[Any] = None,
+    ) -> list[str]:
+        array_tokens = self._collect_array_tokens(template, state, local_data)
+        if not array_tokens:
+            if not rows:
+                return []
+            return [self._render_once(template, state, row, local_data=local_data) for row in rows]
+
+        token_size = self._validate_and_get_array_token_size(array_tokens)
+        if rows and len(rows) != token_size:
+            raise DSLExecutionError(
+                "full_repeat list placeholders must have the same length as result rows.",
+            )
+        row_sequence: list[Optional[Mapping[str, Any]]] = list(rows) if rows else [None] * token_size
+        rendered: list[str] = []
+        for index, row in enumerate(row_sequence):
+            overrides = {token: values[index] for token, values in array_tokens.items()}
+            rendered.append(self._render_once(template, state, row, overrides=overrides, local_data=local_data))
+        return rendered
 
     def resolve_full_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
         return self._resolve_full_repeat_divider(policy, locale)

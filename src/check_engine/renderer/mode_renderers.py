@@ -43,6 +43,16 @@ class MessageRenderHelpers(ABC):
     def resolve_sub_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
         """解析 sub_repeat 分隔符。"""
 
+    @abstractmethod
+    def render_full_repeat_messages(
+        self,
+        template: str,
+        state: ExecutionState,
+        rows: Sequence[Mapping[str, Any]],
+        local_data: Optional[Any] = None,
+    ) -> list[str]:
+        """渲染 full_repeat 每个重复片段。"""
+
 
 class ModeRenderer(ABC):
     """渲染模式策略接口。"""
@@ -101,11 +111,12 @@ class FullRepeatModeRenderer(ModeRenderer):
         local_data: Optional[Any],
         helpers: MessageRenderHelpers,
     ) -> str:
-        if not rows:
+        messages = helpers.render_full_repeat_messages(template, state, rows, local_data=local_data)
+        if not messages:
             return helpers.render_once(template, state, None, local_data=local_data)
 
         divider = helpers.resolve_full_repeat_divider(policy, locale)
-        return divider.join(helpers.render_once(template, state, row, local_data=local_data) for row in rows)
+        return divider.join(messages)
 
 
 @dataclass(frozen=True)

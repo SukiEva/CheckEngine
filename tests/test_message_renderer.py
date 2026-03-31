@@ -173,6 +173,44 @@ class MessageRendererTestCase(unittest.TestCase):
         self.assertEqual(message_cn, "结果：1,200-5.6 | 3,000-7.0")
         self.assertEqual(message_en, "result: 1,200-5.6 | 3,000-7.0")
 
+    def test_render_full_repeat_with_formatted_array_paths(self) -> None:
+        self.state.step_data = {
+            "a": {
+                "out1": [1200.2, 3000],
+                "out2": [5.6, 7.0],
+            }
+        }
+        policy = FailPolicy(
+            decision="exists($steps.a.out1)",
+            mode="full_repeat",
+            divider=" | ",
+            message_cn="金额f{$steps.a.out1:,.0f}，汇率f{$steps.a.out2:,.1f}",
+            message_en="amount f{$steps.a.out1:,.0f}, rate f{$steps.a.out2:,.1f}",
+        )
+
+        message_cn, message_en = self.renderer.render(policy, self.state)
+
+        self.assertEqual(message_cn, "金额1,200，汇率5.6 | 金额3,000，汇率7.0")
+        self.assertEqual(message_en, "amount 1,200, rate 5.6 | amount 3,000, rate 7.0")
+
+    def test_render_full_repeat_with_rows_and_array_length_mismatch(self) -> None:
+        self.state.step_data = {
+            "a": {
+                "out1": [1200.2],
+            }
+        }
+        policy = FailPolicy(
+            decision="exists($steps.a.out1)",
+            mode="full_repeat",
+            divider=" | ",
+            message_cn="金额f{$steps.a.out1:,.0f}-{func}",
+            message_en="amount f{$steps.a.out1:,.0f}-{func}",
+        )
+        rows = [{"func": "A"}, {"func": "B"}]
+
+        with self.assertRaisesRegex(DSLExecutionError, "same length as result rows"):
+            self.renderer.render(policy, self.state, rows)
+
     def test_render_single_with_multiple_formatted_placeholders(self) -> None:
         self.state.step_data = {"exchange_rate": {"final_amount": 12345.67}}
         self.state.variables_data = {"threshold": 1000.4}
