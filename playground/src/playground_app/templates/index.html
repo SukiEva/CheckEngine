@@ -626,10 +626,9 @@
       <div class="canvas-toolbar">
         <button class="el-button el-button--primary" id="btnReset"><span class="ep-icon">delete_sweep</span>清空画布</button>
         <button class="el-button el-button--default is-plain" id="btnImport"><span class="ep-icon">upload_file</span>导入 JSON</button>
-        <button class="el-button el-button--default is-plain" id="btnPreview"><span class="ep-icon">visibility</span>预览 JSON</button>
         <button class="el-button el-button--default is-plain" id="btnValidate"><span class="ep-icon">fact_check</span>校验 DSL</button>
         <button class="el-button el-button--success is-plain" id="btnRun"><span class="ep-icon">play_circle</span>运行 DSL</button>
-        <button class="el-button el-button--default is-plain" id="btnExport"><span class="ep-icon">download</span>下载 JSON</button>
+        <button class="el-button el-button--default is-plain" id="btnPreview"><span class="ep-icon">visibility</span>预览 JSON</button>
         <input type="file" id="fileImportJson" accept="application/json" style="display:none;" />
       </div>
       <section id="canvas">
@@ -652,7 +651,11 @@
   <dialog id="jsonPreviewDialog" class="ep-dialog">
     <div style="padding:12px 14px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
       <strong style="font-size:0.95rem;">ExecDSL JSON 预览</strong>
-      <button class="el-button el-button--default is-plain" id="btnClosePreview" style="padding:6px 10px;"><span class="ep-icon">close</span>关闭</button>
+      <div style="display:flex; gap:8px;">
+        <button class="el-button el-button--default is-plain" id="btnCopyPreview" style="padding:6px 10px;"><span class="ep-icon">content_copy</span>复制</button>
+        <button class="el-button el-button--default is-plain" id="btnDownloadPreview" style="padding:6px 10px;"><span class="ep-icon">download</span>下载</button>
+        <button class="el-button el-button--default is-plain" id="btnClosePreview" style="padding:6px 10px;"><span class="ep-icon">close</span>关闭</button>
+      </div>
     </div>
     <div style="padding:12px;">
       <pre id="dslPreview"><code id="dslPreviewCode" class="language-json"></code></pre>
@@ -1176,6 +1179,8 @@
         } else {
           node.decision = '';
         }
+        const currentStepOrder = Number.isFinite(node.stepOrder) ? Number(node.stepOrder) : index + 1;
+
         if (node.type === 'variable') {
           node.variableWhenRows = readVariableWhenRows();
           node.variableDefault = document.getElementById('f_variable_default').value.trim();
@@ -2113,6 +2118,7 @@
         const sqlParams = Array.isArray(node.sqlParams)
           ? sqlParamsRowsToObject(node.sqlParams)
           : parseJsonObjectOrEmpty(node.sqlParamsText || '{}');
+        const currentStepOrder = Number.isFinite(node.stepOrder) ? Number(node.stepOrder) : index + 1;
 
         if (node.type === 'variable') {
           const variableDefault = parseInputValue(node.variableDefault);
@@ -2129,10 +2135,15 @@
               })
               .filter((whenRow) => whenRow.condition)
             : [];
-          variables[key] = {
+          steps.push({
+            name: key,
+            ...(node.description ? { description: node.description } : {}),
+            type: 'variable',
             when: variableWhenRows,
             default: variableDefault,
-          };
+            consumes: parseConsumesRows(node.consumeRows),
+            _step_order: currentStepOrder,
+          });
         }
 
         if (node.type === 'step') {
@@ -2146,7 +2157,7 @@
             sql_params: sqlParams,
             consumes: parseConsumesRows(node.consumeRows),
             outputs,
-            _step_order: node.stepOrder || 0,
+            _step_order: currentStepOrder,
           };
           if (node.precheckPolicyType === 'on_pass') {
             stepPayload.on_pass = {
@@ -2281,6 +2292,27 @@
       });
 
       (normalizedPayload.steps || []).forEach((item) => {
+        if (item.type === 'variable') {
+          const variableWhenItems = Array.isArray(item.when) ? item.when : [];
+          pushNode('variable', item.name || '', {
+            variableWhenRows: variableWhenItems.length
+              ? variableWhenItems.map((whenItem) => ({
+                condition: normalizeValueToInput(whenItem.condition),
+                value: normalizeValueToInput(whenItem.value),
+              }))
+              : [],
+            variableDefault: normalizeValueToInput(item.default),
+            consumes: formatConsumesText(item.consumes),
+            stepOrder: nextNodes.filter((node) => node.type === 'step' || node.type === 'variable').length + 1,
+            consumeRows: normalizeConsumes(item.consumes).map((consume) => ({
+              stepName: (consume.from || '').replace(/^\$steps\./, ''),
+              alias: consume.alias || '',
+            })),
+            description: item.description || '',
+          });
+          return;
+        }
+
         const hasStepPolicy = !!(item.on_fail || item.on_pass);
         const hasOnFail = !!(item.on_fail && typeof item.on_fail === 'object');
         pushNode('step', item.name || '', {
@@ -2303,7 +2335,7 @@
           resultMode: item.result_mode || 'records',
           sqlParamsText: JSON.stringify(item.sql_params || {}, null, 2),
           sqlParams: objectToSqlParamsRows(item.sql_params || {}),
-          stepOrder: nextNodes.filter((node) => node.type === 'step').length + 1,
+          stepOrder: nextNodes.filter((node) => node.type === 'step' || node.type === 'variable').length + 1,
           consumeRows: normalizeConsumes(item.consumes).map((consume) => ({
             stepName: (consume.from || '').replace(/^\$steps\./, ''),
             alias: consume.alias || '',
@@ -2525,7 +2557,7 @@
             dsl_text: JSON.stringify(dslPayload, null, 2),
           }),
         });
-        const payload = await response.json();
+        const payload = await parseApiPayload(response);
         if (!response.ok) {
           statusText.classList.add('status-warn');
           statusText.innerHTML = `<strong>校验失败：</strong>${escapeHtml(payload.detail || payload.error || '未知错误')}`;
@@ -2576,7 +2608,7 @@
             datasources: datasourcePayload,
           }),
         });
-        const payload = await response.json();
+        const payload = await parseApiPayload(response);
         if (!response.ok) {
           runtimeStatus.textContent = `执行失败: ${payload.detail || payload.error || '未知错误'}`;
           renderRuntimeResult(payload);
@@ -2590,6 +2622,18 @@
         runtimeStatus.textContent = `请求失败: ${error.message || '网络错误'}`;
       } finally {
         setRunButtonLoading(false);
+      }
+    }
+
+    async function parseApiPayload(response) {
+      const responseText = await response.text();
+      if (!responseText.trim()) {
+        return {};
+      }
+      try {
+        return JSON.parse(responseText);
+      } catch (_error) {
+        return { error: responseText };
       }
     }
 
@@ -2979,15 +3023,26 @@
       closeDslPreview();
     });
 
-    document.getElementById('btnExport').addEventListener('click', () => {
+    document.getElementById('btnCopyPreview').addEventListener('click', async () => {
       const json = JSON.stringify(toDslObject(), null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'execdsl_flow_design.json';
-      a.click();
-      URL.revokeObjectURL(url);
+      try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(json);
+        } else {
+          fallbackCopyText(json);
+        }
+        statusText.classList.remove('status-warn');
+        statusText.textContent = '已复制 DSL JSON。';
+      } catch (error) {
+        statusText.classList.add('status-warn');
+        statusText.innerHTML = `<strong>复制失败：</strong>${escapeHtml(error.message || '请手动复制预览内容')}`;
+      }
+    });
+
+    document.getElementById('btnDownloadPreview').addEventListener('click', () => {
+      const json = JSON.stringify(toDslObject(), null, 2);
+      downloadDslJson(json);
+      statusText.classList.remove('status-warn');
       statusText.textContent = '已下载 DSL JSON。';
     });
 
@@ -3047,6 +3102,32 @@
         renderRuntimeInputRows();
         saveInputConfigLocal();
       });
+    }
+
+    function downloadDslJson(jsonText) {
+      const blob = new Blob([jsonText], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = url;
+      downloadLink.download = 'execdsl_flow_design.json';
+      downloadLink.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function fallbackCopyText(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', 'readonly');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const copySuccess = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      if (!copySuccess) {
+        throw new Error('浏览器不支持自动复制，请手动复制。');
+      }
     }
 
     loadLocal();
