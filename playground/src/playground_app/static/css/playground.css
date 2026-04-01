@@ -369,7 +369,6 @@
       line-height: 16px;
       text-align: center;
       margin: 0;
-      transform: translateX(0.5px);
     }
     .node-action-btn .ep-icon.material-icons-outlined {
       font-size: 16px;
