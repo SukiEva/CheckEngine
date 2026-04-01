@@ -94,10 +94,12 @@ export function createCanvasRenderer(options) {
           <span>${node.type}</span>
           <span class="node-head-actions">
             <span class="node-rank-chip">${nodeRank}</span>
-            ${buildNodeActionButtons(node)}
-            ${showDeleteAction
-              ? '<button class="node-action-btn node-action-danger" type="button" data-node-action="delete" title="删除节点" aria-label="删除节点"><span class="ep-icon">delete</span></button>'
-              : ''}
+            <span class="node-action-group">
+              ${buildNodeActionButtons(node)}
+              ${showDeleteAction
+                ? '<button class="node-action-btn node-action-danger" type="button" data-node-action="delete" title="删除节点" aria-label="删除节点"><span class="ep-icon">delete</span></button>'
+                : ''}
+            </span>
           </span>
         </div>
         <div class="node-body">
