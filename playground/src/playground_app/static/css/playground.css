@@ -363,18 +363,19 @@
     }
     .node-action-btn .ep-icon {
       display: block;
-      width: 28px;
-      height: 28px;
-      font-size: 18px;
-      line-height: 28px;
+      width: 16px;
+      height: 16px;
+      font-size: 16px;
+      line-height: 16px;
       text-align: center;
       margin: 0;
+      transform: translateX(0.5px);
     }
     .node-action-btn .ep-icon.material-icons-outlined {
-      font-size: 18px;
-      line-height: 28px;
-      width: 28px;
-      height: 28px;
+      font-size: 16px;
+      line-height: 16px;
+      width: 16px;
+      height: 16px;
     }
     .muted { color: var(--muted); }
 
