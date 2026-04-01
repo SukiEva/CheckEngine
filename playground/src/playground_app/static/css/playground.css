@@ -319,10 +319,10 @@
     }
     .node-action-btn .ep-icon {
       display: block;
-      width: 16px;
-      height: 16px;
-      font-size: 16px;
-      line-height: 16px;
+      width: 18px;
+      height: 18px;
+      font-size: 18px;
+      line-height: 18px;
       text-align: center;
     }
     .muted { color: var(--muted); }
