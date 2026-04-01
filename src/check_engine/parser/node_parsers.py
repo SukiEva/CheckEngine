@@ -28,6 +28,7 @@ from ..dsl import (
     VariableField,
 )
 from ..exceptions import DSLParseError
+from ..step_registry import StepTypeRegistry, build_default_step_registry
 
 
 @dataclass(frozen=True)
@@ -47,13 +48,7 @@ class JsonNodeParser:
     """节点级解析器，负责变量/步骤/失败策略的转换。"""
 
     helpers: ParserHelpers
-    _step_parsers: Mapping[str, Callable[[Mapping[str, Any], str, Sequence[ConsumeSpec]], StepNode]] = field(init=False)
-
-    def __post_init__(self) -> None:
-        self._step_parsers = {
-            NODE_TYPE_SQL: self._parse_sql_step,
-            NODE_TYPE_VARIABLE: self._parse_variable_step,
-        }
+    step_registry: StepTypeRegistry = field(default_factory=build_default_step_registry)
 
     def parse_variables(self, value: Any, path: str) -> Mapping[str, VariableDefinition]:
         mapping = self.helpers.expect_dict(value, path)
@@ -70,6 +65,7 @@ class JsonNodeParser:
                     for index, item in enumerate(when_items)
                 ],
                 default=definition.get(VariableField.DEFAULT),
+                default_specified=VariableField.DEFAULT in definition,
             )
 
         return variables
@@ -82,10 +78,8 @@ class JsonNodeParser:
             mapping = self.helpers.expect_dict(item, node_path)
             node_type = cast(NodeType, self.helpers.expect_string(mapping.get(SqlNodeField.TYPE), f"{node_path}.{SqlNodeField.TYPE}"))
             consumes = self._parse_consumes(mapping, node_path)
-            parser = self._step_parsers.get(node_type)
-            if parser is None:
-                raise DSLParseError(f"{node_path}.{SqlNodeField.TYPE} is not supported: {node_type}")
-            nodes.append(parser(mapping, node_path, consumes))
+            definition = self.step_registry.require(node_type, f"{node_path}.{SqlNodeField.TYPE}")
+            nodes.append(definition.parse(self, mapping, node_path, consumes))
         return nodes
 
     def parse_fail_policy(self, value: Any, path: str, required: bool = True) -> Optional[FailPolicy]:
@@ -133,49 +127,9 @@ class JsonNodeParser:
             "type": node_type,
             "when": [self._parse_variable_condition(item, index, when_path) for index, item in enumerate(when_items)],
             "default": mapping.get(VariableField.DEFAULT),
+            "default_specified": VariableField.DEFAULT in mapping,
             "description": self.helpers.optional_string(mapping.get(SqlNodeField.DESCRIPTION), f"{path}.{SqlNodeField.DESCRIPTION}"),
         }
-
-    def _parse_sql_step(self, mapping: Mapping[str, Any], node_path: str, consumes: Sequence[ConsumeSpec]) -> StepNode:
-        sql_node_fields = self.parse_sql_node_fields(mapping, node_path, NODE_TYPE_SQL)
-        return SqlStepNode(
-            name=self.helpers.expect_string(
-                mapping.get(NamedNodeField.NAME),
-                f"{node_path}.{NamedNodeField.NAME}",
-            ),
-            consumes=consumes,
-            on_fail=self.parse_fail_policy(
-                mapping.get(FailPolicyField.ON_FAIL),
-                f"{node_path}.{FailPolicyField.ON_FAIL}",
-                required=False,
-            ),
-            on_pass=self.parse_pass_policy(
-                mapping.get(FailPolicyField.ON_PASS),
-                f"{node_path}.{FailPolicyField.ON_PASS}",
-            ),
-            **sql_node_fields,
-        )
-
-    def _parse_variable_step(self, mapping: Mapping[str, Any], node_path: str, consumes: Sequence[ConsumeSpec]) -> StepNode:
-        node_type = cast(NodeType, self.helpers.expect_string(mapping.get(SqlNodeField.TYPE), f"{node_path}.{SqlNodeField.TYPE}"))
-        variable_node_fields = self.parse_variable_node_fields(mapping, node_path, node_type)
-        return VariableStepNode(
-            name=self.helpers.expect_string(
-                mapping.get(NamedNodeField.NAME),
-                f"{node_path}.{NamedNodeField.NAME}",
-            ),
-            consumes=consumes,
-            on_fail=self.parse_fail_policy(
-                mapping.get(FailPolicyField.ON_FAIL),
-                f"{node_path}.{FailPolicyField.ON_FAIL}",
-                required=False,
-            ),
-            on_pass=self.parse_pass_policy(
-                mapping.get(FailPolicyField.ON_PASS),
-                f"{node_path}.{FailPolicyField.ON_PASS}",
-            ),
-            **variable_node_fields,
-        )
 
     def _parse_variable_condition(self, item: Any, index: int, when_path: str) -> VariableCondition:
         condition_path = f"{when_path}[{index}]"
@@ -186,6 +140,7 @@ class JsonNodeParser:
                 f"{condition_path}.{VariableField.CONDITION}",
             ),
             value=condition_mapping.get(VariableField.VALUE),
+            value_specified=VariableField.VALUE in condition_mapping,
         )
 
     def _parse_consumes(self, mapping: Mapping[str, Any], node_path: str) -> Sequence[ConsumeSpec]:

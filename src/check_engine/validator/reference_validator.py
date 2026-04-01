@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
-from typing import Callable, NoReturn, Optional
+from typing import NoReturn, Optional
 
 from ..dsl import (
     DslDocument,
@@ -19,22 +18,23 @@ from ..dsl import (
     VariableDefinition,
     VariableStepNode,
 )
-from ..exceptions import DSLValidationError
+from ..exceptions import DSLExecutionError, DSLValidationError
+from ..reference_parser import ReferenceParser, ReferenceSpec
+from ..renderer.template_parser import TemplateParser
+from ..step_registry import StepTypeRegistry, build_default_step_registry
 
 
 class ReferenceValidator:
     """校验 DSL 中的作用域引用是否合法。"""
 
-    PATH_PATTERN = re.compile(r"\$(?:\.(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)?|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
-    EXISTS_CALL_PATTERN = re.compile(
-        r"(?:not\s+)?exists\(\s*(\$(?:\.(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)?|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*))\s*\)"
-    )
-
-    def __init__(self) -> None:
-        self.step_reference_validators: dict[str, Callable[[StepNode, DslDocument, set[str], set[str], dict[str, StepNode], str], None]] = {
-            NODE_TYPE_SQL: self._validate_sql_step_references,
-            NODE_TYPE_VARIABLE: self._validate_variable_step_references,
-        }
+    def __init__(
+        self,
+        reference_parser: Optional[ReferenceParser] = None,
+        step_registry: Optional[StepTypeRegistry] = None,
+    ) -> None:
+        self.reference_parser = reference_parser or ReferenceParser()
+        self.template_parser = TemplateParser(self.reference_parser)
+        self.step_registry = step_registry or build_default_step_registry()
 
     def validate(self, document: DslDocument) -> None:
         step_names = tuple(step.name for step in document.steps)
@@ -48,9 +48,10 @@ class ReferenceValidator:
 
         available_steps: set[str] = set()
         for index, step in enumerate(document.steps):
-            step_reference_validator = self.step_reference_validators.get(step.type)
-            if step_reference_validator is not None:
-                step_reference_validator(
+            step_definition = self.step_registry.get(step.type)
+            if step_definition is not None:
+                step_definition.validate_references(
+                    self,
                     step,
                     document,
                     available_steps,
@@ -104,7 +105,7 @@ class ReferenceValidator:
     ) -> None:
         variable_path_prefix = path_prefix or f"variables.{variable_name}"
         for index, condition in enumerate(definition.when):
-            for reference in self._extract_references(condition.condition):
+            for reference in self.reference_parser.extract_references(condition.condition):
                 self._validate_reference(
                     reference,
                     document,
@@ -126,8 +127,9 @@ class ReferenceValidator:
     ) -> None:
         for key, value in sql_params.items():
             if isinstance(value, str) and value.startswith("$"):
+                reference_spec = self._parse_reference_for_validation(value, f"{path_prefix}.{key}")
                 self._validate_reference(
-                    value,
+                    reference_spec,
                     document,
                     available_steps=available_steps,
                     available_variables=available_variables,
@@ -144,16 +146,20 @@ class ReferenceValidator:
         step_map: dict[str, StepNode],
     ) -> None:
         for consume in step.consumes:
-            parts = self._split_reference(consume.from_path)
-            if len(parts) != 2 or parts[0] != "steps":
+            reference_spec = self._parse_reference_for_validation(
+                consume.from_path,
+                "consumes.from",
+            )
+            if reference_spec.scope != "steps" or len(reference_spec.path) != 1:
                 self._raise(f"Invalid consumes.from reference: {consume.from_path}")
-            if parts[1] not in available_steps:
+            step_name = reference_spec.path[0]
+            if step_name not in available_steps:
                 self._raise(f"consumes.from references a step that has not executed yet: {consume.from_path}")
-            source_step = self._find_step(step_map, parts[1])
+            source_step = self._find_step(step_map, step_name)
             if not isinstance(source_step, SqlStepNode) or not source_step.outputs:
                 self._raise(f"consumes.from references step outputs that are not declared: {consume.from_path}")
 
-    def _validate_sql_step_references(
+    def validate_sql_step_references(
         self,
         step: StepNode,
         document: DslDocument,
@@ -174,7 +180,7 @@ class ReferenceValidator:
         )
         self._validate_consumes(step, available_steps, document, step_map)
 
-    def _validate_variable_step_references(
+    def validate_variable_step_references(
         self,
         step: StepNode,
         document: DslDocument,
@@ -205,8 +211,11 @@ class ReferenceValidator:
         step_map: dict[str, StepNode],
         local_outputs: Optional[set[str]],
     ) -> None:
-        exists_argument_references = self._extract_exists_argument_references(policy.decision)
-        for reference in self._extract_references(policy.decision):
+        exists_argument_references = {
+            reference.explicit
+            for reference in self.reference_parser.extract_exists_argument_references(policy.decision)
+        }
+        for reference in self.reference_parser.extract_references(policy.decision):
             self._validate_reference(
                 reference,
                 document,
@@ -215,11 +224,11 @@ class ReferenceValidator:
                 path=f"{path}.decision",
                 step_map=step_map,
                 local_outputs=local_outputs,
-                allow_sql_step_root=reference in exists_argument_references,
+                allow_sql_step_root=reference.explicit in exists_argument_references,
             )
 
         for field_name, template in (("message_cn", policy.message_cn), ("message_en", policy.message_en)):
-            for reference in self._extract_references(template):
+            for reference in self._extract_template_references(template):
                 self._validate_reference(
                     reference,
                     document,
@@ -242,8 +251,11 @@ class ReferenceValidator:
         step_map: dict[str, StepNode],
         local_outputs: Optional[set[str]],
     ) -> None:
-        exists_argument_references = self._extract_exists_argument_references(policy.decision)
-        for reference in self._extract_references(policy.decision):
+        exists_argument_references = {
+            reference.explicit
+            for reference in self.reference_parser.extract_exists_argument_references(policy.decision)
+        }
+        for reference in self.reference_parser.extract_references(policy.decision):
             self._validate_reference(
                 reference,
                 document,
@@ -252,12 +264,12 @@ class ReferenceValidator:
                 path=f"{path}.decision",
                 step_map=step_map,
                 local_outputs=local_outputs,
-                allow_sql_step_root=reference in exists_argument_references,
+                allow_sql_step_root=reference.explicit in exists_argument_references,
             )
 
     def _validate_reference(
         self,
-        reference: str,
+        reference_spec: ReferenceSpec,
         document: DslDocument,
         available_steps: set[str],
         available_variables: set[str],
@@ -266,100 +278,107 @@ class ReferenceValidator:
         local_outputs: Optional[set[str]],
         allow_sql_step_root: bool = False,
     ) -> None:
-        parts = self._split_reference(reference)
-        if not parts:
-            self._raise(f"{path} contains invalid reference: {reference}")
-
-        if parts[0] == "":
+        del document
+        if reference_spec.is_local:
             self._validate_local_reference(
-                reference,
-                parts,
+                reference_spec,
                 path,
                 local_outputs,
                 allow_local_root=allow_sql_step_root,
             )
             return
 
-        root = parts[0]
+        root = reference_spec.scope
         if root == "input":
-            if len(parts) < 2:
-                self._raise(f"{path} input reference must include a field: {reference}")
+            if not reference_spec.path:
+                self._raise(f"{path} input reference must include a field: {reference_spec.explicit}")
             return
 
         if root == "variables":
-            if len(parts) != 2:
-                self._raise(f"{path} variables reference has invalid depth: {reference}")
-            if parts[1] not in available_variables:
-                self._raise(f"{path} references a variable not available at this point: {reference}")
+            if len(reference_spec.path) != 1:
+                self._raise(f"{path} variables reference has invalid depth: {reference_spec.explicit}")
+            if reference_spec.path[0] not in available_variables:
+                self._raise(f"{path} references a variable not available at this point: {reference_spec.explicit}")
             return
 
         if root == "steps":
-            if len(parts) not in (2, 3):
-                self._raise(f"{path} steps reference has invalid depth: {reference}")
-            step_name = parts[1]
+            step_path = reference_spec.path
+            if len(step_path) not in (1, 2):
+                self._raise(f"{path} steps reference has invalid depth: {reference_spec.explicit}")
+            step_name = step_path[0]
             if step_name not in available_steps:
-                self._raise(f"{path} references a step not available at this point: {reference}")
+                self._raise(f"{path} references a step not available at this point: {reference_spec.explicit}")
             step = self._find_step(step_map, step_name)
-            if len(parts) == 2:
+            if len(step_path) == 1:
                 if step.type == NODE_TYPE_VARIABLE:
                     return
                 if allow_sql_step_root and step.type == NODE_TYPE_SQL:
                     if not isinstance(step, SqlStepNode):
-                        self._raise(f"{path} references an unsupported step type: {reference}")
+                        self._raise(f"{path} references an unsupported step type: {reference_spec.explicit}")
                     if not step.outputs:
-                        self._raise(f"{path} references step outputs that are not declared: {reference}")
+                        self._raise(f"{path} references step outputs that are not declared: {reference_spec.explicit}")
                     return
                 if step.type != NODE_TYPE_VARIABLE:
-                    self._raise(f"{path} sql step reference must include exported field: {reference}")
+                    self._raise(f"{path} sql step reference must include exported field: {reference_spec.explicit}")
+            if len(step_path) != 2:
+                self._raise(f"{path} steps reference has invalid depth: {reference_spec.explicit}")
             if step.type == NODE_TYPE_VARIABLE:
-                self._raise(f"{path} variable step reference only supports $steps.<name>: {reference}")
+                self._raise(f"{path} variable step reference only supports $steps.<name>: {reference_spec.explicit}")
             if not isinstance(step, SqlStepNode):
-                self._raise(f"{path} references an unsupported step type: {reference}")
-            field_name = parts[2]
+                self._raise(f"{path} references an unsupported step type: {reference_spec.explicit}")
+            field_name = step_path[1]
             if not step.outputs:
-                self._raise(f"{path} references step outputs that are not declared: {reference}")
+                self._raise(f"{path} references step outputs that are not declared: {reference_spec.explicit}")
             if field_name not in step.outputs:
-                self._raise(f"{path} references a non-exported step field: {reference}")
+                self._raise(f"{path} references a non-exported step field: {reference_spec.explicit}")
             return
 
-        self._raise(f"{path} contains unknown scope: {reference}")
+        self._raise(f"{path} contains unknown scope: {reference_spec.explicit}")
 
     def _validate_local_reference(
         self,
-        reference: str,
-        parts: list[str],
+        reference_spec: ReferenceSpec,
         path: str,
         local_outputs: Optional[set[str]],
         allow_local_root: bool = False,
     ) -> None:
         if local_outputs is None:
-            self._raise(f"{path} cannot use local scope reference: {reference}")
-        if len(parts) == 2 and parts[1] == "":
+            self._raise(f"{path} cannot use local scope reference: {reference_spec.explicit}")
+        if not reference_spec.path:
             if allow_local_root:
                 return
-            self._raise(f"{path} local reference must include a field: {reference}")
-        if len(parts) < 2:
-            self._raise(f"{path} local reference must include a field: {reference}")
-        field_name = parts[1]
+            self._raise(f"{path} local reference must include a field: {reference_spec.explicit}")
+        field_name = reference_spec.path[0]
         if field_name not in local_outputs:
-            self._raise(f"{path} references a non-exported local field: {reference}")
+            self._raise(f"{path} references a non-exported local field: {reference_spec.explicit}")
 
-    def _validate_single_mode_message_reference(self, reference: str, step_map: dict[str, StepNode], path: str) -> None:
-        parts = self._split_reference(reference)
-        if len(parts) == 3 and parts[0] == "steps":
-            step = self._find_step(step_map, parts[1])
+    def _validate_single_mode_message_reference(
+        self,
+        reference_spec: ReferenceSpec,
+        step_map: dict[str, StepNode],
+        path: str,
+    ) -> None:
+        if reference_spec.scope == "steps" and len(reference_spec.path) == 2:
+            step = self._find_step(step_map, reference_spec.path[0])
             if isinstance(step, SqlStepNode) and step.result_mode == RESULT_MODE_RECORDS:
-                self._raise(f"{path} cannot reference array outputs in single mode: {reference}")
+                self._raise(f"{path} cannot reference array outputs in single mode: {reference_spec.explicit}")
 
-    def _extract_references(self, text: str) -> list[str]:
-        return self.PATH_PATTERN.findall(text)
+    def _extract_template_references(self, template: str) -> tuple[ReferenceSpec, ...]:
+        references: list[ReferenceSpec] = []
+        try:
+            for template_token in self.template_parser.extract_tokens(template):
+                if template_token.reference is not None:
+                    references.append(template_token.reference)
+        except DSLExecutionError as exc:
+            self._raise(str(exc))
+        return tuple(references)
 
-    def _extract_exists_argument_references(self, decision: str) -> set[str]:
-        return {match.group(1) for match in self.EXISTS_CALL_PATTERN.finditer(decision)}
-
-    @staticmethod
-    def _split_reference(reference: str) -> list[str]:
-        return reference[1:].split(".") if reference.startswith("$") else []
+    def _parse_reference_for_validation(self, reference: str, path: str) -> ReferenceSpec:
+        try:
+            return self.reference_parser.parse(reference)
+        except DSLExecutionError as exc:
+            self._raise(f"{path} contains invalid reference: {reference}")
+            raise AssertionError("unreachable") from exc
 
     def _find_step(self, step_map: dict[str, StepNode], step_name: str) -> StepNode:
         if step_name in step_map:

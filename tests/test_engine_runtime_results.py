@@ -323,6 +323,28 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             },
         )
 
+    def test_execution_result_is_snapshot_of_runtime_state(self) -> None:
+        input_data = {"payload": {"ids": [1]}}
+        result = ExecutionResult(
+            passed=True,
+            phase="pass",
+            failed_node=None,
+            message_cn=None,
+            message_en=None,
+            error_message=None,
+            runtime_exception=False,
+            input=MappingProxyType({"payload": MappingProxyType({"ids": [1]})}),
+            variables=MappingProxyType({"threshold": 100}),
+            steps=MappingProxyType({"step_a": MappingProxyType({"values": [1]})}),
+        )
+
+        input_data["payload"]["ids"].append(2)
+
+        self.assertEqual(result.input, {"payload": {"ids": [1]}})
+        self.assertEqual(result.steps, {"step_a": {"values": [1]}})
+        with self.assertRaises(TypeError):
+            cast(Any, result.steps)["step_a"] = {"values": [2]}
+
     def test_execute_variable_step_exports_scalar_to_steps_scope(self) -> None:
         engine = DslEngine()
         registry = cast(DatasourceRegistry, _UnusedRegistry())

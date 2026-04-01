@@ -8,13 +8,14 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from ..exceptions import DSLExecutionError
+from ..reference_parser import ReferenceParser, ReferenceSpec
 
 
 class ScopeResolver(ABC):
     """作用域解析策略接口。"""
 
     @abstractmethod
-    def resolve(self, parts: Sequence[str], reference: str) -> Any:
+    def resolve(self, reference_spec: ReferenceSpec) -> Any:
         """根据路径片段解析引用值。"""
 
 
@@ -24,15 +25,15 @@ class MappingScopeResolver(ScopeResolver):
 
     source: Mapping[str, Any]
 
-    def resolve(self, parts: Sequence[str], reference: str) -> Any:
+    def resolve(self, reference_spec: ReferenceSpec) -> Any:
         current: Any = self.source
-        for part in parts:
+        for part in reference_spec.path:
             if not isinstance(current, Mapping):
                 raise DSLExecutionError(
-                    f"Cannot resolve reference path further: {reference}",
+                    f"Cannot resolve reference path further: {reference_spec.explicit}",
                 )
             if part not in current:
-                raise DSLExecutionError(f"Referenced field does not exist: {reference}")
+                raise DSLExecutionError(f"Referenced field does not exist: {reference_spec.explicit}")
             current = current[part]
         return current
 
@@ -43,14 +44,14 @@ class StepScopeResolver(ScopeResolver):
 
     step_data: MutableMapping[str, Any]
 
-    def resolve(self, parts: Sequence[str], reference: str) -> Any:
-        step_name = self._require_step_name(parts, reference)
+    def resolve(self, reference_spec: ReferenceSpec) -> Any:
+        step_name = self._require_step_name(reference_spec)
         if step_name not in self.step_data:
-            raise DSLExecutionError(f"Step execution result not found: {reference}")
+            raise DSLExecutionError(f"Step execution result not found: {reference_spec.explicit}")
 
         current = self.step_data[step_name]
-        for part in parts[1:]:
-            current = self._resolve_next(current, part, reference)
+        for part in reference_spec.path[1:]:
+            current = self._resolve_next(current, part, reference_spec.explicit)
         return current
 
     def _resolve_next(self, current: Any, part: str, reference: str) -> Any:
@@ -80,12 +81,12 @@ class StepScopeResolver(ScopeResolver):
         )
 
     @staticmethod
-    def _require_step_name(parts: Sequence[str], reference: str) -> str:
-        if len(parts) < 1 or not parts[0]:
+    def _require_step_name(reference_spec: ReferenceSpec) -> str:
+        if not reference_spec.path or not reference_spec.path[0]:
             raise DSLExecutionError(
-                f"Steps reference must include step name: {reference}",
+                f"Steps reference must include step name: {reference_spec.explicit}",
             )
-        return parts[0]
+        return reference_spec.path[0]
 
     @staticmethod
     def _is_projectable_sequence(value: Any) -> bool:
@@ -99,6 +100,7 @@ class RuntimeReferenceResolver:
     input_data: Mapping[str, Any]
     variables_data: Mapping[str, Any]
     step_data: MutableMapping[str, Any] = field(default_factory=dict)
+    reference_parser: ReferenceParser = field(default_factory=ReferenceParser)
     _resolvers: dict[str, ScopeResolver] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -131,30 +133,28 @@ class RuntimeReferenceResolver:
         }
 
     def resolve_reference(self, reference: str, local_data: Optional[Any] = None) -> Any:
-        if reference.startswith("$."):
-            return self._resolve_local_reference(reference, local_data)
+        reference_spec = self.reference_parser.parse(reference)
+        if reference_spec.is_local:
+            return self._resolve_local_reference(reference_spec, local_data)
 
-        parts = self.parse_reference_parts(reference)
-        scope = parts[0]
+        scope = reference_spec.scope
         resolver = self._resolvers.get(scope)
         if resolver is None:
-            raise DSLExecutionError(f"Unknown scope: {reference}")
-        return resolver.resolve(parts[1:], reference)
+            raise DSLExecutionError(f"Unknown scope: {reference_spec.explicit}")
+        return resolver.resolve(reference_spec)
 
-    def _resolve_local_reference(self, reference: str, local_data: Optional[Any]) -> Any:
+    def _resolve_local_reference(self, reference_spec: ReferenceSpec, local_data: Optional[Any]) -> Any:
         if local_data is None:
-            raise DSLExecutionError(f"Local scope is not available for reference: {reference}")
+            raise DSLExecutionError(
+                f"Local scope is not available for reference: {reference_spec.explicit}",
+            )
 
-        suffix = reference[2:]
-        if not suffix:
+        if not reference_spec.path:
             return local_data
 
-        parts = suffix.split(".")
         current: Any = local_data
-        for part in parts:
-            if not part:
-                raise DSLExecutionError(f"Invalid reference path: {reference}")
-            current = self._resolve_local_part(current, part, reference)
+        for part in reference_spec.path:
+            current = self._resolve_local_part(current, part, reference_spec.explicit)
         return current
 
     def _resolve_local_part(self, current: Any, part: str, reference: str) -> Any:
@@ -179,12 +179,5 @@ class RuntimeReferenceResolver:
             f"Cannot resolve reference path further: {reference}",
         )
 
-    @staticmethod
-    def parse_reference_parts(reference: str) -> list[str]:
-        if not reference.startswith("$"):
-            raise DSLExecutionError(f"Invalid reference path: {reference}")
-        if reference.startswith("$."):
-            raise DSLExecutionError(
-                f"Local reference requires runtime local scope and cannot be parsed globally: {reference}",
-            )
-        return reference[1:].split(".")
+    def parse_reference(self, reference: str) -> ReferenceSpec:
+        return self.reference_parser.parse(reference)

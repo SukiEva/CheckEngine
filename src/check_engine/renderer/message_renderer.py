@@ -3,25 +3,27 @@
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import Sequence
 from typing import Any, Mapping, Optional
 
 from ..dsl import FAIL_MODE_FULL_REPEAT, FAIL_MODE_SINGLE, FAIL_MODE_SUB_REPEAT, FailPolicy
 from ..exceptions import DSLExecutionError
 from ..runtime import ExecutionState
+from .render_context import RenderContext
+from .template_parser import TemplateParser, TemplateToken
 from .mode_renderers import FullRepeatModeRenderer, MessageRenderHelpers, ModeRenderer, SingleModeRenderer, SubRepeatModeRenderer
 
 
 class MessageRenderer(MessageRenderHelpers):
     """按 DSL mode 渲染失败消息。"""
 
-    PLACEHOLDER_PATTERN = re.compile(r"\{([^{}]+)\}")
-    FORMAT_PLACEHOLDER_PATTERN = re.compile(r"f\{([^{}]+)\}")
-    IMPLICIT_PATH_PATTERN = re.compile(r"^(input|context|variables|steps)\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$")
-
-    def __init__(self, logger: Optional[logging.Logger] = None) -> None:
+    def __init__(
+        self,
+        logger: Optional[logging.Logger] = None,
+        template_parser: Optional[TemplateParser] = None,
+    ) -> None:
         self.logger = logger or logging.getLogger(__name__)
+        self.template_parser = template_parser or TemplateParser()
         self.mode_renderers: dict[str, ModeRenderer] = {
             FAIL_MODE_SINGLE: SingleModeRenderer(),
             FAIL_MODE_FULL_REPEAT: FullRepeatModeRenderer(),
@@ -93,13 +95,13 @@ class MessageRenderer(MessageRenderHelpers):
         local_data: Optional[Any],
     ) -> dict[str, list[Any]]:
         token_map: dict[str, list[Any]] = {}
-        for token in self._extract_template_tokens(template):
-            reference_token, _ = self._split_format_token(token)
-            if not self._is_global_reference_token(reference_token):
+        render_context = RenderContext(state=state, local_data=local_data)
+        for template_token in self.template_parser.extract_tokens(template):
+            if template_token.reference is None:
                 continue
-            value = self._resolve_global_token(reference_token, state, local_data=local_data)
+            value = render_context.resolve_token(template_token)
             if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-                token_map[reference_token] = list(value)
+                token_map[template_token.token] = list(value)
         return token_map
 
     @staticmethod
@@ -169,95 +171,39 @@ class MessageRenderer(MessageRenderHelpers):
         overrides: Optional[dict[str, Any]] = None,
         local_data: Optional[Any] = None,
     ) -> str:
-        formatted_values: dict[str, str] = {}
-        marker_index = 0
-
-        def replace_formatted(match: re.Match[str]) -> str:
-            nonlocal marker_index
-            marker = self._build_format_marker(marker_index)
-            formatted_values[marker] = self._render_formatted_placeholder(match, state, row, overrides, local_data)
-            marker_index += 1
-            return marker
-
-        formatted_template = self.FORMAT_PLACEHOLDER_PATTERN.sub(replace_formatted, template)
-        rendered_template = self.PLACEHOLDER_PATTERN.sub(
-            lambda match: self._stringify(
-                self._resolve_token_value(match.group(1).strip(), state, row, overrides, local_data)
-            ),
-            formatted_template,
+        render_context = RenderContext(
+            state=state,
+            row=row,
+            overrides=overrides,
+            local_data=local_data,
         )
-        for marker, value in formatted_values.items():
-            rendered_template = rendered_template.replace(marker, value)
-        return rendered_template
+        rendered_parts: list[str] = []
+        cursor = 0
+        for template_token in self.template_parser.extract_tokens(template):
+            rendered_parts.append(template[cursor:template_token.start])
+            rendered_parts.append(self._render_template_token(template_token, render_context))
+            cursor = template_token.end
+        rendered_parts.append(template[cursor:])
+        return "".join(rendered_parts)
 
-    def _render_formatted_placeholder(
-        self,
-        match: re.Match[str],
-        state: ExecutionState,
-        row: Optional[Mapping[str, Any]],
-        overrides: Optional[dict[str, Any]],
-        local_data: Optional[Any],
-    ) -> str:
-        token, format_spec = self._split_format_token(match.group(1).strip())
-        if format_spec is None:
-            raise DSLExecutionError(
-                f"Formatted placeholder must include format spec: {match.group(0)}",
-            )
+    @staticmethod
+    def _render_template_token(template_token: TemplateToken, render_context: RenderContext) -> str:
         try:
-            value = self._resolve_token_value(token, state, row, overrides, local_data)
-            return format(value, format_spec)
+            value = render_context.resolve_token(template_token)
+            if template_token.formatted:
+                if template_token.format_spec is None:
+                    raise DSLExecutionError(
+                        f"Formatted placeholder must include format spec: {template_token.raw}",
+                    )
+                return format(value, template_token.format_spec)
+            return MessageRenderer._stringify(value)
         except DSLExecutionError:
             raise
         except Exception as exc:  # noqa: BLE001
             raise DSLExecutionError(
-                f"Failed to format placeholder: {match.group(0)}",
+                f"Failed to format placeholder: {template_token.raw}",
                 original_exception=exc,
             ) from exc
-
-    def _resolve_token_value(
-        self,
-        token: str,
-        state: ExecutionState,
-        row: Optional[Mapping[str, Any]],
-        overrides: Optional[dict[str, Any]],
-        local_data: Optional[Any],
-    ) -> Any:
-        if overrides is not None and token in overrides:
-            return overrides[token]
-        if self._is_global_reference_token(token):
-            return self._resolve_global_token(token, state, local_data=local_data)
-        if row is None:
-            raise DSLExecutionError(
-                f"Cannot resolve row-level placeholder in template: {token}",
-            )
-        if token not in row:
-            raise DSLExecutionError(
-                f"Template placeholder field does not exist: {token}",
-            )
-        return row[token]
-
-    def _extract_template_tokens(self, template: str) -> list[str]:
-        return [match.group(1).strip() for match in self.PLACEHOLDER_PATTERN.finditer(template)]
-
-    def _is_global_reference_token(self, token: str) -> bool:
-        return token.startswith("$") or self.IMPLICIT_PATH_PATTERN.match(token) is not None
-
-    @staticmethod
-    def _resolve_global_token(token: str, state: ExecutionState, local_data: Optional[Any] = None) -> Any:
-        if token.startswith("$"):
-            return state.resolve_reference(token, local_data=local_data)
-        return state.resolve_path(token)
-
-    @staticmethod
-    def _split_format_token(token: str) -> tuple[str, Optional[str]]:
-        if ":" not in token:
-            return token, None
-        name, format_spec = token.split(":", 1)
-        return name.strip(), format_spec
-
-    @staticmethod
-    def _build_format_marker(index: int) -> str:
-        return "__CHECK_ENGINE_FMT_{0}__".format(index)
 
     @staticmethod
     def _resolve_full_repeat_divider(policy: FailPolicy, locale: str) -> str:

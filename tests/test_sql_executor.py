@@ -65,6 +65,19 @@ class _FakeDatasource(DatasourceLike):
             pass
 
 
+class _ClosableIteratorDatasource(DatasourceLike):
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows = rows
+        self.closed = False
+
+    def get_session(self) -> Generator[_FakeSession, None, None]:
+        session = _FakeSession(self._rows)
+        try:
+            yield session
+        finally:
+            self.closed = True
+
+
 class _MissingSessionDatasource:
     pass
 
@@ -129,6 +142,15 @@ class SqlExecutorTestCase(unittest.TestCase):
         if datasource.last_session is None or datasource.last_session.last_result is None:
             self.fail("fake datasource should record the last session and result")
         self.assertEqual(datasource.last_session.last_result.mappings_result.fetchmany_calls, [2])
+
+    def test_run_sql_closes_iterator_datasource_after_use(self) -> None:
+        executor = SqlExecutor()
+        datasource = _ClosableIteratorDatasource([{"amount": 10}])
+
+        rows = executor._run_sql(cast(Any, datasource), "SELECT 1", {})
+
+        self.assertEqual(rows, [{"amount": 10}])
+        self.assertTrue(datasource.closed)
 
 
     def test_merge_with_clause_supports_existing_recursive_with_and_comments(self) -> None:

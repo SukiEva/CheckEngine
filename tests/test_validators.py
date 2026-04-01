@@ -364,6 +364,60 @@ class ValidatorTestCase(unittest.TestCase):
 
         self.validator.validate(document)
 
+    def test_engine_validate_rejects_implicit_template_step_reference(self) -> None:
+        data = {
+            "steps": [
+                {
+                    "name": "s1",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "false",
+                "mode": "single",
+                "message_cn": "{steps.missing.v}",
+                "message_en": "ok",
+            },
+        }
+
+        from check_engine.engine import DslEngine
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            DslEngine().validate(json.dumps(data))
+        self.assertIn("references a step not available", str(ctx.exception))
+
+    def test_engine_validate_rejects_implicit_template_context_reference(self) -> None:
+        data = {
+            "steps": [
+                {
+                    "name": "s1",
+                    "type": "sql",
+                    "datasource": "db",
+                    "result_mode": "record",
+                    "sql_template": "select 1 as v",
+                    "sql_params": {},
+                    "outputs": ["v"],
+                }
+            ],
+            "on_fail": {
+                "decision": "false",
+                "mode": "single",
+                "message_cn": "{context.flow}",
+                "message_en": "ok",
+            },
+        }
+
+        from check_engine.engine import DslEngine
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            DslEngine().validate(json.dumps(data))
+        self.assertIn("unknown scope", str(ctx.exception))
+
     def test_reserved_step_name_raises(self) -> None:
         data = json.loads(json.dumps(self.example_data))
         data["steps"][0]["name"] = "context"
@@ -554,6 +608,15 @@ class ValidatorTestCase(unittest.TestCase):
         with self.assertRaises(DSLValidationError) as ctx:
             self.structure_validator.validate(document)
         self.assertIn("alias is duplicated", str(ctx.exception))
+
+    def test_invalid_output_identifier_raises(self) -> None:
+        data = json.loads(json.dumps(self.example_data))
+        data["steps"][0]["outputs"] = ["bad-name"]
+        document = self.parser.parse(json.dumps(data))
+
+        with self.assertRaises(DSLValidationError) as ctx:
+            self.structure_validator.validate(document)
+        self.assertIn("valid SQL identifier", str(ctx.exception))
 
     def test_on_fail_single_mode_disallows_records_output_reference(self) -> None:
         data = {

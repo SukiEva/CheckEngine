@@ -70,6 +70,7 @@ class VariableCondition:
 
     condition: str
     value: Any
+    value_specified: bool = True
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ class VariableDefinition:
 
     when: Sequence[VariableCondition] = field(default_factory=list)
     default: Any = None
+    default_specified: bool = True
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "when", tuple(self.when))
@@ -104,6 +106,7 @@ class VariableNode:
     type: NodeType
     when: Sequence[VariableCondition] = field(default_factory=list)
     default: Any = None
+    default_specified: bool = True
     description: Optional[str] = None
 
     def __post_init__(self) -> None:

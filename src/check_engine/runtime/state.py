@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Optional, TypedDict
+from typing import Any, Iterator, Optional, TypedDict, Union
 
 from ..exceptions import DSLExecutionError
 from .reference_resolver import RuntimeReferenceResolver
@@ -17,6 +17,45 @@ def _to_plain_data(value: Any) -> Any:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [_to_plain_data(item) for item in value]
     return value
+
+
+def _freeze_runtime_data(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        frozen_mapping = {
+            key: _freeze_runtime_data(item)
+            for key, item in value.items()
+        }
+        return MappingProxyType(frozen_mapping)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return FrozenSequenceView(_freeze_runtime_data(item) for item in value)
+    return value
+
+
+@dataclass(frozen=True)
+class FrozenSequenceView(Sequence[Any]):
+    """只读序列视图，保留与 list 的值相等语义。"""
+
+    _items: tuple[Any, ...]
+
+    def __init__(self, items: Union[Sequence[Any], Iterator[Any]]) -> None:
+        object.__setattr__(self, "_items", tuple(items))
+
+    def __getitem__(self, index: Any) -> Any:
+        return self._items[index]
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter(self._items)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Sequence) and not isinstance(other, (str, bytes, bytearray)):
+            return list(self._items) == list(other)
+        return self._items == other
+
+    def __repr__(self) -> str:
+        return repr(list(self._items))
 
 
 class _StatePayload(TypedDict):
@@ -60,6 +99,7 @@ class NodeExecutionResult:
     def __post_init__(self) -> None:
         frozen_rows = tuple(MappingProxyType(dict(row)) for row in self.raw_rows)
         object.__setattr__(self, "raw_rows", frozen_rows)
+        object.__setattr__(self, "exported_data", _freeze_runtime_data(self.exported_data))
         object.__setattr__(self, "exported_fields", tuple(self.exported_fields))
 
     def as_rows(self) -> Sequence[Mapping[str, Any]]:
@@ -81,6 +121,12 @@ class ExecutionResult:
     variables: Mapping[str, Any]
     steps: Mapping[str, Any]
     executed_nodes: Sequence[ExecutedNodeTrace] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "input", _freeze_runtime_data(self.input))
+        object.__setattr__(self, "variables", _freeze_runtime_data(self.variables))
+        object.__setattr__(self, "steps", _freeze_runtime_data(self.steps))
+        object.__setattr__(self, "executed_nodes", tuple(self.executed_nodes))
 
     @staticmethod
     def build_pass(state: "ExecutionState") -> "ExecutionResult":
@@ -150,9 +196,9 @@ class ExecutionResult:
     @staticmethod
     def _state_payload(state: "ExecutionState") -> _StatePayload:
         return {
-            "input": state.input_data,
-            "variables": state.variables_data,
-            "steps": state.step_data,
+            "input": _freeze_runtime_data(state.input_data),
+            "variables": _freeze_runtime_data(state.variables_data),
+            "steps": _freeze_runtime_data(state.step_data),
             "executed_nodes": tuple(state.executed_nodes),
         }
 
@@ -216,18 +262,18 @@ class ExecutionState:
         return self.resolve_reference(path if path.startswith("$") else "$" + path)
 
     def get_consumable_rows(self, from_path: str) -> tuple[Sequence[Mapping[str, Any]], list[str]]:
-        parts = RuntimeReferenceResolver.parse_reference_parts(from_path)
-        if parts[0] != "steps":
+        reference_spec = self.reference_resolver.parse_reference(from_path)
+        if reference_spec.scope != "steps":
             raise DSLExecutionError(
                 f"Unsupported consumes.from reference: {from_path}",
             )
 
-        if len(parts) != 2:
+        if len(reference_spec.path) != 1:
             raise DSLExecutionError(
                 f"consumes.from only supports referencing whole step outputs: {from_path}",
             )
 
-        step_name = self._require_step_name(parts, from_path)
+        step_name = self._require_step_name(reference_spec.path, from_path)
         if step_name not in self.step_results:
             raise DSLExecutionError(
                 f"consumes.from references a non-existent step output: {from_path}",
@@ -244,9 +290,9 @@ class ExecutionState:
         return rows, fields
 
     @staticmethod
-    def _require_step_name(parts: list[str], reference: str) -> str:
-        if len(parts) < 2 or not parts[1]:
+    def _require_step_name(parts: Sequence[str], reference: str) -> str:
+        if len(parts) < 1 or not parts[0]:
             raise DSLExecutionError(
                 f"Steps reference must include step name: {reference}",
             )
-        return parts[1]
+        return parts[0]

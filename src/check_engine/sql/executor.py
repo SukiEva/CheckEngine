@@ -29,7 +29,7 @@ class ExecutionStateLike(Protocol):
 
 
 class SqlExecutor:
-    """执行 context 与 step 中的 SQL 节点。"""
+    """执行步骤中的 SQL 节点。"""
 
     def __init__(
         self,
@@ -197,7 +197,16 @@ class SqlExecutor:
     @staticmethod
     @contextmanager
     def _wrap_session_iterator(session_iterator: Any) -> Any:
-        yield next(session_iterator)
+        try:
+            session = next(session_iterator)
+        except StopIteration as exc:
+            raise DSLExecutionError("Datasource session iterator did not yield a session.") from exc
+        try:
+            yield session
+        finally:
+            close = getattr(session_iterator, "close", None)
+            if callable(close):
+                close()
 
     def _project_outputs(self, node: SqlNode, node_name: str, rows: list[dict[str, Any]]) -> tuple[Any, list[str]]:
         if node.result_mode == RESULT_MODE_RECORD and len(rows) != 1:

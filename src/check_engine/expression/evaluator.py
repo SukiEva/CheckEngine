@@ -11,6 +11,7 @@ from types import CodeType
 from typing import Any, Optional
 
 from ..exceptions import DSLExecutionError
+from ..reference_parser import ReferenceParser, ReferenceSpec
 from ..runtime import ExecutionState
 
 
@@ -67,13 +68,15 @@ class _SafeExpressionValidator(ast.NodeVisitor):
 class ExpressionEvaluator:
     """求值 DSL 布尔表达式。"""
 
-    REF_PATTERN = re.compile(
-        r"\$(?:\.(?:[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)?|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)"
-    )
     NULL_PATTERN = re.compile(r"\bnull\b")
 
-    def __init__(self, logger: Optional[logging.Logger] = None) -> None:
+    def __init__(
+        self,
+        logger: Optional[logging.Logger] = None,
+        reference_parser: Optional[ReferenceParser] = None,
+    ) -> None:
         self.logger = logger or logging.getLogger(__name__)
+        self.reference_parser = reference_parser or ReferenceParser()
 
     def compile(self, expression: str) -> CompiledExpression:
         if expression == "exists":
@@ -82,8 +85,8 @@ class ExpressionEvaluator:
         references: list[str] = []
         ref_names: dict[str, str] = {}
 
-        def replace_reference(match: re.Match[str]) -> str:
-            reference = match.group(0)
+        def replace_reference(reference_spec: ReferenceSpec) -> str:
+            reference = reference_spec.explicit
             if reference in ref_names:
                 return ref_names[reference]
             ref_name = "__ref_{0}".format(len(references))
@@ -91,7 +94,7 @@ class ExpressionEvaluator:
             ref_names[reference] = ref_name
             return ref_name
 
-        python_expr = self.REF_PATTERN.sub(replace_reference, expression)
+        python_expr = self.reference_parser.replace_references(expression, replace_reference)
         python_expr = self.NULL_PATTERN.sub("None", python_expr)
 
         try:

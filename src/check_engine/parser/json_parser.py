@@ -8,6 +8,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from ..dsl import DslDocument, TopLevelField
 from ..exceptions import DSLParseError
+from ..step_registry import StepTypeRegistry, build_default_step_registry
 from .node_parsers import JsonNodeParser, ParserHelpers
 
 
@@ -19,7 +20,11 @@ class JsonDslParser:
         TopLevelField.ON_FAIL,
     )
 
-    def __init__(self, logger: Optional[logging.Logger] = None) -> None:
+    def __init__(
+        self,
+        logger: Optional[logging.Logger] = None,
+        step_registry: Optional[StepTypeRegistry] = None,
+    ) -> None:
         self.logger = logger or logging.getLogger(__name__)
         self.node_parser = JsonNodeParser(
             helpers=ParserHelpers(
@@ -29,7 +34,8 @@ class JsonDslParser:
                 optional_string=self._optional_string,
                 optional_string_allow_empty=self._optional_string_allow_empty,
                 parse_string_list=self._parse_string_list,
-            )
+            ),
+            step_registry=step_registry or build_default_step_registry(),
         )
 
     def parse(self, dsl_text: str) -> DslDocument:
