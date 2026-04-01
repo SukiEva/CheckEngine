@@ -607,6 +607,8 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         renderMaterialIcons(rowsContainer);
         rowsContainer.querySelectorAll('[data-variable-remove]').forEach((button) => {
           button.addEventListener('click', () => {
+            const latestRows = collectVariableWhenDraftRows(rowsContainer);
+            rows.splice(0, rows.length, ...latestRows);
             const removeIndex = Number(button.getAttribute('data-variable-remove'));
             rows.splice(removeIndex, 1);
             if (!rows.length) rows.push({ condition: '', value: '' });
@@ -623,6 +625,8 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       };
       drawRows();
       addButton.addEventListener('click', () => {
+        const latestRows = collectVariableWhenDraftRows(rowsContainer);
+        rows.splice(0, rows.length, ...latestRows);
         rows.push({ condition: '', value: '' });
         drawRows();
         if (typeof onChanged === 'function') onChanged();
@@ -644,6 +648,8 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         renderMaterialIcons(rowsContainer);
         rowsContainer.querySelectorAll('[data-output-remove]').forEach((button) => {
           button.addEventListener('click', () => {
+            const latestRows = collectOutputDraftRows(rowsContainer);
+            rows.splice(0, rows.length, ...latestRows);
             const removeIndex = Number(button.getAttribute('data-output-remove'));
             rows.splice(removeIndex, 1);
             if (!rows.length) rows.push({ field: '' });
@@ -659,6 +665,8 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       };
       drawRows();
       addButton.addEventListener('click', () => {
+        const latestRows = collectOutputDraftRows(rowsContainer);
+        rows.splice(0, rows.length, ...latestRows);
         rows.push({ field: '' });
         drawRows();
         if (typeof onChanged === 'function') onChanged();
@@ -694,6 +702,8 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         renderMaterialIcons(rowsContainer);
         rowsContainer.querySelectorAll('[data-consume-remove]').forEach((button) => {
           button.addEventListener('click', () => {
+            const latestRows = collectConsumeDraftRows(rowsContainer);
+            rows.splice(0, rows.length, ...latestRows);
             const removeIndex = Number(button.getAttribute('data-consume-remove'));
             rows.splice(removeIndex, 1);
             if (!rows.length) rows.push({ stepName: '', alias: '' });
@@ -710,10 +720,45 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       };
       drawRows();
       addButton.addEventListener('click', () => {
+        const latestRows = collectConsumeDraftRows(rowsContainer);
+        rows.splice(0, rows.length, ...latestRows);
         rows.push({ stepName: '', alias: '' });
         drawRows();
         if (typeof onChanged === 'function') onChanged();
       });
+    }
+
+    function collectVariableWhenDraftRows(rowsContainer) {
+      const conditions = Array.from(rowsContainer.querySelectorAll('[data-variable-condition]'));
+      const draftRows = conditions.map((conditionInput) => {
+        const rowIndex = conditionInput.getAttribute('data-variable-condition');
+        const valueInput = rowIndex === null
+          ? null
+          : rowsContainer.querySelector(`[data-variable-value="${rowIndex}"]`);
+        return {
+          condition: conditionInput.value.trim(),
+          value: valueInput ? valueInput.value : '',
+        };
+      });
+      return draftRows.length ? draftRows : [{ condition: '', value: '' }];
+    }
+
+    function collectConsumeDraftRows(rowsContainer) {
+      const stepInputs = Array.from(rowsContainer.querySelectorAll('[data-consume-step]'));
+      const aliasInputs = Array.from(rowsContainer.querySelectorAll('[data-consume-alias]'));
+      const draftRows = stepInputs.map((input, index) => ({
+        stepName: input.value.trim(),
+        alias: aliasInputs[index] ? aliasInputs[index].value.trim() : '',
+      }));
+      return draftRows.length ? draftRows : [{ stepName: '', alias: '' }];
+    }
+
+    function collectOutputDraftRows(rowsContainer) {
+      const outputInputs = Array.from(rowsContainer.querySelectorAll('[data-output-field]'));
+      const draftRows = outputInputs.map((input) => ({
+        field: input.value.trim(),
+      }));
+      return draftRows.length ? draftRows : [{ field: '' }];
     }
 
     function readSqlParamRows() {
