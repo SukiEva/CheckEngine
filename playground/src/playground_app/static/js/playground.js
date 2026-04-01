@@ -287,10 +287,13 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         <div class="field field-with-actions">
           <div class="field-header">
             <label>Outputs（与 Consumes 一样按行维护）</label>
-            <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddOutputRow" type="button" title="新增 output" aria-label="新增 output"><span class="ep-icon">add</span></button>
+            <span class="field-header-actions">
+              <button class="el-button el-button--default is-plain el-button--small" id="btnExtractOutputs" type="button" title="从 SQL 提取 output" aria-label="从 SQL 提取 output"><span class="ep-icon">playlist_add_check</span>从 SQL 提取</button>
+              <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddOutputRow" type="button" title="新增 output" aria-label="新增 output"><span class="ep-icon">add</span></button>
+            </span>
           </div>
           <div id="f_outputs_rows" class="field-row-list"></div>
-          <div class="field-note">每行一个输出字段，必须是合法 SQL 标识符（字母或下划线开头，仅包含字母、数字、下划线）。</div>
+          <div class="field-note">每行一个输出字段，必须是合法 SQL 标识符（字母或下划线开头，仅包含字母、数字、下划线）。支持从当前 SQL 的 SELECT 子句自动提取。</div>
         </div>
         ` : ''}
         ` : ''}
@@ -593,6 +596,246 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       return keys;
     }
 
+    function isSqlWordBoundary(character) {
+      return !character || !/[A-Za-z0-9_]/.test(character);
+    }
+
+    function findTopLevelSqlKeyword(sqlTemplate, keyword, startIndex = 0) {
+      if (typeof sqlTemplate !== 'string' || !sqlTemplate) {
+        return -1;
+      }
+      const loweredSql = sqlTemplate.toLowerCase();
+      const loweredKeyword = keyword.toLowerCase();
+      let depth = 0;
+      let index = startIndex;
+      while (index < sqlTemplate.length) {
+        const currentChar = sqlTemplate[index];
+        const nextChar = sqlTemplate[index + 1] || '';
+
+        if (currentChar === "'" || currentChar === '"') {
+          const quoteChar = currentChar;
+          index += 1;
+          while (index < sqlTemplate.length) {
+            if (sqlTemplate[index] === quoteChar) {
+              if (sqlTemplate[index + 1] === quoteChar) {
+                index += 2;
+                continue;
+              }
+              break;
+            }
+            index += 1;
+          }
+          index += 1;
+          continue;
+        }
+
+        if (currentChar === '-' && nextChar === '-') {
+          index += 2;
+          while (index < sqlTemplate.length && sqlTemplate[index] !== '\n') {
+            index += 1;
+          }
+          continue;
+        }
+
+        if (currentChar === '/' && nextChar === '*') {
+          index += 2;
+          while (index < sqlTemplate.length - 1) {
+            if (sqlTemplate[index] === '*' && sqlTemplate[index + 1] === '/') {
+              index += 2;
+              break;
+            }
+            index += 1;
+          }
+          continue;
+        }
+
+        if (currentChar === '(') {
+          depth += 1;
+          index += 1;
+          continue;
+        }
+        if (currentChar === ')') {
+          depth = Math.max(0, depth - 1);
+          index += 1;
+          continue;
+        }
+
+        if (
+          depth === 0 &&
+          loweredSql.slice(index, index + loweredKeyword.length) === loweredKeyword &&
+          isSqlWordBoundary(sqlTemplate[index - 1]) &&
+          isSqlWordBoundary(sqlTemplate[index + loweredKeyword.length])
+        ) {
+          return index;
+        }
+
+        index += 1;
+      }
+      return -1;
+    }
+
+    function splitTopLevelSqlItems(sqlSegment) {
+      if (typeof sqlSegment !== 'string' || !sqlSegment.trim()) {
+        return [];
+      }
+      const items = [];
+      let current = '';
+      let depth = 0;
+      let index = 0;
+
+      while (index < sqlSegment.length) {
+        const currentChar = sqlSegment[index];
+        const nextChar = sqlSegment[index + 1] || '';
+
+        if (currentChar === "'" || currentChar === '"') {
+          const quoteChar = currentChar;
+          current += currentChar;
+          index += 1;
+          while (index < sqlSegment.length) {
+            current += sqlSegment[index];
+            if (sqlSegment[index] === quoteChar) {
+              if (sqlSegment[index + 1] === quoteChar) {
+                current += sqlSegment[index + 1];
+                index += 2;
+                continue;
+              }
+              break;
+            }
+            index += 1;
+          }
+          index += 1;
+          continue;
+        }
+
+        if (currentChar === '-' && nextChar === '-') {
+          current += currentChar + nextChar;
+          index += 2;
+          while (index < sqlSegment.length && sqlSegment[index] !== '\n') {
+            current += sqlSegment[index];
+            index += 1;
+          }
+          continue;
+        }
+
+        if (currentChar === '/' && nextChar === '*') {
+          current += currentChar + nextChar;
+          index += 2;
+          while (index < sqlSegment.length - 1) {
+            current += sqlSegment[index];
+            if (sqlSegment[index] === '*' && sqlSegment[index + 1] === '/') {
+              current += sqlSegment[index + 1];
+              index += 2;
+              break;
+            }
+            index += 1;
+          }
+          continue;
+        }
+
+        if (currentChar === '(') {
+          depth += 1;
+          current += currentChar;
+          index += 1;
+          continue;
+        }
+
+        if (currentChar === ')') {
+          depth = Math.max(0, depth - 1);
+          current += currentChar;
+          index += 1;
+          continue;
+        }
+
+        if (currentChar === ',' && depth === 0) {
+          if (current.trim()) {
+            items.push(current.trim());
+          }
+          current = '';
+          index += 1;
+          continue;
+        }
+
+        current += currentChar;
+        index += 1;
+      }
+
+      if (current.trim()) {
+        items.push(current.trim());
+      }
+      return items;
+    }
+
+    function normalizeSqlOutputIdentifier(rawIdentifier) {
+      if (typeof rawIdentifier !== 'string') {
+        return '';
+      }
+      let normalized = rawIdentifier.trim();
+      if (!normalized) {
+        return '';
+      }
+      if (normalized.startsWith('"') && normalized.endsWith('"') && normalized.length >= 2) {
+        normalized = normalized.slice(1, -1).replace(/""/g, '"');
+      }
+      return isValidDslIdentifier(normalized) ? normalized : '';
+    }
+
+    function extractOutputFieldFromSelectItem(selectItem) {
+      if (typeof selectItem !== 'string') {
+        return '';
+      }
+      const trimmedItem = selectItem.trim().replace(/;$/, '');
+      if (!trimmedItem || trimmedItem === '*') {
+        return '';
+      }
+
+      const normalizedItem = trimmedItem.replace(/^\s*(distinct|all)\s+/i, '');
+      const explicitAliasMatch = normalizedItem.match(/\bas\s+("[^"]+"|[A-Za-z_][A-Za-z0-9_]*)\s*$/i);
+      if (explicitAliasMatch) {
+        return normalizeSqlOutputIdentifier(explicitAliasMatch[1]);
+      }
+
+      const bareReferenceMatch = normalizedItem.match(/^(?:(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_]*)\s*\.\s*)*(?:"[^"]+"|[A-Za-z_][A-Za-z0-9_]*)$/);
+      if (bareReferenceMatch) {
+        const segments = normalizedItem.split('.').map((item) => item.trim()).filter(Boolean);
+        return normalizeSqlOutputIdentifier(segments[segments.length - 1] || '');
+      }
+
+      const implicitAliasMatch = normalizedItem.match(/(?:^|[\s)])("[^"]+"|[A-Za-z_][A-Za-z0-9_]*)\s*$/);
+      if (!implicitAliasMatch) {
+        return '';
+      }
+      const rawAlias = implicitAliasMatch[1];
+      const aliasIndex = normalizedItem.lastIndexOf(rawAlias);
+      const expressionPart = normalizedItem.slice(0, aliasIndex).trim();
+      if (!expressionPart) {
+        return '';
+      }
+      return normalizeSqlOutputIdentifier(rawAlias);
+    }
+
+    function extractSelectOutputFields(sqlTemplate) {
+      const selectIndex = findTopLevelSqlKeyword(sqlTemplate, 'select');
+      if (selectIndex < 0) {
+        return [];
+      }
+      const fromIndex = findTopLevelSqlKeyword(sqlTemplate, 'from', selectIndex + 'select'.length);
+      if (fromIndex < 0 || fromIndex <= selectIndex) {
+        return [];
+      }
+
+      const selectClause = sqlTemplate.slice(selectIndex + 'select'.length, fromIndex);
+      const seenFields = new Set();
+      return splitTopLevelSqlItems(selectClause)
+        .map((selectItem) => extractOutputFieldFromSelectItem(selectItem))
+        .filter((field) => {
+          if (!field || seenFields.has(field)) {
+            return false;
+          }
+          seenFields.add(field);
+          return true;
+        });
+    }
+
     function getSqlParamsFromTemplate(sqlTemplate, existingRows) {
       const extractedKeys = extractSqlParamKeys(sqlTemplate);
       const existingValueMap = {};
@@ -659,7 +902,8 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
     function renderOutputRows(node, onChanged) {
       const rowsContainer = document.getElementById('f_outputs_rows');
       const addButton = document.getElementById('btnAddOutputRow');
-      if (!rowsContainer || !addButton) return;
+      const extractButton = document.getElementById('btnExtractOutputs');
+      if (!rowsContainer || !addButton || !extractButton) return;
       const rows = normalizeOutputRows(node.outputRows);
       const drawRows = () => {
         rowsContainer.innerHTML = rows.map((row, index) => `
@@ -693,6 +937,23 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         rows.push({ field: '' });
         drawRows();
         if (typeof onChanged === 'function') onChanged();
+      });
+      extractButton.addEventListener('click', () => {
+        const sqlInput = document.getElementById('f_sql');
+        const latestSql = sqlInput ? sqlInput.value : node.sql;
+        const extractedFields = extractSelectOutputFields(latestSql);
+        if (!extractedFields.length) {
+          statusText.classList.add('status-warn');
+          statusText.innerHTML = '<strong>提取失败：</strong>未能从当前 SQL 的 SELECT 子句识别输出列，请为表达式补充 alias。';
+          showElMessage('未识别到可用 output', 'error');
+          return;
+        }
+        rows.splice(0, rows.length, ...extractedFields.map((field) => ({ field })));
+        drawRows();
+        if (typeof onChanged === 'function') onChanged();
+        statusText.classList.remove('status-warn');
+        statusText.textContent = `已从 SQL 提取 ${extractedFields.length} 个 output。`;
+        showElMessage(`已提取 ${extractedFields.length} 个 output`, 'success');
       });
     }
 

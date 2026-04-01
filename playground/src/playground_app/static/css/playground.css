@@ -435,9 +435,18 @@
     .field-header label {
       margin: 0;
     }
+    .field-header-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
     .field-header .el-button {
       flex: 0 0 auto;
       margin-left: auto;
+    }
+    .field-header-actions .el-button {
+      margin-left: 0;
     }
     .field-row-list {
       display: grid;
