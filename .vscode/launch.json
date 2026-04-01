@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Playground: FastAPI",
+      "type": "debugpy",
+      "request": "launch",
+      "python": "${workspaceFolder}/playground/.venv/bin/python",
+      "module": "uvicorn",
+      "args": [
+        "playground_app:create_app",
+        "--factory",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "5001"
+      ],
+      "cwd": "${workspaceFolder}/playground",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/playground/src:${workspaceFolder}/src",
+        "PLAYGROUND_HOST": "0.0.0.0",
+        "PLAYGROUND_PORT": "5001",
+        "PLAYGROUND_DEBUG": "false"
+      },
+      "jinja": true,
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    }
+  ]
+}
