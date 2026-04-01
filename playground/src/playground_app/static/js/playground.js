@@ -1,6 +1,6 @@
 import { createCanvasNodeController, createCanvasRenderer } from "./components/canvas_components.js";
 import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
-import { createDslCodec, formatConsumesTextFromRows as codecFormatConsumesTextFromRows, formatOutputsText as codecFormatOutputsText, formatVariableWhenSummary as codecFormatVariableWhenSummary, getOutputFields as codecGetOutputFields, normalizeOutputRows as codecNormalizeOutputRows, normalizeValueToInput as codecNormalizeValueToInput, parseInputValue as codecParseInputValue, parseJsonObjectOrEmpty as codecParseJsonObjectOrEmpty } from "./dsl/dsl_codec.js";
+import { createDslCodec, formatConsumesTextFromRows as codecFormatConsumesTextFromRows, formatOutputsText as codecFormatOutputsText, formatVariableWhenSummary as codecFormatVariableWhenSummary, getOutputFields as codecGetOutputFields, isValidDslIdentifier as codecIsValidDslIdentifier, normalizeOutputRows as codecNormalizeOutputRows, normalizeStepPolicyType as codecNormalizeStepPolicyType, normalizeValueToInput as codecNormalizeValueToInput, parseInputValue as codecParseInputValue, parseJsonObjectOrEmpty as codecParseJsonObjectOrEmpty } from "./dsl/dsl_codec.js";
 import { createAutocompleteBinder } from "./editor/autocomplete.js";
 import { createDatasourceStore } from "./stores/datasource_store.js";
 import { createRuntimeInputStore } from "./stores/runtime_input_store.js";
@@ -59,6 +59,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
     const SQL_NODE_TYPES = new Set(['step']);
     const DECISION_NODE_TYPES = new Set(['step', 'on_fail']);
     const OUTPUT_NODE_TYPES = new Set(['step']);
+    const LEGACY_TOP_LEVEL_FIELDS = new Set(['context', 'prechecks']);
 
     function isSqlNode(nodeType) {
       return SQL_NODE_TYPES.has(nodeType);
@@ -78,7 +79,8 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       if (node.type !== 'step') {
         return false;
       }
-      return node.precheckPolicyType === 'on_fail' || node.precheckPolicyType === 'on_pass';
+      const stepPolicyType = getNodeStepPolicyType(node);
+      return stepPolicyType === 'on_fail' || stepPolicyType === 'on_pass';
     }
 
     function hasOutputs(nodeType) {
@@ -99,6 +101,21 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       return '';
     }
 
+    function normalizeStepPolicyType(stepPolicyType, legacyStepPolicyType) {
+      return codecNormalizeStepPolicyType(stepPolicyType, legacyStepPolicyType);
+    }
+
+    function getNodeStepPolicyType(node) {
+      if (!node || typeof node !== 'object') {
+        return 'none';
+      }
+      return normalizeStepPolicyType(node.stepPolicyType, node.precheckPolicyType);
+    }
+
+    function isValidDslIdentifier(value) {
+      return codecIsValidDslIdentifier(value);
+    }
+
     function makeNode(def, x, y) {
       return {
         id: makeNodeId(),
@@ -116,7 +133,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         variableValue: '',
         variableDefault: '',
         failMode: 'single',
-        precheckPolicyType: 'none',
+        stepPolicyType: 'none',
         messageCn: '',
         messageEn: '',
         divider: '',
@@ -179,15 +196,15 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       }
 
       const showNodeTitleField = node.type !== 'on_fail';
-      const resolvedPrecheckPolicyType = node.type === 'step' && node.precheckPolicyType === 'on_pass'
-        ? 'on_pass'
-        : (node.precheckPolicyType === 'none' ? 'none' : 'on_fail');
+      const resolvedStepPolicyType = node.type === 'step'
+        ? getNodeStepPolicyType(node)
+        : 'none';
       const shouldShowDecision = shouldShowDecisionField({
         ...node,
-        precheckPolicyType: resolvedPrecheckPolicyType,
+        stepPolicyType: resolvedStepPolicyType,
       });
-      const isPrecheckOnFailPolicy = node.type === 'step' && resolvedPrecheckPolicyType === 'on_fail';
-      const showFailPolicyFields = node.type === 'on_fail' || isPrecheckOnFailPolicy;
+      const isStepOnFailPolicy = node.type === 'step' && resolvedStepPolicyType === 'on_fail';
+      const showFailPolicyFields = node.type === 'on_fail' || isStepOnFailPolicy;
       const showDividerConfig = showFailPolicyFields && (node.failMode === 'sub_repeat' || node.failMode === 'full_repeat');
 
       editorPanel.innerHTML = `
@@ -264,23 +281,23 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
             <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddOutputRow" type="button" title="新增 output" aria-label="新增 output"><span class="ep-icon">add</span></button>
           </div>
           <div id="f_outputs_rows" class="field-row-list"></div>
-          <div class="field-note">每行一个输出字段，不使用逗号分隔。</div>
+          <div class="field-note">每行一个输出字段，必须是合法 SQL 标识符（字母或下划线开头，仅包含字母、数字、下划线）。</div>
         </div>
         ` : ''}
         ` : ''}
         ${node.type === 'step' ? `
         <div class="field">
-          <label>Step Policy（可选）</label>
-          <select id="f_precheck_policy_type">
-            <option value="none" ${resolvedPrecheckPolicyType === 'none' ? 'selected' : ''}>none（不短路）</option>
-            <option value="on_fail" ${resolvedPrecheckPolicyType === 'on_fail' ? 'selected' : ''}>on_fail（失败短路）</option>
-            <option value="on_pass" ${resolvedPrecheckPolicyType === 'on_pass' ? 'selected' : ''}>on_pass（成功短路）</option>
+          <label>Step 短路策略（可选）</label>
+          <select id="f_step_policy_type">
+            <option value="none" ${resolvedStepPolicyType === 'none' ? 'selected' : ''}>none（不短路）</option>
+            <option value="on_fail" ${resolvedStepPolicyType === 'on_fail' ? 'selected' : ''}>on_fail（失败时短路）</option>
+            <option value="on_pass" ${resolvedStepPolicyType === 'on_pass' ? 'selected' : ''}>on_pass（成功时短路）</option>
           </select>
         </div>
         ` : ''}
         ${shouldShowDecision ? `
         <div class="field">
-          <label>Decision（用于 step/on_fail）</label>
+          <label>Decision（用于 step 短路策略 / 顶层 on_fail）</label>
           <input id="f_decision" data-ref-autocomplete="true" value="${escapeAttr(node.decision || '')}" />
         </div>
         ` : ''}
@@ -363,7 +380,6 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         } else {
           node.decision = '';
         }
-        const currentStepOrder = Number.isFinite(node.stepOrder) ? Number(node.stepOrder) : index + 1;
 
         if (node.type === 'variable') {
           node.variableWhenRows = readVariableWhenRows();
@@ -384,12 +400,10 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
           }
         }
         if (node.type === 'step') {
-          const previousPolicyType = node.precheckPolicyType === 'on_pass'
-            ? 'on_pass'
-            : (node.precheckPolicyType === 'none' ? 'none' : 'on_fail');
-          node.precheckPolicyType = document.getElementById('f_precheck_policy_type').value;
-          if (previousPolicyType !== node.precheckPolicyType) {
-            if (node.precheckPolicyType === 'on_pass' && !node.decision) {
+          const previousPolicyType = getNodeStepPolicyType(node);
+          node.stepPolicyType = document.getElementById('f_step_policy_type').value;
+          if (previousPolicyType !== node.stepPolicyType) {
+            if (node.stepPolicyType === 'on_pass' && !node.decision) {
               node.decision = 'not exists($.ok)';
               node.failMode = 'single';
               node.messageCn = '';
@@ -397,7 +411,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
               node.divider = '';
               node.dividerCn = '';
               node.dividerEn = '';
-            } else if (node.precheckPolicyType === 'none') {
+            } else if (node.stepPolicyType === 'none') {
               node.decision = '';
               node.failMode = 'single';
               node.messageCn = '';
@@ -405,14 +419,14 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
               node.divider = '';
               node.dividerCn = '';
               node.dividerEn = '';
-            } else if (node.precheckPolicyType === 'on_fail' && !node.decision) {
+            } else if (node.stepPolicyType === 'on_fail' && !node.decision) {
               node.decision = 'exists($.ok)';
             }
             renderEditor();
             return;
           }
         }
-        if (node.type === 'on_fail' || (node.type === 'step' && node.precheckPolicyType === 'on_fail')) {
+        if (node.type === 'on_fail' || (node.type === 'step' && getNodeStepPolicyType(node) === 'on_fail')) {
           const previousFailMode = node.failMode;
           node.failMode = document.getElementById('f_fail_mode').value;
           node.messageCn = document.getElementById('f_message_cn').value;
@@ -474,7 +488,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         'f_sql',
         'f_datasource',
         'f_result_mode',
-        'f_precheck_policy_type',
+        'f_step_policy_type',
         'f_fail_mode',
         'f_message_cn',
         'f_message_en',
@@ -485,7 +499,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       ].forEach((elementId) => {
         const input = document.getElementById(elementId);
         if (!input) return;
-        if (elementId === 'f_precheck_policy_type') {
+        if (elementId === 'f_step_policy_type') {
           input.addEventListener('input', persistEditorNode);
         }
         input.addEventListener('change', persistEditorNode);
@@ -641,7 +655,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       const drawRows = () => {
         rowsContainer.innerHTML = rows.map((row, index) => `
           <div class="field-row field-row--single">
-            <input data-output-field="${index}" value="${escapeAttr(row.field || '')}" placeholder="输出字段名，如 final_amount" />
+            <input data-output-field="${index}" value="${escapeAttr(row.field || '')}" placeholder="输出字段名，如 final_amount（字母/数字/下划线）" />
             <button class="el-button el-button--danger is-plain is-circle el-button--small field-row-action" type="button" data-output-remove="${index}" title="删除 output" aria-label="删除 output"><span class="ep-icon">delete_outline</span></button>
           </div>
         `).join('');
@@ -1300,17 +1314,18 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
     function normalizeStateNodes() {
       let stepCursor = 1;
       state.nodes = state.nodes.map((node) => {
+        const { precheckPolicyType: legacyStepPolicyType, ...rawNode } = node;
         const safeStepOrder = node.type === 'step'
           ? (Number.isFinite(node.stepOrder) ? node.stepOrder : stepCursor)
           : null;
         const normalized = {
-          ...node,
+          ...rawNode,
           sqlParamsText: typeof node.sqlParamsText === 'string' ? node.sqlParamsText : '{}',
           sqlParams: Array.isArray(node.sqlParams) ? node.sqlParams : objectToSqlParamsRows(parseJsonObjectOrEmpty(typeof node.sqlParamsText === 'string' ? node.sqlParamsText : '{}')),
           datasource: typeof node.datasource === 'string' ? node.datasource : 'saas_db',
           resultMode: typeof node.resultMode === 'string' ? node.resultMode : 'records',
           failMode: typeof node.failMode === 'string' ? node.failMode : 'single',
-          precheckPolicyType: typeof node.precheckPolicyType === 'string' ? node.precheckPolicyType : 'none',
+          stepPolicyType: normalizeStepPolicyType(node.stepPolicyType, legacyStepPolicyType),
           messageCn: typeof node.messageCn === 'string' ? node.messageCn : '',
           messageEn: typeof node.messageEn === 'string' ? node.messageEn : '',
           divider: typeof node.divider === 'string' ? node.divider : '',
@@ -1508,10 +1523,75 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       return codecParseInputValue(rawText);
     }
 
+    function validateDslIdentifier(value, path) {
+      if (!isValidDslIdentifier(value)) {
+        throw new Error(`${path} 必须是合法标识符：以字母或下划线开头，且仅包含字母、数字、下划线。`);
+      }
+    }
+
+    function validateOutputs(outputs, path) {
+      if (!Array.isArray(outputs)) {
+        return;
+      }
+      const seenOutputs = new Set();
+      outputs.forEach((output, index) => {
+        if (typeof output !== 'string' || !output.trim()) {
+          throw new Error(`${path}[${index}] 不能为空。`);
+        }
+        const normalizedOutput = output.trim();
+        validateDslIdentifier(normalizedOutput, `${path}[${index}]`);
+        if (seenOutputs.has(normalizedOutput)) {
+          throw new Error(`${path}[${index}] 重复：${normalizedOutput}`);
+        }
+        seenOutputs.add(normalizedOutput);
+      });
+    }
+
+    function validateConsumes(consumes, path) {
+      if (!Array.isArray(consumes)) {
+        return;
+      }
+      const seenAliases = new Set();
+      consumes.forEach((consume, index) => {
+        if (!consume || typeof consume !== 'object' || Array.isArray(consume)) {
+          throw new Error(`${path}[${index}] 必须是对象。`);
+        }
+        if (typeof consume.alias !== 'string' || !consume.alias.trim()) {
+          throw new Error(`${path}[${index}].alias 不能为空。`);
+        }
+        const normalizedAlias = consume.alias.trim();
+        validateDslIdentifier(normalizedAlias, `${path}[${index}].alias`);
+        if (seenAliases.has(normalizedAlias)) {
+          throw new Error(`${path}[${index}].alias 重复：${normalizedAlias}`);
+        }
+        seenAliases.add(normalizedAlias);
+      });
+    }
+
+    function validateStepItems(stepItems) {
+      stepItems.forEach((stepItem, index) => {
+        if (!stepItem || typeof stepItem !== 'object' || Array.isArray(stepItem)) {
+          throw new Error(`steps[${index}] 必须是对象。`);
+        }
+        if (typeof stepItem.name !== 'string' || !stepItem.name.trim()) {
+          throw new Error(`steps[${index}].name 不能为空。`);
+        }
+        validateDslIdentifier(stepItem.name, `steps[${index}].name`);
+        validateOutputs(stepItem.outputs, `steps[${index}].outputs`);
+        validateConsumes(stepItem.consumes, `steps[${index}].consumes`);
+      });
+    }
+
     function validateDslPayload(payload) {
       const allowedTopFields = ['variables', 'steps', 'on_fail'];
       const unknownTopFields = Object.keys(payload).filter((key) => !allowedTopFields.includes(key));
       if (unknownTopFields.length) {
+        const legacyFields = unknownTopFields.filter((key) => LEGACY_TOP_LEVEL_FIELDS.has(key));
+        if (legacyFields.length) {
+          throw new Error(
+            `当前 playground 仅支持顶层 variables / steps / on_fail；请先将 ${legacyFields.join(' / ')} 收敛到 step 短路策略或顶层 on_fail。`
+          );
+        }
         throw new Error(`存在未知顶层字段: ${unknownTopFields.join(', ')}`);
       }
       if (!Array.isArray(payload.steps)) {
@@ -1520,6 +1600,10 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       if (!payload.on_fail || typeof payload.on_fail !== 'object' || Array.isArray(payload.on_fail)) {
         throw new Error('on_fail 必须是对象。');
       }
+      Object.keys(payload.variables || {}).forEach((variableName) => {
+        validateDslIdentifier(variableName, `variables.${variableName}`);
+      });
+      validateStepItems(payload.steps);
     }
 
     function loadLocal() {

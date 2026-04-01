@@ -5,7 +5,8 @@
 - 通过流程图方式生成 DSL
 - 配置真实 PostgreSQL 数据源连接
 - 直接调用 `check-engine` 运行并查看标准结果
-- Precheck 节点支持在设计器中切换 `on_fail` / `on_pass` 策略（含 `not exists($path)` 决策）
+- Step 节点支持配置 `on_fail` / `on_pass` 短路策略（含 `not exists($path)` 决策）
+- 顶层仅支持 `variables / steps / on_fail`；导入含 `context / prechecks` 的旧 DSL 时会直接提示收敛
 
 ## 目录结构
 
@@ -55,6 +56,7 @@ uv run playground-server
   - 若 `divider` 为非空字符串，优先仅输出 `divider`；
   - 仅当 `divider` 为空字符串时，才按非空值输出 `divider_cn` / `divider_en`；
   - `divider` / `divider_cn` / `divider_en` 均不允许空字符串（允许仅空格）。
+- `outputs` 每项必须是合法 SQL 标识符：以字母或下划线开头，且仅包含字母、数字、下划线。
 
 ## 接口说明
 

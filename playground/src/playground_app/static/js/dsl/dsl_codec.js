@@ -8,6 +8,23 @@ export function normalizeValueToInput(value) {
   return JSON.stringify(value);
 }
 
+const IDENTIFIER_PATTERN = /^[A-Za-z_]\w*$/;
+
+export function isValidDslIdentifier(value) {
+  return typeof value === 'string' && IDENTIFIER_PATTERN.test(value.trim());
+}
+
+export function normalizeStepPolicyType(stepPolicyType, legacyStepPolicyType) {
+  const candidate = typeof stepPolicyType === 'string' ? stepPolicyType : legacyStepPolicyType;
+  if (candidate === 'on_pass') {
+    return 'on_pass';
+  }
+  if (candidate === 'on_fail') {
+    return 'on_fail';
+  }
+  return 'none';
+}
+
 export function parseInputValue(rawText) {
   if (!rawText || !rawText.trim()) {
     return '';
@@ -326,6 +343,7 @@ export function createDslCodec(options) {
       }
 
       if (node.type === 'step') {
+        const stepPolicyType = normalizeStepPolicyType(node.stepPolicyType, node.precheckPolicyType);
         const stepPayload = {
           name: key,
           ...(node.description ? { description: node.description } : {}),
@@ -338,11 +356,11 @@ export function createDslCodec(options) {
           outputs,
           _step_order: currentStepOrder,
         };
-        if (node.precheckPolicyType === 'on_pass') {
+        if (stepPolicyType === 'on_pass') {
           stepPayload.on_pass = {
             decision: node.decision || 'not exists($.ok)',
           };
-        } else if (node.precheckPolicyType === 'on_fail') {
+        } else if (stepPolicyType === 'on_fail') {
           stepPayload.on_fail = {
             decision: node.decision || 'exists($.ok)',
             mode: node.failMode || 'single',
@@ -414,7 +432,7 @@ export function createDslCodec(options) {
         consumes: extra.consumes || '',
         consumeRows: Array.isArray(extra.consumeRows) ? extra.consumeRows : consumesTextToRows(extra.consumes || ''),
         description: extra.description || '',
-        precheckPolicyType: extra.precheckPolicyType || 'none',
+        stepPolicyType: normalizeStepPolicyType(extra.stepPolicyType, extra.precheckPolicyType),
         stepOrder: Object.prototype.hasOwnProperty.call(extra, 'stepOrder')
           ? extra.stepOrder
           : (nodeType === 'step' ? nextNodes.filter((node) => node.type === 'step').length + 1 : null),
@@ -462,7 +480,7 @@ export function createDslCodec(options) {
       const hasOnFail = !!(item.on_fail && typeof item.on_fail === 'object');
       pushNode('step', item.name || '', {
         sql: item.sql_template || '',
-        precheckPolicyType: hasStepPolicy ? (hasOnFail ? 'on_fail' : 'on_pass') : 'none',
+        stepPolicyType: hasStepPolicy ? (hasOnFail ? 'on_fail' : 'on_pass') : 'none',
         decision: hasStepPolicy
           ? (hasOnFail
             ? (item.on_fail && item.on_fail.decision ? item.on_fail.decision : 'exists($.ok)')
