@@ -891,6 +891,19 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       autocompleteBinder.bindAutocompletes(node);
     }
 
+    function normalizeNodeKey(node, fallbackIndex) {
+      const rawKey = ((node && node.title) || `${node ? node.type : 'node'}_${fallbackIndex}`).trim();
+      return rawKey
+        .replaceAll(/\s+/g, '_')
+        .replaceAll(/[^a-zA-Z0-9_]/g, '_');
+    }
+
+    function getStepIdSuggestions(currentNodeId) {
+      return state.nodes
+        .filter((item) => item.type === 'step' && item.id !== currentNodeId)
+        .map((item, index) => normalizeNodeKey(item, index + 1));
+    }
+
     function buildDividerPayload(node) {
       if (!node || (node.failMode !== 'sub_repeat' && node.failMode !== 'full_repeat')) {
         return {};
