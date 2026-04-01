@@ -292,6 +292,7 @@
       justify-content: center;
       cursor: pointer;
       color: #5f6b7a;
+      line-height: 0;
       transition: all .16s ease;
     }
     .node-action-btn:hover {
@@ -317,8 +318,12 @@
       color: #b71c1c;
     }
     .node-action-btn .ep-icon {
+      display: block;
+      width: 16px;
+      height: 16px;
       font-size: 16px;
-      line-height: 1;
+      line-height: 16px;
+      text-align: center;
     }
     .muted { color: var(--muted); }
 
