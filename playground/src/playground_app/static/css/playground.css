@@ -138,6 +138,40 @@
     .el-button:hover {
       border-color: #b8d9fb;
       background: #f8fbff;
+      color: #4f5f73;
+    }
+    .canvas-toolbar .el-button {
+      gap: 8px;
+      font-weight: 600;
+    }
+    .canvas-toolbar .el-button .ep-icon {
+      font-size: 20px;
+    }
+    .canvas-toolbar .el-button--primary {
+      border-color: #8bc0ff;
+      background: #f8fbff;
+      color: #2f86e8;
+    }
+    .canvas-toolbar .el-button--primary:hover {
+      border-color: #409eff;
+      background: #eef6ff;
+      color: #2f86e8;
+    }
+    .canvas-toolbar .el-button--default.is-plain {
+      color: #5f6b7a;
+    }
+    .canvas-toolbar .el-button--default.is-plain:hover {
+      color: #4f5f73;
+    }
+    .canvas-toolbar .el-button--success.is-plain {
+      border-color: #9ed8b8;
+      background: #f5fcf8;
+      color: #0f9d58;
+    }
+    .canvas-toolbar .el-button--success.is-plain:hover {
+      border-color: #52b788;
+      background: #ecf9f1;
+      color: #0f9d58;
     }
     .el-button--primary.is-plain {
       border-color: #8bc0ff;
