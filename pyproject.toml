@@ -2,7 +2,7 @@
 name = "check-engine"
 version = "0.1.0"
 description = "ExecDSL parser and execution engine"
-readme = "EXEC_DSL_V0.1.md"
+readme = "EXEC_DSL.md"
 requires-python = ">=3.9"
 dependencies = [
   "sqlalchemy",

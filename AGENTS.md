@@ -9,9 +9,9 @@
 
 ## 当前阶段
 
-- 当前仍处于 DSL 与执行模型设计阶段。
-- 第一优先级是收敛 DSL 语义、执行顺序、引用规则、错误消息规则。
-- 第二优先级是实现最小可运行闭环：解析 -> 校验 -> 执行 -> 返回结果。
+- 当前已经具备最小可运行闭环：解析 -> 校验 -> 编译 -> 执行 -> 返回结果。
+- 第一优先级是继续收敛 DSL 语义、执行顺序、引用规则、错误消息规则。
+- 第二优先级是围绕现有实现补强可观测性、测试覆盖和文档清晰度。
 - 暂不追求复杂编排、过度抽象、多数据库通用框架或脚本化扩展能力。
 
 ## 技术栈
@@ -42,57 +42,56 @@
 围绕 `ExecDSL Python 解析执行器`，优先完成以下能力：
 
 1. DSL 文本解析
-2. DSL 结构校验
-3. 运行时引用解析
-4. SQL 参数绑定
-5. SQL 节点执行
-6. 基于 CTE 的 `consumes` 数据传递
-7. `prechecks` 短路失败机制
-8. 顶层失败判定与消息渲染
-9. 标准执行结果输出
+2. DSL 结构 / 引用 / SQL 安全校验
+3. 表达式预编译与编译缓存
+4. 运行时引用解析
+5. SQL 参数绑定
+6. SQL 与 variable 两类 step 执行
+7. 基于 CTE 的 `consumes` 数据传递
+8. step 级 `on_fail` / `on_pass` 短路机制
+9. 顶层失败判定、消息渲染与标准执行结果输出
 
 ## DSL 事实来源
 
 当前 DSL 设计以以下文件为准：
 
-- [EXEC_DSL_V0.1.md](./EXEC_DSL_V0.1.md)：当前 DSL 规范草案
+- [EXEC_DSL.md](./EXEC_DSL.md)：当前 DSL 规范
 - [example.json](./references/example.json)：当前 DSL 样例
 
 若实现与样例、规范发生冲突，应优先：
 
-1. 先核对 `EXEC_DSL_V0.1.md`
+1. 先核对 `src/check_engine/` 与 `tests/` 中的真实实现
 2. 再核对 `references/example.json`
-3. 若仍有歧义，先与用户确认，再修改实现或文档
+3. 最后核对 `EXEC_DSL.md`
+4. 若仍有歧义，先与用户确认，再修改实现或文档
 
 ## ExecDSL 当前边界
 
 当前 `ExecDSL` 顶层固定为：
 
-- `context`
 - `variables`
-- `prechecks`
 - `steps`
 - `on_fail`
 
 当前执行顺序固定为：
 
 1. 绑定 `$input`
-2. 执行 `context`
-3. 计算 `variables`
-4. 顺序执行 `prechecks`
-5. 若任一 `precheck` 失败，则立即停止
-6. 顺序执行 `steps`
-7. 求值顶层 `on_fail.decision`
-8. 命中则失败，否则返回 `pass`
+2. 计算 `variables`
+3. 顺序执行 `steps`
+4. 每个 `step` 执行后先判定 `on_fail`
+5. 若未失败，再判定 `on_pass`
+6. 所有 `steps` 完成后，求值顶层 `on_fail.decision`
+7. 命中则失败，否则返回 `pass`
 
 当前第一版约束：
 
-- `context` 当前按特殊 SQL 节点处理
-- `variables` 当前只支持 `assign_by_condition`
-- `prechecks` 当前以 SQL 检查为主
-- `steps` 当前以 `type: sql` 为主
+- 仅支持 JSON DSL 文本输入
+- 顶层 `variables` 和 `type: variable` step 都使用 `when/default` 语义
+- `steps` 当前支持 `type: sql` 与 `type: variable`
+- `sql` step 仅支持单条只读 `SELECT/WITH`
 - `consumes` 通过 CTE 实现
-- 成功时不需要错误消息，直接返回 `pass`
+- step 级短路通过 `on_fail` / `on_pass` 完成，不再保留独立 `prechecks`
+- 成功时直接返回 `pass`
 
 ## 关键设计原则
 
@@ -120,38 +119,42 @@
 - 执行结果应尽量保留可调试信息。
 - 至少要能定位：
   - 哪个节点失败
-  - 失败阶段是 `precheck` 还是最终判定
+  - 失败阶段是 `step`、`final` 还是 `runtime`
   - 对应中英文消息
   - 哪个 SQL 节点被执行过
+  - 实际执行 SQL 与节点执行轨迹
 
 ## 引用与数据流原则
 
 - 运行时作用域使用：
   - `$input`
-  - `$context`
   - `$variables`
   - `$steps`
+- step 级 SQL 策略与消息模板允许使用局部作用域 `$.`
 - 步骤输出必须使用带命名空间路径引用，例如：
   - `$steps.exchange_rate.final_amount`
+- `variable` step 的结果使用 `$steps.<step_name>` 引用，例如：
+  - `$steps.final_threshold`
 - 不支持扁平引用，例如：
   - `$steps.final_amount`
 - `outputs` 是对外暴露字段白名单，不做全局字段提升。
-- 被 `consumes` 引用的节点，必须显式声明 `outputs`。
+- 被字段级引用或被 `consumes` 引用的 SQL 节点，必须显式声明 `outputs`。
 
-## prechecks 规则
+## step 短路规则
 
-- `prechecks` 按顺序执行。
-- 任一 `precheck` 失败即短路返回。
-- `prechecks` 失败后：
-  - 不再执行后续 `prechecks`
-  - 不再执行 `steps`
-  - 不再执行顶层 `on_fail`
-- 当前 `prechecks.on_fail.decision` 重点支持 `exists` 语义。
+- `steps` 按顺序执行。
+- 每个 `step` 可选配置 `on_fail` / `on_pass`。
+- `on_fail` 命中即短路失败返回，`phase = "step"`。
+- `on_pass` 命中即短路成功返回，`phase = "pass"`。
+- 同一个 `step` 内，`on_fail` 判定优先于 `on_pass`。
+- 若 step 级未短路，才会继续执行后续 steps。
+- 顶层 `on_fail` 仅在所有 steps 都完成后才会判定。
 
 ## 消息渲染规则
 
 - 支持 `{field}` 形式的行级占位符。
 - 支持 `{$path}` 形式的全局路径占位符。
+- 支持 `f{...:format_spec}` 形式的格式化占位符。
 - `sub_repeat`：
   - `[]` 仅用于标识重复片段
   - 最终输出中不保留 `[]`
@@ -169,6 +172,7 @@
 
 - DSL 解析模块
 - DSL 校验模块
+- DSL 编译模块
 - 引用解析模块
 - 表达式求值模块
 - SQL 执行模块
@@ -176,35 +180,46 @@
 - 消息渲染模块
 - 标准结果封装模块
 
-建议先完成最小闭环，再补充扩展能力，不要一开始就做过多插件化设计。
+建议优先沿着现有目录继续演进，不要脱离当前代码状态另起一套抽象。
 
-## 目录与代码组织建议
+## 目录与代码组织
 
-由于项目仍在早期，目录可以逐步演进，但建议朝以下结构靠拢：
+当前实际目录结构更接近：
 
 ```text
 src/check_engine/
+  compiler/
   dsl/
+  expression/
   parser/
-  validator/
-  executor/
   renderer/
+  runtime/
+  sql/
+  validator/
+  __init__.py
+  engine.py
+  execution_pipeline.py
+  reference_parser.py
+  step_registry.py
 tests/
 playground/
-docs/
+references/
 ```
 
 说明：
 
 - `src/check_engine/`：正式发布的库代码
+- `compiler/`：表达式预编译与编译缓存
 - `dsl/`：DSL 模型与协议定义
+- `expression/`：表达式编译与求值
 - `parser/`：DSL 解析
+- `renderer/`：失败消息渲染
+- `runtime/`：运行时状态、引用解析、结果封装
+- `sql/`：SQL 执行与 CTE 构造
 - `validator/`：DSL 校验
-- `executor/`：执行调度与 SQL 运行
-- `renderer/`：消息渲染
 - `tests/`：单元测试与集成测试
 - `playground/`：验证项目或样例运行环境
-- `docs/`：设计文档
+- `references/`：DSL 样例与参考数据
 
 ## 测试要求
 
@@ -252,9 +267,9 @@ docs/
 - 提交时尽量只提交本次修改的文件，不混入用户的其他草稿改动。
 - 不要提交 `uv.lock`；若本地执行 `uv` 命令生成了该文件，应将其移出提交范围。
 - 提交信息应简洁明确，优先使用英文动词开头的 conventional 风格，例如：
-  - `docs: update ExecDSL agent guidance`
+  - `docs: align ExecDSL docs with implementation`
   - `feat: add DSL validator skeleton`
-  - `test: add precheck rendering cases`
+  - `test: add step short-circuit rendering cases`
 
 ## 禁止事项
 
