@@ -116,6 +116,14 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       return codecIsValidDslIdentifier(value);
     }
 
+    function isTopLevelVariableNode(node) {
+      return !!node && node.type === 'variable' && !Number.isFinite(node.stepOrder);
+    }
+
+    function canEditNodeKind(node) {
+      return !!node && node.type !== 'on_fail' && !isTopLevelVariableNode(node);
+    }
+
     function makeNode(def, x, y) {
       return {
         id: makeNodeId(),
@@ -196,6 +204,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       }
 
       const showNodeTitleField = node.type !== 'on_fail';
+      const editableNodeKind = canEditNodeKind(node);
       const resolvedStepPolicyType = node.type === 'step'
         ? getNodeStepPolicyType(node)
         : 'none';
@@ -220,7 +229,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
           <input id="f_description" value="${escapeAttr(node.description || '')}" placeholder="可选：用于 step 的说明" />
         </div>
         ` : ''}
-        ${node.type !== 'on_fail' ? `
+        ${editableNodeKind ? `
         <div class="field">
           <label>类型</label>
           <select id="f_node_kind">
@@ -350,7 +359,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       renderMaterialIcons(editorPanel);
 
       const persistEditorNode = () => {
-        if (node.type !== 'on_fail') {
+        if (canEditNodeKind(node)) {
           const nodeKindSelect = document.getElementById('f_node_kind');
           if (nodeKindSelect) {
             const nextType = nodeKindSelect.value === 'sql' ? 'step' : 'variable';
