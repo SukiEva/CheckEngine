@@ -331,12 +331,12 @@
       border-radius: 999px;
       background: transparent;
       padding: 0;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      display: inline-grid;
+      place-items: center;
       cursor: pointer;
       color: #5f6b7a;
       line-height: 1;
+      overflow: hidden;
       transition: all .16s ease;
     }
     .node-action-btn:hover {
@@ -362,20 +362,19 @@
       color: #b71c1c;
     }
     .node-action-btn .ep-icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
+      display: block;
+      width: 28px;
+      height: 28px;
       font-size: 18px;
-      line-height: 1;
+      line-height: 28px;
       text-align: center;
-      vertical-align: middle;
-      flex: 0 0 auto;
+      margin: 0;
     }
     .node-action-btn .ep-icon.material-icons-outlined {
       font-size: 18px;
-      line-height: 1;
+      line-height: 28px;
+      width: 28px;
+      height: 28px;
     }
     .muted { color: var(--muted); }
 
