@@ -1,0 +1,4 @@
+interface:
+  display_name: "生成 ExecDSL"
+  short_description: "生成并校验符合 ExecDSL 规则的 JSON DSL"
+  default_prompt: "使用 $generate-execdsl，把业务规则整理成可通过项目校验的 ExecDSL JSON。"
