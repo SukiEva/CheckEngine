@@ -1,6 +1,6 @@
 import { createCanvasNodeController, createCanvasRenderer } from "./components/canvas_components.js";
 import { initRuntimeDslOperations } from "./runtime_dsl_operations.js";
-import { createDslCodec, formatConsumesTextFromRows as codecFormatConsumesTextFromRows, formatOutputsText as codecFormatOutputsText, formatVariableWhenSummary as codecFormatVariableWhenSummary, getOutputFields as codecGetOutputFields, isValidDslIdentifier as codecIsValidDslIdentifier, normalizeOutputRows as codecNormalizeOutputRows, normalizeStepPolicyType as codecNormalizeStepPolicyType, normalizeValueToInput as codecNormalizeValueToInput, parseInputValue as codecParseInputValue, parseJsonObjectOrEmpty as codecParseJsonObjectOrEmpty } from "./dsl/dsl_codec.js";
+import { consumesTextToRows as codecConsumesTextToRows, createDslCodec, formatConsumesTextFromRows as codecFormatConsumesTextFromRows, formatOutputsText as codecFormatOutputsText, formatVariableWhenSummary as codecFormatVariableWhenSummary, getOutputFields as codecGetOutputFields, isValidDslIdentifier as codecIsValidDslIdentifier, normalizeOutputRows as codecNormalizeOutputRows, normalizeStepPolicyType as codecNormalizeStepPolicyType, normalizeValueToInput as codecNormalizeValueToInput, parseInputValue as codecParseInputValue, parseJsonObjectOrEmpty as codecParseJsonObjectOrEmpty } from "./dsl/dsl_codec.js";
 import { createAutocompleteBinder } from "./editor/autocomplete.js";
 import { createDatasourceStore } from "./stores/datasource_store.js";
 import { createRuntimeInputStore } from "./stores/runtime_input_store.js";
@@ -536,7 +536,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       const drawRows = () => {
         if (!rows.length) {
           rowsContainer.innerHTML = '<div class="muted">未检测到 SQL 命名变量（例如 <code>:user_id</code>）。</div>';
-          bindRuntimeAutocomplete(node);
+          bindAutocompletes(node);
           return;
         }
         rowsContainer.innerHTML = rows.map((row, index) => `
@@ -552,7 +552,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
             if (typeof onChanged === 'function') onChanged();
           });
         });
-        bindRuntimeAutocomplete(node);
+        bindAutocompletes(node);
       };
       drawRows();
     }
@@ -635,7 +635,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
             if (typeof onChanged === 'function') onChanged();
           });
         });
-        bindRuntimeAutocomplete(node);
+        bindAutocompletes(node);
       };
       drawRows();
       addButton.addEventListener('click', () => {
@@ -694,7 +694,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       if (!rowsContainer || !addButton || !datalist) return;
       const rows = Array.isArray(node.consumeRows) && node.consumeRows.length
         ? node.consumeRows
-        : consumesTextToRows(node.consumes || '');
+        : codecConsumesTextToRows(node.consumes || '');
       if (!rows.length) {
         rows.push({ stepName: '', alias: '' });
       }
@@ -730,7 +730,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
             if (typeof onChanged === 'function') onChanged();
           });
         });
-        bindRuntimeAutocomplete(node);
+        bindAutocompletes(node);
       };
       drawRows();
       addButton.addEventListener('click', () => {
@@ -848,24 +848,12 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       return entries;
     }
 
-    function normalizeInputRows(rows) {
-      return rows;
-    }
-
     function renderRuntimeInputRows() {
       runtimeInputStore.renderRuntimeInputRows();
     }
 
-    function readRuntimeInputRows() {
-      return runtimeInputStore.readRuntimeInputRows();
-    }
-
     function readRuntimeInputPayload() {
       return runtimeInputStore.readRuntimeInputPayload();
-    }
-
-    function saveInputConfigLocal() {
-      runtimeInputStore.saveInputConfigLocal();
     }
 
     function loadInputConfigLocal() {
@@ -888,312 +876,10 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       requiredInputRows: REQUIRED_INPUT_ROWS,
       readRuntimeInputPayload,
       getOutputFields,
-      normalizeValueToInput,
     });
 
     function bindAutocompletes(node) {
       autocompleteBinder.bindAutocompletes(node);
-    }
-
-    const runtimeAutocompleteEl = document.createElement('div');
-    runtimeAutocompleteEl.className = 'autocomplete-panel';
-    runtimeAutocompleteEl.style.position = 'fixed';
-    runtimeAutocompleteEl.style.left = '0';
-    runtimeAutocompleteEl.style.top = '0';
-    runtimeAutocompleteEl.style.width = 'min(420px, 80vw)';
-    runtimeAutocompleteEl.style.display = 'none';
-    runtimeAutocompleteEl.style.zIndex = '60';
-    document.body.appendChild(runtimeAutocompleteEl);
-    const runtimeAutocompleteState = {
-      target: null,
-      matches: [],
-      activeIndex: 0,
-      range: null,
-    };
-
-    function getReferenceRange(target) {
-      const start = target.selectionStart || 0;
-      const end = target.selectionEnd || 0;
-      if (start !== end) return null;
-      const value = target.value || '';
-      let tokenStart = start;
-      while (tokenStart > 0 && /[\$.\w]/.test(value[tokenStart - 1])) {
-        tokenStart -= 1;
-      }
-      let tokenEnd = start;
-      while (tokenEnd < value.length && /[\$.\w]/.test(value[tokenEnd])) {
-        tokenEnd += 1;
-      }
-      const token = value.slice(tokenStart, tokenEnd);
-      if (!token.startsWith('$')) return null;
-      return { start: tokenStart, end: tokenEnd, token };
-    }
-
-    function hideRuntimeAutocomplete() {
-      runtimeAutocompleteState.target = null;
-      runtimeAutocompleteState.matches = [];
-      runtimeAutocompleteState.activeIndex = 0;
-      runtimeAutocompleteState.range = null;
-      runtimeAutocompleteEl.style.display = 'none';
-      runtimeAutocompleteEl.innerHTML = '';
-    }
-
-    function renderRuntimeAutocomplete() {
-      runtimeAutocompleteEl.innerHTML = runtimeAutocompleteState.matches
-        .map((item, index) => `
-          <button type="button" class="autocomplete-item${index === runtimeAutocompleteState.activeIndex ? ' active' : ''}" data-ac-index="${index}">
-            ${escapeHtml(item)}
-          </button>
-        `)
-        .join('');
-      runtimeAutocompleteEl.style.display = runtimeAutocompleteState.matches.length ? 'grid' : 'none';
-      runtimeAutocompleteEl.querySelectorAll('[data-ac-index]').forEach((button) => {
-        button.addEventListener('mousedown', (event) => {
-          event.preventDefault();
-          const index = Number(button.getAttribute('data-ac-index'));
-          applyRuntimeAutocomplete(index);
-        });
-      });
-    }
-
-    function applyRuntimeAutocomplete(index) {
-      const match = runtimeAutocompleteState.matches[index];
-      const target = runtimeAutocompleteState.target;
-      const range = runtimeAutocompleteState.range;
-      if (!match || !target || !range) {
-        hideRuntimeAutocomplete();
-        return;
-      }
-      const value = target.value || '';
-      target.value = `${value.slice(0, range.start)}${match}${value.slice(range.end)}`;
-      const nextCaret = range.start + match.length;
-      target.focus();
-      target.setSelectionRange(nextCaret, nextCaret);
-      hideRuntimeAutocomplete();
-    }
-
-    function positionRuntimeAutocomplete(target) {
-      const rect = target.getBoundingClientRect();
-      runtimeAutocompleteEl.style.left = `${Math.max(12, rect.left)}px`;
-      runtimeAutocompleteEl.style.top = `${Math.min(window.innerHeight - 20, rect.bottom + 8)}px`;
-    }
-
-    function bindRuntimeAutocomplete(currentNode) {
-      const updateAutocomplete = (target) => {
-        if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
-          hideRuntimeAutocomplete();
-          return;
-        }
-        if (target.dataset.refAutocomplete !== 'true') {
-          hideRuntimeAutocomplete();
-          return;
-        }
-        const range = getReferenceRange(target);
-        if (!range) {
-          hideRuntimeAutocomplete();
-          return;
-        }
-        const token = range.token.toLowerCase();
-        const matches = getRuntimePathSuggestions(currentNode)
-          .filter((item) => item.toLowerCase().startsWith(token))
-          .slice(0, 12);
-        if (!matches.length) {
-          hideRuntimeAutocomplete();
-          return;
-        }
-        runtimeAutocompleteState.target = target;
-        runtimeAutocompleteState.matches = matches;
-        runtimeAutocompleteState.activeIndex = 0;
-        runtimeAutocompleteState.range = range;
-        positionRuntimeAutocomplete(target);
-        renderRuntimeAutocomplete();
-      };
-
-      editorPanel.querySelectorAll('[data-ref-autocomplete="true"]').forEach((inputEl) => {
-        if (inputEl.dataset.runtimeAcBound === 'true') {
-          return;
-        }
-        inputEl.dataset.runtimeAcBound = 'true';
-        inputEl.addEventListener('focus', () => updateAutocomplete(inputEl));
-        inputEl.addEventListener('input', () => updateAutocomplete(inputEl));
-        inputEl.addEventListener('click', () => updateAutocomplete(inputEl));
-        inputEl.addEventListener('blur', () => {
-          window.setTimeout(hideRuntimeAutocomplete, 120);
-        });
-        inputEl.addEventListener('keydown', (event) => {
-          if (!runtimeAutocompleteState.matches.length || runtimeAutocompleteState.target !== inputEl) return;
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            runtimeAutocompleteState.activeIndex = (runtimeAutocompleteState.activeIndex + 1) % runtimeAutocompleteState.matches.length;
-            renderRuntimeAutocomplete();
-            return;
-          }
-          if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            runtimeAutocompleteState.activeIndex = (runtimeAutocompleteState.activeIndex - 1 + runtimeAutocompleteState.matches.length) % runtimeAutocompleteState.matches.length;
-            renderRuntimeAutocomplete();
-            return;
-          }
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            applyRuntimeAutocomplete(runtimeAutocompleteState.activeIndex);
-            return;
-          }
-          if (event.key === 'Escape') {
-            hideRuntimeAutocomplete();
-          }
-        });
-      });
-    }
-
-    function createAutocomplete(config) {
-      const {
-        inputEl,
-        panelEl,
-        getKeyword,
-        buildOptions,
-        applySuggestion,
-      } = config;
-      let activeIndex = -1;
-      let currentOptions = [];
-      let waitTimer = 0;
-
-      const hidePanel = () => {
-        panelEl.classList.remove('show');
-        panelEl.innerHTML = '';
-        activeIndex = -1;
-        currentOptions = [];
-      };
-
-      const renderWaiting = () => {
-        panelEl.classList.add('show');
-        panelEl.innerHTML = '<div class="autocomplete-waiting">联想中...</div>';
-      };
-
-      const renderOptions = (options) => {
-        currentOptions = options;
-        activeIndex = options.length ? 0 : -1;
-        if (!options.length) {
-          panelEl.classList.remove('show');
-          panelEl.innerHTML = '';
-          return;
-        }
-        panelEl.classList.add('show');
-        panelEl.innerHTML = options
-          .map((item, index) => `
-            <button type="button" class="autocomplete-item${index === activeIndex ? ' active' : ''}" data-value="${escapeAttr(item)}">${escapeHtml(item)}</button>
-          `)
-          .join('');
-        panelEl.querySelectorAll('.autocomplete-item').forEach((button, index) => {
-          button.addEventListener('mousedown', (event) => {
-            event.preventDefault();
-            applySuggestion(options[index]);
-            hidePanel();
-          });
-        });
-      };
-
-      const updateActiveVisual = () => {
-        panelEl.querySelectorAll('.autocomplete-item').forEach((button, index) => {
-          button.classList.toggle('active', index === activeIndex);
-        });
-      };
-
-      const requestSuggestions = () => {
-        const keyword = getKeyword();
-        if (!keyword) {
-          hidePanel();
-          return;
-        }
-        renderWaiting();
-        clearTimeout(waitTimer);
-        waitTimer = window.setTimeout(() => {
-          const options = buildOptions(keyword).slice(0, 10);
-          renderOptions(options);
-        }, 220);
-      };
-
-      inputEl.addEventListener('focus', requestSuggestions);
-      inputEl.addEventListener('input', requestSuggestions);
-      inputEl.addEventListener('blur', () => {
-        window.setTimeout(hidePanel, 120);
-      });
-      inputEl.addEventListener('keydown', (event) => {
-        if (!panelEl.classList.contains('show') || !currentOptions.length) return;
-        if (event.key === 'ArrowDown') {
-          event.preventDefault();
-          activeIndex = (activeIndex + 1) % currentOptions.length;
-          updateActiveVisual();
-          return;
-        }
-        if (event.key === 'ArrowUp') {
-          event.preventDefault();
-          activeIndex = (activeIndex - 1 + currentOptions.length) % currentOptions.length;
-          updateActiveVisual();
-          return;
-        }
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          if (activeIndex >= 0 && activeIndex < currentOptions.length) {
-            applySuggestion(currentOptions[activeIndex]);
-            hidePanel();
-          }
-          return;
-        }
-        if (event.key === 'Escape') {
-          hidePanel();
-        }
-      });
-    }
-
-    function getStepIdSuggestions(currentNodeId) {
-      return state.nodes
-        .filter((item) => item.type === 'step' && item.id !== currentNodeId)
-        .map((item, index) => normalizeNodeKey(item, index + 1));
-    }
-
-    function getRuntimePathSuggestions(currentNode) {
-      const basics = [
-        '$input',
-        '$variables',
-        '$steps',
-      ];
-      const inputPayload = readRuntimeInputPayload();
-      Object.keys(inputPayload).forEach((key) => {
-        basics.push(`$input.${key}`);
-      });
-      REQUIRED_INPUT_ROWS.forEach((requiredRow) => {
-        if (!Object.prototype.hasOwnProperty.call(inputPayload, requiredRow.key)) {
-          basics.push(`$input.${requiredRow.key}`);
-        }
-      });
-      const runtimePaths = [];
-      const currentNodeOutputFields = getOutputFields(currentNode);
-      const currentNodeLocalPaths = currentNodeOutputFields.map((field) => `$.${field}`);
-
-      state.nodes.forEach((item, index) => {
-        const nodeKey = normalizeNodeKey(item, index + 1);
-        const outputFields = getOutputFields(item);
-        if (item.type === 'variable') {
-          runtimePaths.push(`$variables.${nodeKey}`);
-        }
-        if (item.type === 'step') {
-          runtimePaths.push(`$steps.${nodeKey}`);
-          outputFields.forEach((field) => runtimePaths.push(`$steps.${nodeKey}.${field}`));
-        }
-      });
-
-      if (currentNode.type !== 'step') {
-        basics.push('$steps.<step_id>.<output>');
-      }
-      return [...new Set([...basics, ...currentNodeLocalPaths, ...runtimePaths])];
-    }
-
-    function normalizeNodeKey(node, fallbackIndex) {
-      const rawKey = (node.title || `${node.type}_${fallbackIndex}`).trim();
-      return rawKey
-        .replaceAll(/\s+/g, '_')
-        .replaceAll(/[^a-zA-Z0-9_]/g, '_');
     }
 
     function buildDividerPayload(node) {
@@ -1279,32 +965,12 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       return dslCodec.fromDslObject(payload);
     }
 
-    function updateDatasourceOptions(datasourceConfigs) {
-      return datasourceConfigs;
-    }
-
-    function createDatasourceCard(data) {
-      return data;
-    }
-
     function readDatasourceConfigRows() {
       return datasourceStore.readDatasourceConfigRows();
     }
 
-    function renderDatasourceCards(datasourceItems) {
-      return datasourceItems;
-    }
-
-    function normalizeDatasourceConfigs(rawDatasourceConfigs) {
-      return rawDatasourceConfigs;
-    }
-
     function loadDatasourceConfigLocal() {
       datasourceStore.loadDatasourceConfigLocal();
-    }
-
-    function saveDatasourceConfigLocal() {
-      datasourceStore.saveDatasourceConfigLocal();
     }
 
     function saveLocal() {
@@ -1342,7 +1008,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
             ),
           variableDefault: typeof node.variableDefault === 'string' ? node.variableDefault : '',
           consumes: typeof node.consumes === 'string' ? node.consumes : '',
-          consumeRows: Array.isArray(node.consumeRows) ? node.consumeRows : consumesTextToRows(typeof node.consumes === 'string' ? node.consumes : ''),
+          consumeRows: Array.isArray(node.consumeRows) ? node.consumeRows : codecConsumesTextToRows(typeof node.consumes === 'string' ? node.consumes : ''),
           stepOrder: safeStepOrder,
         };
         if (node.type === 'step') {
@@ -1365,23 +1031,6 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       return codecParseJsonObjectOrEmpty(rawText);
     }
 
-    function parseConsumesRows(rows) {
-      if (!Array.isArray(rows) || !rows.length) return [];
-      return rows
-        .filter((row) => row && typeof row === 'object')
-        .map((row) => {
-          const stepName = typeof row.stepName === 'string' ? row.stepName.trim() : '';
-          const alias = typeof row.alias === 'string' ? row.alias.trim() : '';
-          if (!stepName || !alias) return null;
-          const fromPath = stepName.startsWith('$') ? stepName : `$steps.${stepName}`;
-          return {
-            from: fromPath,
-            alias,
-          };
-        })
-        .filter(Boolean);
-    }
-
     function normalizeOutputRows(outputRows) {
       return codecNormalizeOutputRows(outputRows);
     }
@@ -1398,121 +1047,8 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       return codecFormatVariableWhenSummary(variableWhenRows);
     }
 
-    function formatConsumesText(consumes) {
-      if (!Array.isArray(consumes)) return '';
-      return consumes
-        .map((consume) => {
-          const fromPath = consume && typeof consume.from === 'string' ? consume.from : '';
-          const alias = consume && typeof consume.alias === 'string' ? consume.alias : '';
-          const compactFrom = fromPath.replace(/^\$steps\./, '');
-          if (!compactFrom) return '';
-          if (alias && alias !== compactFrom) {
-            return `${compactFrom}:${alias}`;
-          }
-          return compactFrom;
-        })
-        .filter(Boolean)
-        .join(', ');
-    }
-
-    function consumesTextToRows(rawText) {
-      if (!rawText || !rawText.trim()) return [{ stepName: '', alias: '' }];
-      return rawText
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .map((token) => {
-          const [rawName, rawAlias] = token.split(':').map((part) => part.trim());
-          return {
-            stepName: rawName || '',
-            alias: rawAlias || '',
-          };
-        });
-    }
-
     function formatConsumesTextFromRows(rows) {
       return codecFormatConsumesTextFromRows(rows);
-    }
-
-    function normalizeDslPayload(payload) {
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        throw new Error('DSL 顶层必须是对象。');
-      }
-      const normalized = { ...payload };
-      normalized.variables = normalizeVariables(normalized.variables || {});
-      normalized.steps = normalizeSteps(normalized.steps || []);
-      normalized.on_fail = normalizeFailPolicy(normalized.on_fail || {});
-      return normalized;
-    }
-
-    function normalizeVariables(rawVariables) {
-      const normalized = {};
-      Object.entries(rawVariables || {}).forEach(([name, value]) => {
-        if (!value || typeof value !== 'object') return;
-        if (Array.isArray(value.when) || Object.prototype.hasOwnProperty.call(value, 'default')) {
-          normalized[name] = value;
-          return;
-        }
-        const assign = value.assign_by_condition || {};
-        normalized[name] = {
-          when: assign.decision ? [{ condition: assign.decision, value: assign.value }] : [],
-          default: Object.prototype.hasOwnProperty.call(assign, 'value') ? assign.value : null,
-        };
-      });
-      return normalized;
-    }
-
-    function normalizeFailPolicy(rawPolicy) {
-      const safePolicy = rawPolicy && typeof rawPolicy === 'object' && !Array.isArray(rawPolicy) ? rawPolicy : {};
-      const message = safePolicy.message && typeof safePolicy.message === 'object' ? safePolicy.message : {};
-      const normalized = {
-        ...safePolicy,
-        mode: safePolicy.mode || 'single',
-        message_cn: safePolicy.message_cn || message.zh || '',
-        message_en: safePolicy.message_en || message.en || '',
-        divider: typeof safePolicy.divider === 'string' ? safePolicy.divider : '',
-        divider_cn: typeof safePolicy.divider_cn === 'string' ? safePolicy.divider_cn : '',
-        divider_en: typeof safePolicy.divider_en === 'string' ? safePolicy.divider_en : '',
-      };
-      delete normalized.message;
-      return normalized;
-    }
-
-    function normalizeSteps(rawSteps) {
-      if (!Array.isArray(rawSteps)) return [];
-      return rawSteps.map((item) => ({
-        ...item,
-        name: item.name || item.id || '',
-        sql_template: item.sql_template || item.sql || '',
-        sql_params: item.sql_params || {},
-        consumes: normalizeConsumes(item.consumes),
-        ...(item.on_fail && typeof item.on_fail === 'object' && !Array.isArray(item.on_fail)
-          ? { on_fail: normalizeFailPolicy(item.on_fail) }
-          : {}),
-        ...(item.on_pass && typeof item.on_pass === 'object' && !Array.isArray(item.on_pass)
-          ? { on_pass: { decision: item.on_pass.decision || '' } }
-          : {}),
-      }));
-    }
-
-    function normalizeConsumes(rawConsumes) {
-      if (!Array.isArray(rawConsumes)) return [];
-      return rawConsumes.map((consume) => {
-        if (consume && typeof consume === 'object' && !Array.isArray(consume)) {
-          return {
-            from: consume.from || '',
-            alias: consume.alias || 'cte_alias',
-          };
-        }
-        if (typeof consume === 'string') {
-          const compact = consume.replace(/^\$steps\./, '');
-          return {
-            from: consume.startsWith('$') ? consume : `$steps.${compact}`,
-            alias: compact.replace(/[^a-zA-Z0-9_]/g, '_') || 'cte_alias',
-          };
-        }
-        return { from: '', alias: 'cte_alias' };
-      });
     }
 
     function normalizeValueToInput(value) {

@@ -4,12 +4,11 @@ export function createAutocompleteBinder(options) {
     requiredInputRows,
     readRuntimeInputPayload,
     getOutputFields,
-    normalizeValueToInput,
-    consumesRowsReader,
   } = options;
 
   let runtimeAutocompleteContext = null;
   let runtimeFallbackPanel = null;
+  let scrollListenerBound = false;
 
   function getReferenceRange(target) {
     const cursor = target.selectionStart || 0;
@@ -128,7 +127,6 @@ export function createAutocompleteBinder(options) {
 
   function bindRuntimeAutocomplete(currentNode) {
     const targets = Array.from(document.querySelectorAll('[data-ref-autocomplete="true"]'));
-    const consumeRowsContainer = document.getElementById('f_consumes_rows');
     const consumeStepOptions = document.getElementById('consumeStepOptions');
     const stepIdSuggestions = getStepIdSuggestions(currentNode.id);
     if (consumeStepOptions) {
@@ -137,15 +135,11 @@ export function createAutocompleteBinder(options) {
         .join('');
     }
 
-    if (consumeRowsContainer) {
-      consumeRowsContainer.querySelectorAll('[data-consume-step-name]').forEach((input) => {
-        input.addEventListener('focus', () => {
-          input.setAttribute('list', 'consumeStepOptions');
-        });
-      });
-    }
-
     targets.forEach((target) => {
+      if (target.dataset.runtimeAcBound === 'true') {
+        return;
+      }
+      target.dataset.runtimeAcBound = 'true';
       target.addEventListener('input', () => {
         const range = getReferenceRange(target);
         if (!range || !range.keyword.startsWith('$')) {
@@ -190,11 +184,14 @@ export function createAutocompleteBinder(options) {
       });
     });
 
-    document.addEventListener('scroll', () => {
-      if (runtimeAutocompleteContext) {
-        positionRuntimeAutocomplete(runtimeAutocompleteContext.target);
-      }
-    }, { passive: true });
+    if (!scrollListenerBound) {
+      document.addEventListener('scroll', () => {
+        if (runtimeAutocompleteContext) {
+          positionRuntimeAutocomplete(runtimeAutocompleteContext.target);
+        }
+      }, { passive: true });
+      scrollListenerBound = true;
+    }
   }
 
   function ensureRuntimePanel(target) {
@@ -292,7 +289,8 @@ export function createAutocompleteBinder(options) {
     const sqlTextarea = document.getElementById('f_sql');
     const sqlPanel = document.getElementById('ac_sql');
 
-    if (sqlTextarea && sqlPanel) {
+    if (sqlTextarea && sqlPanel && sqlTextarea.dataset.sqlAcBound !== 'true') {
+      sqlTextarea.dataset.sqlAcBound = 'true';
       createAutocomplete({
         inputEl: sqlTextarea,
         panelEl: sqlPanel,
