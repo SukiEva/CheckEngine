@@ -325,9 +325,22 @@
       color: var(--muted);
       font-weight: 600;
     }
+    .field-with-actions {
+      gap: 8px;
+    }
+    .field-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .field-header label {
+      margin: 0;
+    }
 
     .field input,
     .kv-row input,
+    .runtime-input-row input,
     .field textarea,
     .field select {
       width: 100%;
@@ -350,6 +363,7 @@
     }
     .field input:focus,
     .kv-row input:focus,
+    .runtime-input-row input:focus,
     .field textarea:focus,
     .field select:focus {
       outline: none;
@@ -523,6 +537,20 @@
       font-size: 0.8rem;
       color: var(--muted);
     }
+    .runtime-input-list {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+    .runtime-input-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .runtime-input-row .el-button {
+      align-self: center;
+    }
     .kv-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
@@ -576,6 +604,17 @@
       .app > aside:last-child {
         grid-column: 1 / -1;
         min-height: 320px;
+      }
+    }
+    @media (max-width: 520px) {
+      .datasource-grid,
+      .kv-row,
+      .runtime-input-row {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .field-header {
+        align-items: flex-start;
       }
     }
   

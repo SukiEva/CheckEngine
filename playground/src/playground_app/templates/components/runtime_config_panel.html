@@ -18,10 +18,12 @@
       <div class="inline-status" id="datasourceStatus">尚未加载数据源配置。</div>
     </section>
     <section class="tab-panel active" data-tab-panel="input">
-      <div class="field">
-        <label>input_data（key/value）</label>
-        <div id="runtimeInputRows"></div>
-        <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddInputParam" title="新增输入参数" aria-label="新增输入参数"><span class="ep-icon">add</span></button>
+      <div class="field field-with-actions">
+        <div class="field-header">
+          <label>input_data（key/value）</label>
+          <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddInputParam" title="新增输入参数" aria-label="新增输入参数"><span class="ep-icon">add</span></button>
+        </div>
+        <div id="runtimeInputRows" class="runtime-input-list"></div>
       </div>
       <div class="inline-status">运行 DSL 时将使用这里的 input_data；默认包含 <code>source_object_id</code>、<code>renter_id</code> 与 <code>accounting_period</code>。</div>
     </section>
