@@ -422,6 +422,7 @@
 
     .field input,
     .kv-row input,
+    .field-row input,
     .runtime-input-row input,
     .field textarea,
     .field select {
@@ -445,6 +446,7 @@
     }
     .field input:focus,
     .kv-row input:focus,
+    .field-row input:focus,
     .runtime-input-row input:focus,
     .field textarea:focus,
     .field select:focus {
