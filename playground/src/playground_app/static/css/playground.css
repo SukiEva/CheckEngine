@@ -124,11 +124,55 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
+      min-height: 36px;
+      padding: 0 14px;
+      border: 1px solid #d6deea;
+      background: #fff;
+      color: #5f6b7a;
       border-radius: 10px;
       font-size: 0.84rem;
+      line-height: 1;
+      cursor: pointer;
+      transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease;
+    }
+    .el-button:hover {
+      border-color: #b8d9fb;
+      background: #f8fbff;
+    }
+    .el-button--primary.is-plain {
+      border-color: #8bc0ff;
+      background: #f8fbff;
+      color: #409eff;
+    }
+    .el-button--primary.is-plain:hover {
+      border-color: #409eff;
+      background: #eef6ff;
+      color: #2f86e8;
+    }
+    .el-button--danger.is-plain {
+      border-color: #f5b9b9;
+      background: #fff8f8;
+      color: #f56c6c;
+    }
+    .el-button--danger.is-plain:hover {
+      border-color: #f09292;
+      background: #fff1f1;
+      color: #e45757;
+    }
+    .el-button.el-button--small {
+      min-height: 36px;
+      font-size: 0.82rem;
     }
     .el-button.is-circle {
       border-radius: 50%;
+    }
+    .el-button.is-circle.el-button--small {
+      width: 36px;
+      min-width: 36px;
+      height: 36px;
+      min-height: 36px;
+      padding: 0;
+      flex: 0 0 36px;
     }
     .el-button .ep-icon {
       font-size: 17px;
@@ -350,6 +394,31 @@
     .field-header label {
       margin: 0;
     }
+    .field-header .el-button {
+      flex: 0 0 auto;
+      margin-left: auto;
+    }
+    .field-row-list {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+    .field-row {
+      display: grid;
+      gap: 10px;
+      align-items: center;
+      grid-auto-flow: column;
+    }
+    .field-row--single {
+      grid-template-columns: minmax(0, 1fr) 36px;
+    }
+    .field-row--double {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 36px;
+    }
+    .field-row-action {
+      justify-self: center;
+      align-self: center;
+    }
 
     .field input,
     .kv-row input,
@@ -556,19 +625,13 @@
       align-content: start;
     }
     .runtime-input-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-      gap: 6px;
       align-items: center;
     }
     .runtime-input-row .el-button {
       align-self: center;
     }
     .kv-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-      gap: 6px;
-      margin-bottom: 6px;
+      margin-bottom: 0;
     }
     .btn-loading {
       position: relative;
@@ -622,8 +685,12 @@
     @media (max-width: 520px) {
       .datasource-grid,
       .kv-row,
-      .runtime-input-row {
+      .runtime-input-row,
+      .field-row--single,
+      .field-row--double,
+      .field-row {
         grid-template-columns: minmax(0, 1fr);
+        grid-auto-flow: row;
       }
 
       .field-header {

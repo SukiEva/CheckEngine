@@ -9,12 +9,14 @@
       <button type="button" class="el-button el-button--default is-plain tab-btn active is-active" data-tab-target="input">输入参数</button>
     </div>
     <section class="tab-panel" data-tab-panel="datasource">
-      <div class="field">
-        <label>datasource（name/db_url）</label>
+      <div class="field field-with-actions">
+        <div class="field-header">
+          <label>datasource（name/db_url）</label>
+          <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnDsAdd" title="新增数据源" aria-label="新增数据源"><span class="ep-icon">add</span></button>
+        </div>
       </div>
       <div class="field-note">仅支持 PostgreSQL：<code>postgresql://</code> 或 <code>postgresql+psycopg2://</code>。</div>
       <div class="datasource-list" id="datasourceList"></div>
-      <button type="button" class="el-button el-button--primary is-plain is-circle el-button--small" id="btnDsAdd" title="新增数据源" aria-label="新增数据源"><span class="ep-icon">add</span></button>
       <div class="inline-status" id="datasourceStatus">尚未加载数据源配置。</div>
     </section>
     <section class="tab-panel active" data-tab-panel="input">

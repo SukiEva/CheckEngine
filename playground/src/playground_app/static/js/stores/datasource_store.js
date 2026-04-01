@@ -71,10 +71,10 @@ export function createDatasourceStore(options) {
     const card = document.createElement('div');
     card.className = 'datasource-card';
     card.innerHTML = `
-      <div class="kv-row">
+      <div class="field-row field-row--double">
         <input data-role="name" placeholder="datasource 名称，例如 saas_db" />
         <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" />
-        <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="ep-icon">delete_outline</span></button>
+        <button class="el-button el-button--danger is-plain is-circle el-button--small field-row-action" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="ep-icon">delete_outline</span></button>
       </div>
     `;
     if (typeof renderMaterialIcons === 'function') {

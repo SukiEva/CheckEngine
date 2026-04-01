@@ -218,10 +218,12 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         </div>
         `}
         ${node.type === 'step' ? `
-        <div class="field">
-          <label>Consumes（step_name + alias）</label>
-          <div id="f_consumes_rows"></div>
-          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddConsumeRow" type="button" title="新增 consume" aria-label="新增 consume"><span class="ep-icon">add</span></button>
+        <div class="field field-with-actions">
+          <div class="field-header">
+            <label>Consumes（step_name + alias）</label>
+            <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddConsumeRow" type="button" title="新增 consume" aria-label="新增 consume"><span class="ep-icon">add</span></button>
+          </div>
+          <div id="f_consumes_rows" class="field-row-list"></div>
           <div class="field-note">step_name 支持选择已有 step 名，也支持输入 <code>$</code> 触发运行时变量联想。</div>
           <datalist id="consumeStepOptions"></datalist>
         </div>
@@ -256,10 +258,12 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
           <div class="field-note">变量名从 SQL 中自动提取并只读，仅需输入变量值。</div>
         </div>
         ${hasOutputs(node.type) ? `
-        <div class="field">
-          <label>Outputs（与 Consumes 一样按行维护）</label>
-          <div id="f_outputs_rows"></div>
-          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddOutputRow" type="button" title="新增 output" aria-label="新增 output"><span class="ep-icon">add</span></button>
+        <div class="field field-with-actions">
+          <div class="field-header">
+            <label>Outputs（与 Consumes 一样按行维护）</label>
+            <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddOutputRow" type="button" title="新增 output" aria-label="新增 output"><span class="ep-icon">add</span></button>
+          </div>
+          <div id="f_outputs_rows" class="field-row-list"></div>
           <div class="field-note">每行一个输出字段，不使用逗号分隔。</div>
         </div>
         ` : ''}
@@ -281,10 +285,12 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         </div>
         ` : ''}
         ${node.type === 'variable' ? `
-        <div class="field">
-          <label>When 条件与赋值（condition/value）</label>
-          <div id="f_variable_when_rows"></div>
-          <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddVariableWhen" type="button" title="新增 when 条件" aria-label="新增 when 条件"><span class="ep-icon">add</span></button>
+        <div class="field field-with-actions">
+          <div class="field-header">
+            <label>When 条件与赋值（condition/value）</label>
+            <button class="el-button el-button--primary is-plain is-circle el-button--small" id="btnAddVariableWhen" type="button" title="新增 when 条件" aria-label="新增 when 条件"><span class="ep-icon">add</span></button>
+          </div>
+          <div id="f_variable_when_rows" class="field-row-list"></div>
         </div>
         <div class="field">
           <label>默认值（default）</label>
@@ -592,10 +598,10 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         : [{ condition: '', value: '' }];
       const drawRows = () => {
         rowsContainer.innerHTML = rows.map((row, index) => `
-          <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
+          <div class="field-row field-row--double">
             <input data-variable-condition="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.condition || '')}" placeholder="条件，如 $input.amount > 1000" />
             <input data-variable-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(normalizeValueToInput(Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : ''))}" placeholder="赋值，如 1000 或 \"PASS\"" />
-            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="ep-icon">delete_outline</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small field-row-action" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="ep-icon">delete_outline</span></button>
           </div>
         `).join('');
         renderMaterialIcons(rowsContainer);
@@ -630,9 +636,9 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       const rows = normalizeOutputRows(node.outputRows);
       const drawRows = () => {
         rowsContainer.innerHTML = rows.map((row, index) => `
-          <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; margin-bottom:6px;">
+          <div class="field-row field-row--single">
             <input data-output-field="${index}" value="${escapeAttr(row.field || '')}" placeholder="输出字段名，如 final_amount" />
-            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-output-remove="${index}" title="删除 output" aria-label="删除 output"><span class="ep-icon">delete_outline</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small field-row-action" type="button" data-output-remove="${index}" title="删除 output" aria-label="删除 output"><span class="ep-icon">delete_outline</span></button>
           </div>
         `).join('');
         renderMaterialIcons(rowsContainer);
@@ -679,10 +685,10 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       const drawRows = () => {
         renderStepOptions();
         rowsContainer.innerHTML = rows.map((row, index) => `
-          <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:6px; margin-bottom:6px;">
+          <div class="field-row field-row--double">
             <input data-consume-step="${index}" data-ref-autocomplete="true" list="consumeStepOptions" value="${escapeAttr(row.stepName || '')}" placeholder="step_name 或 $steps.xxx" />
             <input data-consume-alias="${index}" value="${escapeAttr(row.alias || '')}" placeholder="alias（必填）" />
-            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="ep-icon">delete_outline</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small field-row-action" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="ep-icon">delete_outline</span></button>
           </div>
         `).join('');
         renderMaterialIcons(rowsContainer);

@@ -42,10 +42,10 @@ export function createRuntimeInputStore(options) {
       const safeKey = row && typeof row.key === 'string' ? row.key : '';
       const safeValue = row && Object.prototype.hasOwnProperty.call(row, 'value') ? String(row.value ?? '') : '';
       return `
-      <div class="runtime-input-row" data-input-row="${index}">
+      <div class="field-row field-row--double runtime-input-row" data-input-row="${index}">
         <input data-input-key="${index}" placeholder="参数名，例如 source_object_id" value="${safeKey}" />
         <input data-input-value="${index}" placeholder="参数值，例如 DEMO_1" value="${safeValue}" />
-        <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-remove-input="${index}" aria-label="删除参数" title="删除参数"><span class="ep-icon">delete_outline</span></button>
+        <button class="el-button el-button--danger is-plain is-circle el-button--small field-row-action" type="button" data-remove-input="${index}" aria-label="删除参数" title="删除参数"><span class="ep-icon">delete_outline</span></button>
       </div>
       `;
     }).join('');
