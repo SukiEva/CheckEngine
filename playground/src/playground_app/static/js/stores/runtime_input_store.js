@@ -5,6 +5,7 @@ export function createRuntimeInputStore(options) {
     requiredRows,
     defaultRows,
     parseInputValue,
+    renderMaterialIcons,
   } = options;
 
   let runtimeInputRows = [...defaultRows];
@@ -44,10 +45,13 @@ export function createRuntimeInputStore(options) {
       <div class="runtime-input-row" data-input-row="${index}">
         <input data-input-key="${index}" placeholder="参数名，例如 source_object_id" value="${safeKey}" />
         <input data-input-value="${index}" placeholder="参数值，例如 DEMO_1" value="${safeValue}" />
-        <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-remove-input="${index}" aria-label="删除参数" title="删除参数"><span aria-hidden="true">✕</span></button>
+        <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-remove-input="${index}" aria-label="删除参数" title="删除参数"><span class="ep-icon">delete_outline</span></button>
       </div>
       `;
     }).join('');
+    if (typeof renderMaterialIcons === 'function') {
+      renderMaterialIcons(runtimeInputRowsEl);
+    }
 
     runtimeInputRowsEl.querySelectorAll('[data-remove-input]').forEach((button) => {
       button.addEventListener('click', () => {

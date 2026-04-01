@@ -97,7 +97,7 @@ export function createCanvasRenderer(options) {
             <span class="node-action-group">
               ${buildNodeActionButtons(node)}
               ${showDeleteAction
-                ? '<button class="node-action-btn node-action-danger" type="button" data-node-action="delete" title="删除节点" aria-label="删除节点"><span class="ep-icon">delete</span></button>'
+                ? '<button class="node-action-btn node-action-danger" type="button" data-node-action="delete" title="删除节点" aria-label="删除节点"><span class="ep-icon">delete_outline</span></button>'
                 : ''}
             </span>
           </span>

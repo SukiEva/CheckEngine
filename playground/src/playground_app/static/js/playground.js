@@ -146,6 +146,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       requiredRows: REQUIRED_INPUT_ROWS,
       defaultRows: DEFAULT_INPUT_ROWS,
       parseInputValue: codecParseInputValue,
+      renderMaterialIcons,
     });
 
     let canvasNodeController = null;
@@ -493,6 +494,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
       storageKey: DATASOURCE_CONFIG_STORAGE_KEY,
       defaultConfigs: DEFAULT_DATASOURCE_CONFIGS,
       renderEditor,
+      renderMaterialIcons,
     });
 
     function renderDatasourceOptionsHtml() {
@@ -593,7 +595,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
           <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:6px; margin-bottom:6px;">
             <input data-variable-condition="${index}" data-ref-autocomplete="true" value="${escapeAttr(row.condition || '')}" placeholder="条件，如 $input.amount > 1000" />
             <input data-variable-value="${index}" data-ref-autocomplete="true" value="${escapeAttr(normalizeValueToInput(Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : ''))}" placeholder="赋值，如 1000 或 \"PASS\"" />
-            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="ep-icon">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-variable-remove="${index}" title="删除 when 条件" aria-label="删除 when 条件"><span class="ep-icon">delete_outline</span></button>
           </div>
         `).join('');
         renderMaterialIcons(rowsContainer);
@@ -630,7 +632,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
         rowsContainer.innerHTML = rows.map((row, index) => `
           <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; margin-bottom:6px;">
             <input data-output-field="${index}" value="${escapeAttr(row.field || '')}" placeholder="输出字段名，如 final_amount" />
-            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-output-remove="${index}" title="删除 output" aria-label="删除 output"><span class="ep-icon">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-output-remove="${index}" title="删除 output" aria-label="删除 output"><span class="ep-icon">delete_outline</span></button>
           </div>
         `).join('');
         renderMaterialIcons(rowsContainer);
@@ -680,7 +682,7 @@ import { closeDialog as uiCloseDialog, escapeAttr as uiEscapeAttr, escapeHtml as
           <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:6px; margin-bottom:6px;">
             <input data-consume-step="${index}" data-ref-autocomplete="true" list="consumeStepOptions" value="${escapeAttr(row.stepName || '')}" placeholder="step_name 或 $steps.xxx" />
             <input data-consume-alias="${index}" value="${escapeAttr(row.alias || '')}" placeholder="alias（必填）" />
-            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="ep-icon">delete</span></button>
+            <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-consume-remove="${index}" title="删除 consume" aria-label="删除 consume"><span class="ep-icon">delete_outline</span></button>
           </div>
         `).join('');
         renderMaterialIcons(rowsContainer);

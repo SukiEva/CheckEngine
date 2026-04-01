@@ -5,6 +5,7 @@ export function createDatasourceStore(options) {
     storageKey,
     defaultConfigs,
     renderEditor,
+    renderMaterialIcons,
   } = options;
 
   let datasourceNameOptions = [];
@@ -73,9 +74,12 @@ export function createDatasourceStore(options) {
       <div class="kv-row">
         <input data-role="name" placeholder="datasource 名称，例如 saas_db" />
         <input data-role="db_url" placeholder="postgresql+psycopg2://user:pass@host:5432/dbname" />
-        <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span aria-hidden="true">✕</span></button>
+        <button class="el-button el-button--danger is-plain is-circle el-button--small" type="button" data-role="remove" title="删除数据源" aria-label="删除数据源"><span class="ep-icon">delete_outline</span></button>
       </div>
     `;
+    if (typeof renderMaterialIcons === 'function') {
+      renderMaterialIcons(card);
+    }
     card.querySelector('[data-role="name"]').value = data && data.name ? data.name : '';
     card.querySelector('[data-role="db_url"]').value = data && data.db_url ? data.db_url : '';
     card.querySelector('[data-role="remove"]').addEventListener('click', () => {
@@ -94,6 +98,9 @@ export function createDatasourceStore(options) {
   function renderDatasourceCards(datasourceItems) {
     datasourceList.innerHTML = '';
     datasourceItems.forEach((item) => datasourceList.appendChild(createDatasourceCard(item)));
+    if (typeof renderMaterialIcons === 'function') {
+      renderMaterialIcons(datasourceList);
+    }
     updateDatasourceOptions(datasourceItems);
   }
 
