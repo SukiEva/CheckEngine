@@ -142,7 +142,7 @@ class ExecutionPipeline:
                 raise RuntimeError("step execution result is unexpectedly None.")
             state.set_step_result(step.name, result)
             step_fail_decision = compiled_dsl.step_fail_decisions.get(step.name)
-            if step_fail_decision is not None and self._should_fail_step(state, step_fail_decision, step.name):
+            if step_fail_decision is not None and self._evaluate_step_decision(state, step_fail_decision, step.name):
                 if step.on_fail is None:
                     raise RuntimeError("step.on_fail is unexpectedly None.")
                 message_cn, message_en = self.message_renderer.render(
@@ -159,7 +159,7 @@ class ExecutionPipeline:
                     state=state,
                 )
             step_pass_decision = compiled_dsl.step_pass_decisions.get(step.name)
-            if step_pass_decision is not None and self._should_pass_step(state, step_pass_decision, step.name):
+            if step_pass_decision is not None and self._evaluate_step_decision(state, step_pass_decision, step.name):
                 return ExecutionResult.build_pass(state)
         return None
 
@@ -229,16 +229,7 @@ class ExecutionPipeline:
                 return item.value
         return definition.default
 
-    def _should_fail_step(
-        self,
-        state: ExecutionState,
-        compiled_expression: CompiledExpression,
-        step_name: str,
-    ) -> bool:
-        step_data = state.step_data.get(step_name)
-        return self._should_fail_by_expression(compiled_expression, state, local_data=step_data)
-
-    def _should_pass_step(
+    def _evaluate_step_decision(
         self,
         state: ExecutionState,
         compiled_expression: CompiledExpression,
