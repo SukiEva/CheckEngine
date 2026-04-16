@@ -28,30 +28,35 @@
 
 ## 2. 真实执行链路
 
-`DslEngine.execute()` 的执行顺序如下：
+### 2.1 `DslEngine.validate()` 执行顺序
 
 1. 通过 `JsonDslParser` 解析 DSL 文本
-2. 通过 `DslValidator` 做静态校验
+2. 通过 `DslValidator` 做静态校验（结构、引用、SQL 安全）
 3. 通过 `DslCompiler` 预编译表达式
-4. 将编译结果放入编译缓存
-5. 创建 `ExecutionPipeline`
-6. 初始化 `ExecutionState`
-7. 执行顶层 `variables`
-8. 顺序执行 `steps`
-9. 判定顶层 `on_fail`
-10. 产出 `ExecutionResult`
+4. 将编译结果写入编译缓存（预热缓存，供后续 execute 复用）
+
+### 2.2 `DslEngine.execute()` 执行顺序
+
+1. 检查编译缓存；缓存命中则直接跳到第 4 步
+2. 通过 `JsonDslParser` 解析 DSL 文本
+3. 通过 `DslCompiler` 预编译表达式（**不调用 DslValidator**）
+4. 创建 `ExecutionPipeline`
+5. 初始化 `ExecutionState`
+6. 执行顶层 `variables`
+7. 顺序执行 `steps`
+8. 判定顶层 `on_fail`
+9. 产出 `ExecutionResult`
 
 对应的真实对象链路如下：
 
 ```text
-DSL JSON
-  -> JsonDslParser
-  -> DslDocument
-  -> DslValidator
-  -> DslCompiler
-  -> CompiledDsl
-  -> ExecutionPipeline
-  -> ExecutionResult
+validate():
+  DSL JSON -> JsonDslParser -> DslDocument -> DslValidator -> DslCompiler -> CompiledDsl -> cache
+
+execute():
+  cache hit  -> CompiledDsl
+  cache miss -> DSL JSON -> JsonDslParser -> DslCompiler -> CompiledDsl -> cache
+  CompiledDsl -> ExecutionPipeline -> ExecutionResult
 ```
 
 ## 3. 关键模块职责
@@ -179,7 +184,7 @@ from check_engine import DslEngine, StaticDatasourceRegistry
 
 ### 6.1 `DslEngine.validate(dsl_text)`
 
-用于显式校验 DSL，可在“保存规则”或“发布规则”前调用。
+用于显式校验 DSL，可在”保存规则”或”发布规则”前调用。校验成功后同时完成表达式预编译并写入编译缓存，供后续 `execute()` 调用直接复用，无需重复解析和编译。
 
 ### 6.2 `DslEngine.execute(dsl_text, input_data, datasource_registry)`
 

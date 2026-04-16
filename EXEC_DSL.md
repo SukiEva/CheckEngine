@@ -158,17 +158,34 @@
       "value": 900
     }
   ],
-  "default": 1000
+  "default": 1000,
+  "on_fail": {
+    "decision": "$steps.final_threshold == 0",
+    "mode": "single",
+    "message_cn": "阈值为零",
+    "message_en": "Threshold is zero"
+  },
+  "on_pass": {
+    "decision": "$steps.final_threshold > 9999"
+  },
+  "description": "计算最终校验阈值"
 }
 ```
 
-规则如下：
+字段说明：
 
 - `when/default` 语义与顶层 `variables` 一致
 - `default` 必填
+- `on_fail`：可选，step 失败短路策略
+- `on_pass`：可选，step 成功短路策略
+- `description`：可选，仅用于说明，不参与执行
+
+规则如下：
+
 - `consumes` 当前不支持出现在 `variable` step 上
 - `variable` step 执行结果通过 `$steps.<step_name>` 引用
 - `variable` step 没有导出字段概念，不支持 `$steps.<step_name>.<field>`
+- `variable` step 的 `on_fail` / `on_pass` 不支持 `$.` 局部作用域（variable step 无导出字段）
 
 ### 4.3 consumes
 
@@ -328,8 +345,8 @@
 分隔符规则：
 
 - `full_repeat`
-  - 中文默认 `；`
-  - 英文默认空格 `" "`
+  - 优先顺序：`divider_cn`/`divider_en` > `divider` > 内置默认值
+  - 中文内置默认 `；`，英文内置默认空格 `" "`
 - `sub_repeat`
   - 优先使用 `divider`
   - 否则分别使用 `divider_cn` / `divider_en`
