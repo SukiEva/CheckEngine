@@ -43,7 +43,7 @@ class ReferenceValidator:
         all_variables = set(document.variables.keys())
 
         for variable_name, definition in document.variables.items():
-            self._validate_variable_definition(variable_name, definition, document, available_variables, step_map)
+            self._validate_variable_definition(variable_name, definition, available_variables, step_map)
             available_variables.add(variable_name)
 
         available_steps: set[str] = set()
@@ -53,7 +53,6 @@ class ReferenceValidator:
                 step_definition.validate_references(
                     self,
                     step,
-                    document,
                     available_steps,
                     all_variables,
                     step_map,
@@ -63,7 +62,6 @@ class ReferenceValidator:
                 local_outputs = set(step.outputs) if isinstance(step, SqlStepNode) else None
                 self._validate_fail_policy(
                     step.on_fail,
-                    document,
                     available_steps=available_steps,
                     available_variables=all_variables,
                     path=f"steps[{index}].on_fail",
@@ -74,7 +72,6 @@ class ReferenceValidator:
                 local_outputs = set(step.outputs) if isinstance(step, SqlStepNode) else None
                 self._validate_pass_policy(
                     step.on_pass,
-                    document,
                     available_steps=available_steps,
                     available_variables=all_variables,
                     path=f"steps[{index}].on_pass",
@@ -85,7 +82,6 @@ class ReferenceValidator:
 
         self._validate_fail_policy(
             document.on_fail,
-            document,
             available_steps=set(step_names),
             available_variables=all_variables,
             path="on_fail",
@@ -97,7 +93,6 @@ class ReferenceValidator:
         self,
         variable_name: str,
         definition: VariableDefinition,
-        document: DslDocument,
         available_variables: set[str],
         step_map: dict[str, StepNode],
         available_steps: Optional[set[str]] = None,
@@ -108,7 +103,6 @@ class ReferenceValidator:
             for reference in self.reference_parser.extract_references(condition.condition):
                 self._validate_reference(
                     reference,
-                    document,
                     available_steps=available_steps or set(),
                     available_variables=available_variables,
                     path=f"{variable_path_prefix}.when[{index}].condition",
@@ -119,7 +113,6 @@ class ReferenceValidator:
     def _validate_sql_params(
         self,
         sql_params: Mapping[str, object],
-        document: DslDocument,
         available_steps: set[str],
         available_variables: set[str],
         step_map: dict[str, StepNode],
@@ -130,7 +123,6 @@ class ReferenceValidator:
                 reference_spec = self._parse_reference_for_validation(value, f"{path_prefix}.{key}")
                 self._validate_reference(
                     reference_spec,
-                    document,
                     available_steps=available_steps,
                     available_variables=available_variables,
                     path=f"{path_prefix}.{key}",
@@ -142,7 +134,6 @@ class ReferenceValidator:
         self,
         step: StepNode,
         available_steps: set[str],
-        _document: DslDocument,
         step_map: dict[str, StepNode],
     ) -> None:
         for consume in step.consumes:
@@ -162,7 +153,6 @@ class ReferenceValidator:
     def validate_sql_step_references(
         self,
         step: StepNode,
-        document: DslDocument,
         available_steps: set[str],
         available_variables: set[str],
         step_map: dict[str, StepNode],
@@ -172,18 +162,16 @@ class ReferenceValidator:
             return
         self._validate_sql_params(
             step.sql_params,
-            document,
             available_steps=available_steps,
             available_variables=available_variables,
             step_map=step_map,
             path_prefix=f"{path_prefix}.sql_params",
         )
-        self._validate_consumes(step, available_steps, document, step_map)
+        self._validate_consumes(step, available_steps, step_map)
 
     def validate_variable_step_references(
         self,
         step: StepNode,
-        document: DslDocument,
         available_steps: set[str],
         available_variables: set[str],
         step_map: dict[str, StepNode],
@@ -194,7 +182,6 @@ class ReferenceValidator:
         self._validate_variable_definition(
             step.name,
             VariableDefinition(when=step.when, default=step.default),
-            document,
             available_variables=available_variables,
             available_steps=available_steps,
             step_map=step_map,
@@ -204,7 +191,6 @@ class ReferenceValidator:
     def _validate_fail_policy(
         self,
         policy: FailPolicy,
-        document: DslDocument,
         available_steps: set[str],
         available_variables: set[str],
         path: str,
@@ -218,7 +204,6 @@ class ReferenceValidator:
         for reference in self.reference_parser.extract_references(policy.decision):
             self._validate_reference(
                 reference,
-                document,
                 available_steps,
                 available_variables=available_variables,
                 path=f"{path}.decision",
@@ -231,7 +216,6 @@ class ReferenceValidator:
             for reference in self._extract_template_references(template):
                 self._validate_reference(
                     reference,
-                    document,
                     available_steps,
                     available_variables=available_variables,
                     path=f"{path}.{field_name}",
@@ -244,7 +228,6 @@ class ReferenceValidator:
     def _validate_pass_policy(
         self,
         policy: PassPolicy,
-        document: DslDocument,
         available_steps: set[str],
         available_variables: set[str],
         path: str,
@@ -258,7 +241,6 @@ class ReferenceValidator:
         for reference in self.reference_parser.extract_references(policy.decision):
             self._validate_reference(
                 reference,
-                document,
                 available_steps=available_steps,
                 available_variables=available_variables,
                 path=f"{path}.decision",
@@ -270,7 +252,6 @@ class ReferenceValidator:
     def _validate_reference(
         self,
         reference_spec: ReferenceSpec,
-        document: DslDocument,
         available_steps: set[str],
         available_variables: set[str],
         path: str,
@@ -278,7 +259,6 @@ class ReferenceValidator:
         local_outputs: Optional[set[str]],
         allow_sql_step_root: bool = False,
     ) -> None:
-        del document
         if reference_spec.is_local:
             self._validate_local_reference(
                 reference_spec,
@@ -376,15 +356,13 @@ class ReferenceValidator:
     def _parse_reference_for_validation(self, reference: str, path: str) -> ReferenceSpec:
         try:
             return self.reference_parser.parse(reference)
-        except DSLExecutionError as exc:
+        except DSLExecutionError:
             self._raise(f"{path} contains invalid reference: {reference}")
-            raise AssertionError("unreachable") from exc
 
     def _find_step(self, step_map: dict[str, StepNode], step_name: str) -> StepNode:
         if step_name in step_map:
             return step_map[step_name]
         self._raise(f"Step not found: {step_name}")
-        raise AssertionError("unreachable")
 
     @staticmethod
     def _raise(message: str) -> NoReturn:

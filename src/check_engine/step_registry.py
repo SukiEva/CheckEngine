@@ -24,7 +24,7 @@ from .sql import DatasourceRegistry
 
 ParseStepFn = Callable[[Any, Mapping[str, Any], str, Sequence[ConsumeSpec]], StepNode]
 ValidateStructureFn = Callable[[Any, StepNode, Any, str], None]
-ValidateReferenceFn = Callable[[Any, StepNode, Any, set[str], set[str], dict[str, StepNode], str], None]
+ValidateReferenceFn = Callable[[Any, StepNode, set[str], set[str], dict[str, StepNode], str], None]
 CompileStepFn = Callable[[Any, StepNode], Any]
 ExecuteStepFn = Callable[[Any, StepNode, Any, ExecutionState, DatasourceRegistry], NodeExecutionResult]
 
@@ -147,7 +147,6 @@ def _validate_variable_step_structure(validator: Any, node: StepNode, raw_step: 
 def _validate_sql_step_references(
     validator: Any,
     step: StepNode,
-    document: Any,
     available_steps: set[str],
     available_variables: set[str],
     step_map: dict[str, StepNode],
@@ -155,7 +154,6 @@ def _validate_sql_step_references(
 ) -> None:
     validator.validate_sql_step_references(
         step,
-        document,
         available_steps,
         available_variables,
         step_map,
@@ -166,7 +164,6 @@ def _validate_sql_step_references(
 def _validate_variable_step_references(
     validator: Any,
     step: StepNode,
-    document: Any,
     available_steps: set[str],
     available_variables: set[str],
     step_map: dict[str, StepNode],
@@ -174,7 +171,6 @@ def _validate_variable_step_references(
 ) -> None:
     validator.validate_variable_step_references(
         step,
-        document,
         available_steps,
         available_variables,
         step_map,
