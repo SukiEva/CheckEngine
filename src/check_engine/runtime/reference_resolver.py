@@ -11,6 +11,30 @@ from ..exceptions import DSLExecutionError
 from ..reference_parser import ReferenceParser, ReferenceSpec
 
 
+def _is_projectable_sequence(value: Any) -> bool:
+    return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
+
+
+def _resolve_path_part(current: Any, part: str, reference: str) -> Any:
+    """将单个路径片段应用于当前值，支持 Mapping 查字段和 Sequence 投影。"""
+    if isinstance(current, Mapping):
+        if part not in current:
+            raise DSLExecutionError(f"Referenced field does not exist: {reference}")
+        return current[part]
+
+    if _is_projectable_sequence(current):
+        projected: list[Any] = []
+        for item in current:
+            if not isinstance(item, Mapping):
+                raise DSLExecutionError(f"Cannot resolve reference path further: {reference}")
+            if part not in item:
+                raise DSLExecutionError(f"Referenced field does not exist: {reference}")
+            projected.append(item[part])
+        return projected
+
+    raise DSLExecutionError(f"Cannot resolve reference path further: {reference}")
+
+
 class ScopeResolver(ABC):
     """作用域解析策略接口。"""
 
@@ -51,34 +75,8 @@ class StepScopeResolver(ScopeResolver):
 
         current = self.step_data[step_name]
         for part in reference_spec.path[1:]:
-            current = self._resolve_next(current, part, reference_spec.explicit)
+            current = _resolve_path_part(current, part, reference_spec.explicit)
         return current
-
-    def _resolve_next(self, current: Any, part: str, reference: str) -> Any:
-        if isinstance(current, Mapping):
-            if part not in current:
-                raise DSLExecutionError(
-                    f"Referenced field does not exist: {reference}",
-                )
-            return current[part]
-
-        if self._is_projectable_sequence(current):
-            projected: list[Any] = []
-            for item in current:
-                if not isinstance(item, Mapping):
-                    raise DSLExecutionError(
-                        f"Cannot resolve reference path further: {reference}",
-                    )
-                if part not in item:
-                    raise DSLExecutionError(
-                        f"Referenced field does not exist: {reference}",
-                    )
-                projected.append(item[part])
-            return projected
-
-        raise DSLExecutionError(
-            f"Cannot resolve reference path further: {reference}",
-        )
 
     @staticmethod
     def _require_step_name(reference_spec: ReferenceSpec) -> str:
@@ -87,10 +85,6 @@ class StepScopeResolver(ScopeResolver):
                 f"Steps reference must include step name: {reference_spec.explicit}",
             )
         return reference_spec.path[0]
-
-    @staticmethod
-    def _is_projectable_sequence(value: Any) -> bool:
-        return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
 
 
 @dataclass
@@ -158,26 +152,7 @@ class RuntimeReferenceResolver:
         return current
 
     def _resolve_local_part(self, current: Any, part: str, reference: str) -> Any:
-        if isinstance(current, Mapping):
-            if part not in current:
-                raise DSLExecutionError(f"Referenced field does not exist: {reference}")
-            return current[part]
-
-        if StepScopeResolver._is_projectable_sequence(current):
-            projected: list[Any] = []
-            for item in current:
-                if not isinstance(item, Mapping):
-                    raise DSLExecutionError(
-                        f"Cannot resolve reference path further: {reference}",
-                    )
-                if part not in item:
-                    raise DSLExecutionError(f"Referenced field does not exist: {reference}")
-                projected.append(item[part])
-            return projected
-
-        raise DSLExecutionError(
-            f"Cannot resolve reference path further: {reference}",
-        )
+        return _resolve_path_part(current, part, reference)
 
     def parse_reference(self, reference: str) -> ReferenceSpec:
         return self.reference_parser.parse(reference)
