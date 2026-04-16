@@ -141,17 +141,7 @@ class StructureValidator:
     def _validate_fail_policy(self, policy: FailPolicy, path: str) -> None:
         if policy.mode not in self.VALID_FAIL_MODES:
             self._raise(f"{path}.mode is not supported: {policy.mode}")
-        decision = policy.decision.strip()
-        if not decision:
-            self._raise(f"{path}.decision must not be empty.")
-        if decision == EXISTS_DECISION:
-            self._raise(f"{path}.decision does not support bare 'exists'; use exists($path) instead.")
-        if decision == "not exists":
-            self._raise(f"{path}.decision does not support bare 'not exists'; use not exists($path) instead.")
-        if decision != EXISTS_DECISION and decision.startswith(EXISTS_DECISION) and not self.reference_parser.is_exists_call(decision):
-            self._raise(f"{path}.decision exists syntax is invalid: {policy.decision}")
-        if decision.startswith("not exists") and not self.reference_parser.is_not_exists_call(decision):
-            self._raise(f"{path}.decision not exists syntax is invalid: {policy.decision}")
+        self._validate_decision_syntax(policy.decision, f"{path}.decision")
         if not policy.message_cn.strip():
             self._raise(f"{path}.message_cn must not be empty.")
         if not policy.message_en.strip():
@@ -166,6 +156,22 @@ class StructureValidator:
             self._validate_repeat_segment(policy.message_cn, f"{path}.message_cn")
             self._validate_repeat_segment(policy.message_en, f"{path}.message_en")
 
+    def _validate_decision_syntax(self, decision: str, path: str) -> None:
+        stripped = decision.strip()
+        if not stripped:
+            self._raise(f"{path} must not be empty.")
+        if stripped == EXISTS_DECISION:
+            self._raise(f"{path} does not support bare 'exists'; use exists($path) instead.")
+        if stripped == "not exists":
+            self._raise(f"{path} does not support bare 'not exists'; use not exists($path) instead.")
+        if stripped.startswith(EXISTS_DECISION) and not self.reference_parser.is_exists_call(stripped):
+            self._raise(f"{path} exists syntax is invalid: {decision}")
+        if stripped.startswith("not exists") and not self.reference_parser.is_not_exists_call(stripped):
+            self._raise(f"{path} not exists syntax is invalid: {decision}")
+
+    def _validate_pass_policy(self, policy: PassPolicy, path: str) -> None:
+        self._validate_decision_syntax(policy.decision, f"{path}.decision")
+
     def _validate_optional_non_empty_string(self, value: Any, path: str) -> None:
         if value is None:
             return
@@ -179,19 +185,6 @@ class StructureValidator:
             self._raise(f"{path} must contain exactly one [] segment.")
         if template.index("[") > template.index("]"):
             self._raise(f"{path} has invalid [] ordering.")
-
-    def _validate_pass_policy(self, policy: PassPolicy, path: str) -> None:
-        decision = policy.decision.strip()
-        if not decision:
-            self._raise(f"{path}.decision must not be empty.")
-        if decision == EXISTS_DECISION:
-            self._raise(f"{path}.decision does not support bare 'exists'; use exists($path) instead.")
-        if decision == "not exists":
-            self._raise(f"{path}.decision does not support bare 'not exists'; use not exists($path) instead.")
-        if decision.startswith(EXISTS_DECISION) and not self.reference_parser.is_exists_call(decision):
-            self._raise(f"{path}.decision exists syntax is invalid: {policy.decision}")
-        if decision.startswith("not exists") and not self.reference_parser.is_not_exists_call(decision):
-            self._raise(f"{path}.decision not exists syntax is invalid: {policy.decision}")
 
     def _validate_node_name(self, name: str, path: str) -> None:
         if name in self.RESERVED_NODE_NAMES:
