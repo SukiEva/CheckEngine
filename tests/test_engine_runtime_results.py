@@ -271,7 +271,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "pass")
         self.assertEqual(result.steps, {"step_a": {"v": []}})
 
-    def test_execution_result_to_dict_normalizes_mapping_views(self) -> None:
+    def test_execution_result_to_dict_returns_plain_data(self) -> None:
         result = ExecutionResult(
             passed=False,
             phase="final",
@@ -280,9 +280,9 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             message_en="y",
             error_message=None,
             runtime_exception=False,
-            input=MappingProxyType({"source_object_id": "SO-1"}),
-            variables=MappingProxyType({"threshold": 1000}),
-            steps=MappingProxyType({"step_a": MappingProxyType({"values": (1, 2)})}),
+            input={"source_object_id": "SO-1"},
+            variables={"threshold": 1000},
+            steps={"step_a": {"values": [1, 2]}},
         )
 
         payload = result.to_dict()
@@ -313,9 +313,9 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
             message_en=None,
             error_message=None,
             runtime_exception=False,
-            input=MappingProxyType({"source_object_id": "SO-1"}),
-            variables=MappingProxyType({"threshold": 1000}),
-            steps=MappingProxyType({"step_a": MappingProxyType({"values": (1, 2)})}),
+            input={"source_object_id": "SO-1"},
+            variables={"threshold": 1000},
+            steps={"step_a": {"values": [1, 2]}},
         )
 
         payload = result.to_dict()
@@ -398,7 +398,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(result.phase, "final")
         self.assertEqual(result.steps["threshold_step"], 200)
 
-    def test_node_execution_result_rows_are_read_only_views(self) -> None:
+    def test_node_execution_result_rows_are_tuple_of_dicts(self) -> None:
         result = NodeExecutionResult(
             raw_rows=[{"v": 1}],
             exported_data={"v": 1},
@@ -408,8 +408,7 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         rows = result.as_rows()
 
         self.assertIsInstance(rows, tuple)
-        with self.assertRaises(TypeError):
-            cast(Any, rows[0])["v"] = 2
+        self.assertEqual(rows[0], {"v": 1})
 
 
 

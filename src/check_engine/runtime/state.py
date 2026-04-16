@@ -4,58 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
-from types import MappingProxyType
-from typing import Any, Iterator, Optional, TypedDict, Union
+from typing import Any, Optional, TypedDict
 
 from check_engine.exceptions import DSLExecutionError
 from check_engine.runtime.reference_resolver import RuntimeReferenceResolver
-
-
-def _to_plain_data(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {key: _to_plain_data(item) for key, item in value.items()}
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return [_to_plain_data(item) for item in value]
-    return value
-
-
-def _freeze_runtime_data(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        frozen_mapping = {
-            key: _freeze_runtime_data(item)
-            for key, item in value.items()
-        }
-        return MappingProxyType(frozen_mapping)
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return FrozenSequenceView(_freeze_runtime_data(item) for item in value)
-    return value
-
-
-@dataclass(frozen=True)
-class FrozenSequenceView(Sequence[Any]):
-    """只读序列视图，保留与 list 的值相等语义。"""
-
-    _items: tuple[Any, ...]
-
-    def __init__(self, items: Union[Sequence[Any], Iterator[Any]]) -> None:
-        object.__setattr__(self, "_items", tuple(items))
-
-    def __getitem__(self, index: Any) -> Any:
-        return self._items[index]
-
-    def __len__(self) -> int:
-        return len(self._items)
-
-    def __iter__(self) -> Iterator[Any]:
-        return iter(self._items)
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, Sequence) and not isinstance(other, (str, bytes, bytearray)):
-            return list(self._items) == list(other)
-        return self._items == other
-
-    def __repr__(self) -> str:
-        return repr(list(self._items))
 
 
 class _StatePayload(TypedDict):
@@ -97,9 +49,7 @@ class NodeExecutionResult:
     executed_sql: Optional[str] = None
 
     def __post_init__(self) -> None:
-        frozen_rows = tuple(MappingProxyType(dict(row)) for row in self.raw_rows)
-        object.__setattr__(self, "raw_rows", frozen_rows)
-        object.__setattr__(self, "exported_data", _freeze_runtime_data(self.exported_data))
+        object.__setattr__(self, "raw_rows", tuple(dict(row) for row in self.raw_rows))
         object.__setattr__(self, "exported_fields", tuple(self.exported_fields))
 
     def as_rows(self) -> Sequence[Mapping[str, Any]]:
@@ -123,9 +73,6 @@ class ExecutionResult:
     executed_nodes: Sequence[ExecutedNodeTrace] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "input", _freeze_runtime_data(self.input))
-        object.__setattr__(self, "variables", _freeze_runtime_data(self.variables))
-        object.__setattr__(self, "steps", _freeze_runtime_data(self.steps))
         object.__setattr__(self, "executed_nodes", tuple(self.executed_nodes))
 
     @staticmethod
@@ -187,18 +134,18 @@ class ExecutionResult:
             "message_en": self.message_en,
             "error_message": self.error_message,
             "runtime_exception": self.runtime_exception,
-            "input": _to_plain_data(self.input),
-            "variables": _to_plain_data(self.variables),
-            "steps": _to_plain_data(self.steps),
+            "input": dict(self.input),
+            "variables": dict(self.variables),
+            "steps": dict(self.steps),
             "executed_nodes": [item.to_dict() for item in self.executed_nodes],
         }
 
     @staticmethod
     def _state_payload(state: "ExecutionState") -> _StatePayload:
         return {
-            "input": _freeze_runtime_data(state.input_data),
-            "variables": _freeze_runtime_data(state.variables_data),
-            "steps": _freeze_runtime_data(state.step_data),
+            "input": dict(state.input_data),
+            "variables": dict(state.variables_data),
+            "steps": dict(state.step_data),
             "executed_nodes": tuple(state.executed_nodes),
         }
 
