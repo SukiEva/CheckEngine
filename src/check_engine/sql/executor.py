@@ -31,6 +31,8 @@ class ExecutionStateLike(Protocol):
 class SqlExecutor:
     """执行步骤中的 SQL 节点。"""
 
+    _SQL_PARAM_PATTERN = re.compile(r":([A-Za-z_][A-Za-z0-9_]*)")
+
     def __init__(
         self,
         cte_builder: Optional[CteBuilder] = None,
@@ -98,10 +100,9 @@ class SqlExecutor:
         if not params:
             return sql
 
-        pattern = re.compile(r":([A-Za-z_][A-Za-z0-9_]*)")
         rendered_parts: list[str] = []
         cursor = 0
-        for match in pattern.finditer(sql):
+        for match in self._SQL_PARAM_PATTERN.finditer(sql):
             start, end = match.span()
             if start > 0 and sql[start - 1] == ":":
                 continue
