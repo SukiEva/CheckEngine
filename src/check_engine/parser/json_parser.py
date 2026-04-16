@@ -39,6 +39,8 @@ class JsonDslParser:
         )
 
     def parse(self, dsl_text: str) -> DslDocument:
+        if not isinstance(dsl_text, str):
+            raise DSLParseError("DSL text must be a string.")
         try:
             data = json.loads(dsl_text)
         except json.JSONDecodeError as exc:

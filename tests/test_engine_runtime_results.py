@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from check_engine.engine import DslEngine
 from check_engine.sql import DatasourceRegistry, SqlExecutor
 from check_engine.renderer import MessageRenderer
-from check_engine.exceptions import DSLExecutionError, DSLValidationError
+from check_engine.exceptions import DSLExecutionError, DSLParseError, DSLValidationError
 from check_engine.runtime.state import ExecutionResult, NodeExecutionResult
 
 
@@ -87,6 +87,20 @@ class EngineRuntimeResultTestCase(unittest.TestCase):
         self.assertEqual(result.error_message, "SQL node execution failed: step_a")
         self.assertTrue(result.runtime_exception)
         logger_mock.error.assert_called_once()
+
+    def test_validate_non_string_dsl_reuses_parser_error(self) -> None:
+        with self.assertRaises(DSLParseError) as ctx:
+            DslEngine().validate(cast(Any, 123))
+
+        self.assertEqual(str(ctx.exception), "DSL text must be a string.")
+
+    def test_execute_non_string_dsl_reuses_parser_error(self) -> None:
+        registry = cast(DatasourceRegistry, _UnusedRegistry())
+
+        with self.assertRaises(DSLParseError) as ctx:
+            DslEngine().execute(cast(Any, 123), {}, datasource_registry=registry)
+
+        self.assertEqual(str(ctx.exception), "DSL text must be a string.")
 
     def test_execute_returns_runtime_failure_result_with_on_fail_node(self) -> None:
         engine = DslEngine()

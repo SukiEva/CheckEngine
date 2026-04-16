@@ -7,6 +7,8 @@ from collections import OrderedDict
 import hashlib
 from typing import Generic, Optional, TypeVar
 
+from check_engine.exceptions import DSLParseError
+
 CompiledValueT = TypeVar("CompiledValueT")
 
 
@@ -65,5 +67,7 @@ class HashedLruCompileCache(CompileCacheLike[CompiledValueT]):
 
     @staticmethod
     def _build_key(dsl_text: str) -> str:
+        if not isinstance(dsl_text, str):
+            raise DSLParseError("DSL text must be a string.")
         digest = hashlib.sha256(dsl_text.encode("utf-8")).hexdigest()
         return f"{len(dsl_text)}:{digest}"

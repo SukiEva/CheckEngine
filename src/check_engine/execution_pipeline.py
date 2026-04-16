@@ -6,7 +6,7 @@ import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Optional, TypeVar, cast
+from typing import Any, Optional, TypeVar
 
 from check_engine.compiler import CompiledDsl
 from check_engine.dsl import SqlNode, SqlStepNode, StepNode, VariableDefinition, VariableStepNode
@@ -72,7 +72,7 @@ class ExecutionPipeline:
         compiled_step_data: Any,
         state: ExecutionState,
     ) -> NodeExecutionResult:
-        compiled_conditions = cast(tuple[CompiledExpression, ...], compiled_step_data or ())
+        compiled_conditions = compiled_step_data or ()
         value = self._evaluate_variable(
             VariableDefinition(when=step.when, default=step.default),
             compiled_conditions,
