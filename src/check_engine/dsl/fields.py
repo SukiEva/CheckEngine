@@ -44,6 +44,8 @@ class StepField(str, Enum):
     """步骤字段。"""
 
     CONSUMES = "consumes"
+    ON_FAIL = "on_fail"
+    ON_PASS = "on_pass"
 
 
 class ConsumeField(str, Enum):
@@ -56,8 +58,6 @@ class ConsumeField(str, Enum):
 class FailPolicyField(str, Enum):
     """失败策略字段。"""
 
-    ON_FAIL = "on_fail"
-    ON_PASS = "on_pass"
     DECISION = "decision"
     MODE = "mode"
     MESSAGE_CN = "message_cn"

@@ -8,12 +8,12 @@ from typing import Any, Callable, Optional
 
 from .dsl import (
     ConsumeSpec,
-    FailPolicyField,
     NamedNodeField,
     NODE_TYPE_SQL,
     NODE_TYPE_VARIABLE,
     NodeType,
     SqlNodeField,
+    StepField,
     SqlStepNode,
     StepNode,
     VariableStepNode,
@@ -92,13 +92,13 @@ def _parse_sql_step(node_parser: Any, mapping: Mapping[str, Any], node_path: str
         ),
         consumes=consumes,
         on_fail=node_parser.parse_fail_policy(
-            mapping.get(FailPolicyField.ON_FAIL),
-            f"{node_path}.{FailPolicyField.ON_FAIL}",
+            mapping.get(StepField.ON_FAIL),
+            f"{node_path}.{StepField.ON_FAIL}",
             required=False,
         ),
         on_pass=node_parser.parse_pass_policy(
-            mapping.get(FailPolicyField.ON_PASS),
-            f"{node_path}.{FailPolicyField.ON_PASS}",
+            mapping.get(StepField.ON_PASS),
+            f"{node_path}.{StepField.ON_PASS}",
         ),
         **sql_node_fields,
     )
@@ -122,13 +122,13 @@ def _parse_variable_step(
         ),
         consumes=consumes,
         on_fail=node_parser.parse_fail_policy(
-            mapping.get(FailPolicyField.ON_FAIL),
-            f"{node_path}.{FailPolicyField.ON_FAIL}",
+            mapping.get(StepField.ON_FAIL),
+            f"{node_path}.{StepField.ON_FAIL}",
             required=False,
         ),
         on_pass=node_parser.parse_pass_policy(
-            mapping.get(FailPolicyField.ON_PASS),
-            f"{node_path}.{FailPolicyField.ON_PASS}",
+            mapping.get(StepField.ON_PASS),
+            f"{node_path}.{StepField.ON_PASS}",
         ),
         **variable_node_fields,
     )
