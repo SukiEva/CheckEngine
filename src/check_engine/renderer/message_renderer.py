@@ -67,7 +67,30 @@ class MessageRenderer(MessageRenderHelpers):
             helpers=self,
         )
 
-    def _render_sub_repeat_segments(
+    def render_once(
+        self,
+        template: str,
+        state: ExecutionState,
+        row: Optional[Mapping[str, Any]],
+        overrides: Optional[dict[str, Any]] = None,
+        local_data: Optional[Any] = None,
+    ) -> str:
+        render_context = RenderContext(
+            state=state,
+            row=row,
+            overrides=overrides,
+            local_data=local_data,
+        )
+        rendered_parts: list[str] = []
+        cursor = 0
+        for template_token in self.template_parser.extract_tokens(template):
+            rendered_parts.append(template[cursor:template_token.start])
+            rendered_parts.append(self._render_template_token(template_token, render_context))
+            cursor = template_token.end
+        rendered_parts.append(template[cursor:])
+        return "".join(rendered_parts)
+
+    def render_sub_repeat_segments(
         self,
         segment: str,
         state: ExecutionState,
@@ -75,7 +98,7 @@ class MessageRenderer(MessageRenderHelpers):
         local_data: Optional[Any] = None,
     ) -> list[str]:
         if rows:
-            return [self._render_once(segment, state, row) for row in rows]
+            return [self.render_once(segment, state, row) for row in rows]
 
         array_tokens = self._collect_array_tokens(segment, state, local_data)
         if not array_tokens:
@@ -85,8 +108,63 @@ class MessageRenderer(MessageRenderHelpers):
         rendered: list[str] = []
         for index in range(token_size):
             overrides = {token: values[index] for token, values in array_tokens.items()}
-            rendered.append(self._render_once(segment, state, None, overrides=overrides, local_data=local_data))
+            rendered.append(self.render_once(segment, state, None, overrides=overrides, local_data=local_data))
         return rendered
+
+    def render_full_repeat_messages(
+        self,
+        template: str,
+        state: ExecutionState,
+        rows: Sequence[Mapping[str, Any]],
+        local_data: Optional[Any] = None,
+    ) -> list[str]:
+        array_tokens = self._collect_array_tokens(template, state, local_data)
+        if not array_tokens:
+            if not rows:
+                return []
+            return [self.render_once(template, state, row, local_data=local_data) for row in rows]
+
+        token_size = self._validate_and_get_array_token_size(array_tokens)
+        if rows and len(rows) != token_size:
+            raise DSLExecutionError(
+                "full_repeat list placeholders must have the same length as result rows.",
+            )
+        row_sequence: list[Optional[Mapping[str, Any]]] = list(rows) if rows else [None] * token_size
+        rendered: list[str] = []
+        for index, row in enumerate(row_sequence):
+            overrides = {token: values[index] for token, values in array_tokens.items()}
+            rendered.append(self.render_once(template, state, row, overrides=overrides, local_data=local_data))
+        return rendered
+
+    @staticmethod
+    def resolve_full_repeat_divider(policy: FailPolicy, locale: str) -> str:
+        if locale == "cn":
+            if policy.divider_cn is not None:
+                return policy.divider_cn
+            if policy.divider is not None:
+                return policy.divider
+            return "；"
+        if policy.divider_en is not None:
+            return policy.divider_en
+        if policy.divider is not None:
+            return policy.divider
+        return " "
+
+    @staticmethod
+    def resolve_sub_repeat_divider(policy: FailPolicy, locale: str) -> str:
+        if policy.divider is not None:
+            return policy.divider
+        if locale == "cn":
+            if policy.divider_cn is None:
+                raise DSLExecutionError(
+                    "sub_repeat divider_cn is required when divider is not set.",
+                )
+            return policy.divider_cn
+        if policy.divider_en is None:
+            raise DSLExecutionError(
+                "sub_repeat divider_en is required when divider is not set.",
+            )
+        return policy.divider_en
 
     def _collect_array_tokens(
         self,
@@ -113,79 +191,6 @@ class MessageRenderer(MessageRenderHelpers):
             )
         return token_lengths.pop()
 
-
-    def render_once(
-        self,
-        template: str,
-        state: ExecutionState,
-        row: Optional[Mapping[str, Any]],
-        local_data: Optional[Any] = None,
-    ) -> str:
-        return self._render_once(template, state, row, local_data=local_data)
-
-    def render_sub_repeat_segments(
-        self,
-        segment: str,
-        state: ExecutionState,
-        rows: Sequence[Mapping[str, Any]],
-        local_data: Optional[Any] = None,
-    ) -> list[str]:
-        return self._render_sub_repeat_segments(segment, state, rows, local_data=local_data)
-
-    def render_full_repeat_messages(
-        self,
-        template: str,
-        state: ExecutionState,
-        rows: Sequence[Mapping[str, Any]],
-        local_data: Optional[Any] = None,
-    ) -> list[str]:
-        array_tokens = self._collect_array_tokens(template, state, local_data)
-        if not array_tokens:
-            if not rows:
-                return []
-            return [self._render_once(template, state, row, local_data=local_data) for row in rows]
-
-        token_size = self._validate_and_get_array_token_size(array_tokens)
-        if rows and len(rows) != token_size:
-            raise DSLExecutionError(
-                "full_repeat list placeholders must have the same length as result rows.",
-            )
-        row_sequence: list[Optional[Mapping[str, Any]]] = list(rows) if rows else [None] * token_size
-        rendered: list[str] = []
-        for index, row in enumerate(row_sequence):
-            overrides = {token: values[index] for token, values in array_tokens.items()}
-            rendered.append(self._render_once(template, state, row, overrides=overrides, local_data=local_data))
-        return rendered
-
-    def resolve_full_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
-        return self._resolve_full_repeat_divider(policy, locale)
-
-    def resolve_sub_repeat_divider(self, policy: FailPolicy, locale: str) -> str:
-        return self._resolve_sub_repeat_divider(policy, locale)
-
-    def _render_once(
-        self,
-        template: str,
-        state: ExecutionState,
-        row: Optional[Mapping[str, Any]],
-        overrides: Optional[dict[str, Any]] = None,
-        local_data: Optional[Any] = None,
-    ) -> str:
-        render_context = RenderContext(
-            state=state,
-            row=row,
-            overrides=overrides,
-            local_data=local_data,
-        )
-        rendered_parts: list[str] = []
-        cursor = 0
-        for template_token in self.template_parser.extract_tokens(template):
-            rendered_parts.append(template[cursor:template_token.start])
-            rendered_parts.append(self._render_template_token(template_token, render_context))
-            cursor = template_token.end
-        rendered_parts.append(template[cursor:])
-        return "".join(rendered_parts)
-
     @staticmethod
     def _render_template_token(template_token: TemplateToken, render_context: RenderContext) -> str:
         try:
@@ -204,36 +209,6 @@ class MessageRenderer(MessageRenderHelpers):
                 f"Failed to format placeholder: {template_token.raw}",
                 original_exception=exc,
             ) from exc
-
-    @staticmethod
-    def _resolve_full_repeat_divider(policy: FailPolicy, locale: str) -> str:
-        if locale == "cn":
-            if policy.divider_cn is not None:
-                return policy.divider_cn
-            if policy.divider is not None:
-                return policy.divider
-            return "；"
-        if policy.divider_en is not None:
-            return policy.divider_en
-        if policy.divider is not None:
-            return policy.divider
-        return " "
-
-    @staticmethod
-    def _resolve_sub_repeat_divider(policy: FailPolicy, locale: str) -> str:
-        if policy.divider is not None:
-            return policy.divider
-        if locale == "cn":
-            if policy.divider_cn is None:
-                raise DSLExecutionError(
-                    "sub_repeat divider_cn is required when divider is not set.",
-                )
-            return policy.divider_cn
-        if policy.divider_en is None:
-            raise DSLExecutionError(
-                "sub_repeat divider_en is required when divider is not set.",
-            )
-        return policy.divider_en
 
     @staticmethod
     def _stringify(value: Any) -> str:
