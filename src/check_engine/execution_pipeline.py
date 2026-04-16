@@ -256,8 +256,5 @@ class ExecutionPipeline:
         try:
             return action(), None
         except DSLExecutionError as exc:
-            self._log_dsl_error(f"runtime:{failed_node}", exc)
+            log_dsl_error(self.logger, f"runtime:{failed_node}", exc)
             return None, ExecutionResult.build_runtime_failure(exc, state, failed_node=failed_node)
-
-    def _log_dsl_error(self, phase: str, exc: Exception) -> None:
-        log_dsl_error(self.logger, phase, exc)

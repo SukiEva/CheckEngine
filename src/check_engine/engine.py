@@ -59,8 +59,6 @@ class DslEngine:
 
     def validate(self, dsl_text: str) -> None:
         """显式校验 DSL（适合保存/更新规则时调用）。"""
-        if not isinstance(dsl_text, str):
-            raise TypeError("dsl_text must be a string.")
         try:
             document = self.parser.parse(dsl_text)
             self.validator.validate(document)
@@ -68,7 +66,7 @@ class DslEngine:
             self._compile_cache_backend.put(dsl_text, compiled)
         except Exception as exc:  # noqa: BLE001
             handled_error = self._ensure_dsl_error(exc)
-            self._log_dsl_error("validate", handled_error)
+            log_dsl_error(self.logger, "validate", handled_error)
             raise handled_error from exc
 
     def execute(
@@ -77,13 +75,11 @@ class DslEngine:
         input_data: Mapping[str, Any],
         datasource_registry: DatasourceRegistry,
     ) -> ExecutionResult:
-        if not isinstance(dsl_text, str):
-            raise TypeError("dsl_text must be a string.")
         try:
             compiled_dsl = self._compile(dsl_text)
         except Exception as exc:  # noqa: BLE001
             handled_error = self._ensure_dsl_error(exc)
-            self._log_dsl_error("compile", handled_error)
+            log_dsl_error(self.logger, "compile", handled_error)
             raise handled_error from exc
         pipeline = ExecutionPipeline(
             expression_evaluator=self.expression_evaluator,
@@ -113,5 +109,3 @@ class DslEngine:
             return exc
         return DSLExecutionError("Unexpected runtime error in DSL engine.", original_exception=exc)
 
-    def _log_dsl_error(self, phase: str, exc: Exception) -> None:
-        log_dsl_error(self.logger, phase, exc)
