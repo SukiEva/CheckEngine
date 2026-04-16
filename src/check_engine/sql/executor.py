@@ -218,7 +218,6 @@ class SqlExecutor:
 
         if node.result_mode == RESULT_MODE_RECORD:
             row = rows[0] if rows else {}
-            self._ensure_output_columns_exist(row, fields)
             return (self._project_row(row, fields) if fields else {}), fields
 
         if not fields:
