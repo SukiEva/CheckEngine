@@ -116,7 +116,6 @@ class StructureValidator:
         if not isinstance(node, SqlStepNode):
             self._raise(f"{path} node class does not match sql type.")
         self._validate_sql_node(node, path)
-        self._validate_outputs(node.outputs, f"{path}.outputs")
 
     def validate_variable_step_structure(self, node: StepNode, path: str) -> None:
         if not isinstance(node, VariableStepNode):
