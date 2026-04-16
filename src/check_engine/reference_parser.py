@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from .exceptions import DSLExecutionError
+from check_engine.exceptions import DSLExecutionError
 
 
 @dataclass(frozen=True)

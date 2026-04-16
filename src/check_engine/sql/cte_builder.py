@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
-from ..dsl import ConsumeSpec
-from ..exceptions import DSLExecutionError
+from check_engine.dsl import ConsumeSpec
+from check_engine.exceptions import DSLExecutionError
 
 class ConsumableRowsState(Protocol):
     """CTE 构造依赖的最小状态协议。"""

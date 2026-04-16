@@ -8,14 +8,14 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, Optional, TypeVar, cast
 
-from .compiler import CompiledDsl
-from .dsl import SqlNode, StepNode, VariableDefinition, VariableStepNode
-from .exceptions import DSLExecutionError, log_dsl_error
-from .expression import CompiledExpression, ExpressionEvaluator
-from .renderer import MessageRenderer
-from .runtime import ExecutionResult, ExecutionState, NodeExecutionResult
-from .sql import DatasourceRegistry, SqlExecutor
-from .step_registry import StepTypeRegistry
+from check_engine.compiler import CompiledDsl
+from check_engine.dsl import SqlNode, StepNode, VariableDefinition, VariableStepNode
+from check_engine.exceptions import DSLExecutionError, log_dsl_error
+from check_engine.expression import CompiledExpression, ExpressionEvaluator
+from check_engine.renderer import MessageRenderer
+from check_engine.runtime import ExecutionResult, ExecutionState, NodeExecutionResult
+from check_engine.sql import DatasourceRegistry, SqlExecutor
+from check_engine.step_registry import StepTypeRegistry
 
 RuntimeValueT = TypeVar("RuntimeValueT")
 

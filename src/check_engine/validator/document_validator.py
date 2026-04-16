@@ -2,12 +2,12 @@
 
 from typing import Optional
 
-from ..dsl import DslDocument
-from ..reference_parser import ReferenceParser
-from ..step_registry import StepTypeRegistry
-from .reference_validator import ReferenceValidator
-from .sql_validator import SqlSafetyValidator
-from .structure_validator import StructureValidator
+from check_engine.dsl import DslDocument
+from check_engine.reference_parser import ReferenceParser
+from check_engine.step_registry import StepTypeRegistry
+from check_engine.validator.reference_validator import ReferenceValidator
+from check_engine.validator.sql_validator import SqlSafetyValidator
+from check_engine.validator.structure_validator import StructureValidator
 
 
 class DslValidator:

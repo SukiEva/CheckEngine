@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import NoReturn, Optional
 
-from ..dsl import (
+from check_engine.dsl import (
     DslDocument,
     FAIL_MODE_SINGLE,
     NODE_TYPE_SQL,
@@ -18,10 +18,10 @@ from ..dsl import (
     VariableDefinition,
     VariableStepNode,
 )
-from ..exceptions import DSLExecutionError, DSLValidationError
-from ..reference_parser import ReferenceParser, ReferenceSpec
-from ..renderer.template_parser import TemplateParser
-from ..step_registry import StepTypeRegistry, build_default_step_registry
+from check_engine.exceptions import DSLExecutionError, DSLValidationError
+from check_engine.reference_parser import ReferenceParser, ReferenceSpec
+from check_engine.renderer.template_parser import TemplateParser
+from check_engine.step_registry import StepTypeRegistry, build_default_step_registry
 
 
 class ReferenceValidator:

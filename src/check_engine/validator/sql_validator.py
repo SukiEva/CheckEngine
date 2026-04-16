@@ -9,8 +9,8 @@ import sqlparse
 from sqlparse import tokens as sql_tokens
 from sqlparse.sql import Statement, Token
 
-from ..dsl import DslDocument, SqlNode, SqlStepNode
-from ..exceptions import DSLValidationError
+from check_engine.dsl import DslDocument, SqlNode, SqlStepNode
+from check_engine.exceptions import DSLValidationError
 
 
 class SqlSafetyValidator:

@@ -9,11 +9,11 @@ from contextlib import AbstractContextManager, contextmanager
 from decimal import Decimal
 from typing import Any, Optional, Protocol, cast
 
-from ..dsl import RESULT_MODE_RECORD, RESULT_MODE_RECORDS, SqlNode, SqlStepNode
-from ..exceptions import DSLExecutionError
-from ..runtime import NodeExecutionResult
-from .cte_builder import CteBuilder
-from .datasource import DatasourceLike, DatasourceRegistry
+from check_engine.dsl import RESULT_MODE_RECORD, RESULT_MODE_RECORDS, SqlNode, SqlStepNode
+from check_engine.exceptions import DSLExecutionError
+from check_engine.runtime import NodeExecutionResult
+from check_engine.sql.cte_builder import CteBuilder
+from check_engine.sql.datasource import DatasourceLike, DatasourceRegistry
 
 
 class ExecutionStateLike(Protocol):

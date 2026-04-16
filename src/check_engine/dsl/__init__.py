@@ -1,6 +1,6 @@
 """DSL 数据模型。"""
 
-from .fields import (
+from check_engine.dsl.fields import (
     ConsumeField,
     FailPolicyField,
     NamedNodeField,
@@ -11,7 +11,7 @@ from .fields import (
     TopLevelField,
     VariableField,
 )
-from .models import (
+from check_engine.dsl.models import (
     ConsumeSpec,
     DslDocument,
     EXISTS_DECISION,

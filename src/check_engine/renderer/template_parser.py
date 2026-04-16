@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from ..reference_parser import ReferenceParser, ReferenceSpec
+from check_engine.reference_parser import ReferenceParser, ReferenceSpec
 
 
 @dataclass(frozen=True)

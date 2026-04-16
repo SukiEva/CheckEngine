@@ -1,5 +1,5 @@
 """表达式求值。"""
 
-from .evaluator import CompiledExpression, ExpressionEvaluator
+from check_engine.expression.evaluator import CompiledExpression, ExpressionEvaluator
 
 __all__ = ["CompiledExpression", "ExpressionEvaluator"]

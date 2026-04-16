@@ -10,9 +10,9 @@ from dataclasses import dataclass
 from types import CodeType
 from typing import Any, Optional
 
-from ..exceptions import DSLExecutionError
-from ..reference_parser import ReferenceParser, ReferenceSpec
-from ..runtime import ExecutionState
+from check_engine.exceptions import DSLExecutionError
+from check_engine.reference_parser import ReferenceParser, ReferenceSpec
+from check_engine.runtime import ExecutionState
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,7 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any, NoReturn, Optional
 
-from ..dsl import (
+from check_engine.dsl import (
     DslDocument,
     ReservedNodeName,
     TopLevelField,
@@ -27,9 +27,9 @@ from ..dsl import (
     VariableStepNode,
     VariableDefinition,
 )
-from ..exceptions import DSLValidationError
-from ..reference_parser import ReferenceParser
-from ..step_registry import StepTypeRegistry, build_default_step_registry
+from check_engine.exceptions import DSLValidationError
+from check_engine.reference_parser import ReferenceParser
+from check_engine.step_registry import StepTypeRegistry, build_default_step_registry
 
 
 class StructureValidator:

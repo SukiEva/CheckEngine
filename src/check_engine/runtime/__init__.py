@@ -1,6 +1,6 @@
 """运行时状态。"""
 
-from .state import ExecutedNodeTrace, ExecutionResult, ExecutionState, NodeExecutionResult
+from check_engine.runtime.state import ExecutedNodeTrace, ExecutionResult, ExecutionState, NodeExecutionResult
 
 __all__ = [
     "ExecutedNodeTrace",

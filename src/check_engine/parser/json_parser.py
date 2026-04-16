@@ -6,10 +6,10 @@ import json
 import logging
 from typing import Any, Mapping, Optional, Sequence
 
-from ..dsl import DslDocument, TopLevelField
-from ..exceptions import DSLParseError
-from ..step_registry import StepTypeRegistry, build_default_step_registry
-from .node_parsers import JsonNodeParser, ParserHelpers
+from check_engine.dsl import DslDocument, TopLevelField
+from check_engine.exceptions import DSLParseError
+from check_engine.step_registry import StepTypeRegistry, build_default_step_registry
+from check_engine.parser.node_parsers import JsonNodeParser, ParserHelpers
 
 
 class JsonDslParser:

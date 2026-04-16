@@ -6,18 +6,18 @@ import logging
 from collections.abc import Mapping
 from typing import Any, Optional
 
-from .compiler import CompiledDsl, CompileCacheLike, DslCompiler, HashedLruCompileCache, NoopCompileCache
-from .exceptions import DSLExecutionError, log_dsl_error
-from .execution_pipeline import ExecutionPipeline
-from .expression import ExpressionEvaluator
-from .parser import JsonDslParser
-from .reference_parser import ReferenceParser
-from .renderer import MessageRenderer
-from .renderer.template_parser import TemplateParser
-from .runtime import ExecutionResult
-from .sql import DatasourceRegistry, SqlExecutor
-from .step_registry import StepTypeRegistry, build_default_step_registry
-from .validator import DslValidator
+from check_engine.compiler import CompiledDsl, CompileCacheLike, DslCompiler, HashedLruCompileCache, NoopCompileCache
+from check_engine.exceptions import DSLExecutionError, log_dsl_error
+from check_engine.execution_pipeline import ExecutionPipeline
+from check_engine.expression import ExpressionEvaluator
+from check_engine.parser import JsonDslParser
+from check_engine.reference_parser import ReferenceParser
+from check_engine.renderer import MessageRenderer
+from check_engine.renderer.template_parser import TemplateParser
+from check_engine.runtime import ExecutionResult
+from check_engine.sql import DatasourceRegistry, SqlExecutor
+from check_engine.step_registry import StepTypeRegistry, build_default_step_registry
+from check_engine.validator import DslValidator
 
 
 class DslEngine:
@@ -107,7 +107,7 @@ class DslEngine:
 
     @staticmethod
     def _ensure_dsl_error(exc: Exception) -> Exception:
-        from .exceptions import DSLParseError, DSLValidationError
+        from check_engine.exceptions import DSLParseError, DSLValidationError
 
         if isinstance(exc, (DSLParseError, DSLValidationError, DSLExecutionError)):
             return exc

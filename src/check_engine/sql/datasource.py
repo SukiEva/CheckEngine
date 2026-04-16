@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import AbstractContextManager
 from typing import Any, Protocol, Union, runtime_checkable
 
-from ..exceptions import DSLExecutionError
+from check_engine.exceptions import DSLExecutionError
 
 
 @runtime_checkable

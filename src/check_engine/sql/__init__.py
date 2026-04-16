@@ -1,7 +1,7 @@
 """SQL 执行相关组件。"""
 
-from .datasource import DatasourceRegistry, StaticDatasourceRegistry
-from .executor import SqlExecutor
+from check_engine.sql.datasource import DatasourceRegistry, StaticDatasourceRegistry
+from check_engine.sql.executor import SqlExecutor
 
 __all__ = [
     "DatasourceRegistry",

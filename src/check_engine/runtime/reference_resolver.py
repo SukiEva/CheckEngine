@@ -7,8 +7,8 @@ from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from ..exceptions import DSLExecutionError
-from ..reference_parser import ReferenceParser, ReferenceSpec
+from check_engine.exceptions import DSLExecutionError
+from check_engine.reference_parser import ReferenceParser, ReferenceSpec
 
 
 def _is_projectable_sequence(value: Any) -> bool:

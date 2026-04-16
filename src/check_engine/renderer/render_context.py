@@ -6,9 +6,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from ..exceptions import DSLExecutionError
-from ..runtime import ExecutionState
-from .template_parser import TemplateToken
+from check_engine.exceptions import DSLExecutionError
+from check_engine.runtime import ExecutionState
+from check_engine.renderer.template_parser import TemplateToken
 
 
 @dataclass(frozen=True)

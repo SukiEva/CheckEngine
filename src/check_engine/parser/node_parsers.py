@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Optional, cast
 
-from ..dsl import (
+from check_engine.dsl import (
     ConsumeField,
     ConsumeSpec,
     FailPolicy,
@@ -27,8 +27,8 @@ from ..dsl import (
     VariableDefinition,
     VariableField,
 )
-from ..exceptions import DSLParseError
-from ..step_registry import StepTypeRegistry, build_default_step_registry
+from check_engine.exceptions import DSLParseError
+from check_engine.step_registry import StepTypeRegistry, build_default_step_registry
 
 
 @dataclass(frozen=True)

@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Iterator, Optional, TypedDict, Union
 
-from ..exceptions import DSLExecutionError
-from .reference_resolver import RuntimeReferenceResolver
+from check_engine.exceptions import DSLExecutionError
+from check_engine.runtime.reference_resolver import RuntimeReferenceResolver
 
 
 def _to_plain_data(value: Any) -> Any:

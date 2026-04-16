@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from ..dsl import DslDocument, StepNode, VariableStepNode
-from ..exceptions import DSLExecutionError, DSLValidationError
-from ..expression import CompiledExpression, ExpressionEvaluator
-from ..step_registry import StepTypeRegistry, build_default_step_registry
+from check_engine.dsl import DslDocument, StepNode, VariableStepNode
+from check_engine.exceptions import DSLExecutionError, DSLValidationError
+from check_engine.expression import CompiledExpression, ExpressionEvaluator
+from check_engine.step_registry import StepTypeRegistry, build_default_step_registry
 
 
 @dataclass(frozen=True)

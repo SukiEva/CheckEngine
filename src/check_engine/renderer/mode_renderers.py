@@ -7,9 +7,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from ..dsl import FailPolicy
-from ..exceptions import DSLExecutionError
-from ..runtime import ExecutionState
+from check_engine.dsl import FailPolicy
+from check_engine.exceptions import DSLExecutionError
+from check_engine.runtime import ExecutionState
 
 
 class MessageRenderHelpers(ABC):

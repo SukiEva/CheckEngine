@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
-from .dsl import (
+from check_engine.dsl import (
     ConsumeSpec,
     NamedNodeField,
     NODE_TYPE_SQL,
@@ -18,9 +18,9 @@ from .dsl import (
     StepNode,
     VariableStepNode,
 )
-from .exceptions import DSLParseError
-from .runtime import ExecutionState, NodeExecutionResult
-from .sql import DatasourceRegistry
+from check_engine.exceptions import DSLParseError
+from check_engine.runtime import ExecutionState, NodeExecutionResult
+from check_engine.sql import DatasourceRegistry
 
 ParseStepFn = Callable[[Any, Mapping[str, Any], str, Sequence[ConsumeSpec]], StepNode]
 ValidateStructureFn = Callable[[Any, StepNode, Any, str], None]
