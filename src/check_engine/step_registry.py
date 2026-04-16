@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 from check_engine.dsl import (
     ConsumeSpec,
@@ -136,12 +136,12 @@ def _parse_variable_step(
 
 def _validate_sql_step_structure(validator: Any, node: StepNode, raw_step: Any, path: str) -> None:
     del raw_step
-    validator.validate_sql_step_structure(node, path)
+    validator.validate_sql_step_structure(cast(SqlStepNode, node), path)
 
 
 def _validate_variable_step_structure(validator: Any, node: StepNode, raw_step: Any, path: str) -> None:
     del raw_step
-    validator.validate_variable_step_structure(node, path)
+    validator.validate_variable_step_structure(cast(VariableStepNode, node), path)
 
 
 def _validate_sql_step_references(
@@ -153,7 +153,7 @@ def _validate_sql_step_references(
     path_prefix: str,
 ) -> None:
     validator.validate_sql_step_references(
-        step,
+        cast(SqlStepNode, step),
         available_steps,
         available_variables,
         step_map,
@@ -170,7 +170,7 @@ def _validate_variable_step_references(
     path_prefix: str,
 ) -> None:
     validator.validate_variable_step_references(
-        step,
+        cast(VariableStepNode, step),
         available_steps,
         available_variables,
         step_map,
@@ -183,7 +183,7 @@ def _compile_sql_step(_compiler: Any, _step: StepNode) -> Any:
 
 
 def _compile_variable_step(compiler: Any, step: StepNode) -> Any:
-    return compiler.compile_variable_step(step)
+    return compiler.compile_variable_step(cast(VariableStepNode, step))
 
 
 def _execute_sql_step(
@@ -193,7 +193,7 @@ def _execute_sql_step(
     state: ExecutionState,
     datasource_registry: DatasourceRegistry,
 ) -> NodeExecutionResult:
-    return pipeline.execute_sql_step(step, state, datasource_registry)
+    return pipeline.execute_sql_step(cast(SqlStepNode, step), state, datasource_registry)
 
 
 def _execute_variable_step(
@@ -204,4 +204,4 @@ def _execute_variable_step(
     datasource_registry: DatasourceRegistry,
 ) -> NodeExecutionResult:
     del datasource_registry
-    return pipeline.execute_variable_step(step, compiled_step_data, state)
+    return pipeline.execute_variable_step(cast(VariableStepNode, step), compiled_step_data, state)

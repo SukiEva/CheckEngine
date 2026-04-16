@@ -9,7 +9,7 @@ from functools import partial
 from typing import Any, Optional, TypeVar, cast
 
 from check_engine.compiler import CompiledDsl
-from check_engine.dsl import SqlNode, StepNode, VariableDefinition, VariableStepNode
+from check_engine.dsl import SqlNode, SqlStepNode, StepNode, VariableDefinition, VariableStepNode
 from check_engine.exceptions import DSLExecutionError, log_dsl_error
 from check_engine.expression import CompiledExpression, ExpressionEvaluator
 from check_engine.renderer import MessageRenderer
@@ -54,15 +54,13 @@ class ExecutionPipeline:
 
     def execute_sql_step(
         self,
-        step: StepNode,
+        step: SqlStepNode,
         state: ExecutionState,
         datasource_registry: DatasourceRegistry,
     ) -> NodeExecutionResult:
-        if not isinstance(step, SqlNode):
-            raise DSLExecutionError(f"Unsupported sql step node class: {type(step).__name__}")
         return self._execute_sql_node(
             phase="step",
-            node=cast(SqlNode, step),
+            node=step,
             state=state,
             datasource_registry=datasource_registry,
             node_name=step.name,
@@ -70,12 +68,10 @@ class ExecutionPipeline:
 
     def execute_variable_step(
         self,
-        step: StepNode,
+        step: VariableStepNode,
         compiled_step_data: Any,
         state: ExecutionState,
     ) -> NodeExecutionResult:
-        if not isinstance(step, VariableStepNode):
-            raise DSLExecutionError(f"Unsupported variable step node class: {type(step).__name__}")
         compiled_conditions = cast(tuple[CompiledExpression, ...], compiled_step_data or ())
         value = self._evaluate_variable(
             VariableDefinition(when=step.when, default=step.default),

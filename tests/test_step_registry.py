@@ -30,7 +30,7 @@ class StepRegistryExtensionTestCase(unittest.TestCase):
             type_name="constant",
             parse=self._parse_constant_step,
             validate_structure=lambda validator, node, _raw_step, path: validator.validate_variable_step_structure(node, path),
-            validate_references=lambda validator, step, document, available_steps, available_variables, step_map, path_prefix: None,
+            validate_references=lambda validator, step, available_steps, available_variables, step_map, path_prefix: None,
             compile=lambda compiler, step: None,
             execute=self._execute_constant_step,
         )

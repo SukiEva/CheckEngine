@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from check_engine.compiler import CompiledDsl, CompileCacheLike, DslCompiler, HashedLruCompileCache, NoopCompileCache
-from check_engine.exceptions import DSLExecutionError, log_dsl_error
+from check_engine.exceptions import DSLExecutionError, DSLParseError, DSLValidationError, log_dsl_error
 from check_engine.execution_pipeline import ExecutionPipeline
 from check_engine.expression import ExpressionEvaluator
 from check_engine.parser import JsonDslParser
@@ -18,6 +18,8 @@ from check_engine.runtime import ExecutionResult
 from check_engine.sql import DatasourceRegistry, SqlExecutor
 from check_engine.step_registry import StepTypeRegistry, build_default_step_registry
 from check_engine.validator import DslValidator
+
+HandledDslError = Union[DSLParseError, DSLValidationError, DSLExecutionError]
 
 
 class DslEngine:
@@ -102,10 +104,7 @@ class DslEngine:
         return compiled
 
     @staticmethod
-    def _ensure_dsl_error(exc: Exception) -> Exception:
-        from check_engine.exceptions import DSLParseError, DSLValidationError
-
+    def _ensure_dsl_error(exc: Exception) -> HandledDslError:
         if isinstance(exc, (DSLParseError, DSLValidationError, DSLExecutionError)):
             return exc
         return DSLExecutionError("Unexpected runtime error in DSL engine.", original_exception=exc)
-

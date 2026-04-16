@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from check_engine.dsl import DslDocument, StepNode, VariableStepNode
+from check_engine.dsl import DslDocument, VariableStepNode
 from check_engine.exceptions import DSLExecutionError, DSLValidationError
 from check_engine.expression import CompiledExpression, ExpressionEvaluator
 from check_engine.step_registry import StepTypeRegistry, build_default_step_registry
@@ -78,9 +78,7 @@ class DslCompiler:
                 original_exception=exc,
             ) from exc
 
-    def compile_variable_step(self, step: StepNode) -> tuple[CompiledExpression, ...]:
-        if not isinstance(step, VariableStepNode):
-            return ()
+    def compile_variable_step(self, step: VariableStepNode) -> tuple[CompiledExpression, ...]:
         return tuple(
             self._compile_expression(item.condition, f"steps.{step.name}.when[{index}].condition")
             for index, item in enumerate(step.when)

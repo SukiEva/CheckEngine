@@ -112,14 +112,10 @@ class StructureValidator:
             self._raise(f"{path}.sql_template must not be empty.")
         self._validate_outputs(node.outputs, f"{path}.outputs")
 
-    def validate_sql_step_structure(self, node: StepNode, path: str) -> None:
-        if not isinstance(node, SqlStepNode):
-            self._raise(f"{path} node class does not match sql type.")
+    def validate_sql_step_structure(self, node: SqlStepNode, path: str) -> None:
         self._validate_sql_node(node, path)
 
-    def validate_variable_step_structure(self, node: StepNode, path: str) -> None:
-        if not isinstance(node, VariableStepNode):
-            self._raise(f"{path} node class does not match variable type.")
+    def validate_variable_step_structure(self, node: VariableStepNode, path: str) -> None:
         if not node.default_specified:
             self._raise(f"{path}.default is required.")
         for index, condition in enumerate(node.when):

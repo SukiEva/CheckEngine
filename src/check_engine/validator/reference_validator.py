@@ -152,14 +152,12 @@ class ReferenceValidator:
 
     def validate_sql_step_references(
         self,
-        step: StepNode,
+        step: SqlStepNode,
         available_steps: set[str],
         available_variables: set[str],
         step_map: dict[str, StepNode],
         path_prefix: str,
     ) -> None:
-        if not isinstance(step, SqlStepNode):
-            return
         self._validate_sql_params(
             step.sql_params,
             available_steps=available_steps,
@@ -171,14 +169,12 @@ class ReferenceValidator:
 
     def validate_variable_step_references(
         self,
-        step: StepNode,
+        step: VariableStepNode,
         available_steps: set[str],
         available_variables: set[str],
         step_map: dict[str, StepNode],
         path_prefix: str,
     ) -> None:
-        if not isinstance(step, VariableStepNode):
-            return
         self._validate_variable_definition(
             step.name,
             VariableDefinition(when=step.when, default=step.default),

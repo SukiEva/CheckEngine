@@ -59,9 +59,9 @@ class SqlExecutor:
             datasource = datasource_registry.get(node.datasource)
             rows = self._run_sql(datasource, final_sql, final_params, node.result_mode)
             exported_data, exported_fields = self._project_outputs(node, node_name, rows)
+        except DSLExecutionError:
+            raise
         except Exception as exc:  # noqa: BLE001
-            if isinstance(exc, DSLExecutionError):
-                raise
             raise DSLExecutionError(
                 f"SQL node execution failed: {node_name}",
                 original_exception=exc,
