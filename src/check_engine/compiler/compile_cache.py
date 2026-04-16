@@ -33,25 +33,32 @@ class NoopCompileCache(CompileCacheLike[CompiledValueT]):
 
 
 class HashedLruCompileCache(CompileCacheLike[CompiledValueT]):
-    """基于哈希 key 的 LRU 编译缓存。"""
+    """基于哈希 key 的 LRU 编译缓存。
+
+    以 SHA-256 摘要作为桶键加速查找，同时保留原始文本用于等值校验，
+    消除极端情况下哈希碰撞导致返回错误缓存结果的风险。
+    """
 
     def __init__(self, maxsize: int) -> None:
         if maxsize <= 0:
             raise ValueError("maxsize must be greater than 0.")
         self._maxsize = maxsize
-        self._entries: OrderedDict[str, CompiledValueT] = OrderedDict()
+        self._entries: OrderedDict[str, tuple[str, CompiledValueT]] = OrderedDict()
 
     def get(self, dsl_text: str) -> Optional[CompiledValueT]:
         key = self._build_key(dsl_text)
-        cached = self._entries.get(key)
-        if cached is None:
+        entry = self._entries.get(key)
+        if entry is None:
+            return None
+        stored_text, value = entry
+        if stored_text != dsl_text:
             return None
         self._entries.move_to_end(key)
-        return cached
+        return value
 
     def put(self, dsl_text: str, value: CompiledValueT) -> None:
         key = self._build_key(dsl_text)
-        self._entries[key] = value
+        self._entries[key] = (dsl_text, value)
         self._entries.move_to_end(key)
         if len(self._entries) > self._maxsize:
             self._entries.popitem(last=False)
