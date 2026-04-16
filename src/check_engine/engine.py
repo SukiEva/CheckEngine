@@ -64,7 +64,8 @@ class DslEngine:
         try:
             document = self.parser.parse(dsl_text)
             self.validator.validate(document)
-            self.compiler.compile(document)
+            compiled = self.compiler.compile(document)
+            self._compile_cache_backend.put(dsl_text, compiled)
         except Exception as exc:  # noqa: BLE001
             handled_error = self._ensure_dsl_error(exc)
             self._log_dsl_error("validate", handled_error)
