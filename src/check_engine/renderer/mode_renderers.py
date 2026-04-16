@@ -134,8 +134,13 @@ class SubRepeatModeRenderer(ModeRenderer):
         local_data: Optional[Any],
         helpers: MessageRenderHelpers,
     ) -> str:
-        left = template.index("[")
-        right = template.index("]")
+        try:
+            left = template.index("[")
+            right = template.index("]")
+        except ValueError:
+            raise DSLExecutionError(
+                f"sub_repeat template must contain exactly one [] segment: {template!r}",
+            )
         prefix = template[:left]
         segment = template[left + 1 : right]
         suffix = template[right + 1 :]
