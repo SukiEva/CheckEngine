@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import traceback
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
@@ -11,7 +10,7 @@ from typing import Any, Optional, TypeVar, cast
 
 from .compiler import CompiledDsl
 from .dsl import SqlNode, StepNode, VariableDefinition, VariableStepNode
-from .exceptions import DSLExecutionError
+from .exceptions import DSLExecutionError, log_dsl_error
 from .expression import CompiledExpression, ExpressionEvaluator
 from .renderer import MessageRenderer
 from .runtime import ExecutionResult, ExecutionState, NodeExecutionResult
@@ -270,7 +269,4 @@ class ExecutionPipeline:
             return None, ExecutionResult.build_runtime_failure(exc, state, failed_node=failed_node)
 
     def _log_dsl_error(self, phase: str, exc: Exception) -> None:
-        error_traceback = getattr(exc, "original_traceback", None)
-        if not isinstance(error_traceback, str) or not error_traceback:
-            error_traceback = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-        self.logger.error("DslEngine %s failed: %s\n%s", phase, exc, error_traceback)
+        log_dsl_error(self.logger, phase, exc)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import traceback
 from typing import Optional
 
@@ -90,3 +91,11 @@ class DSLExecutionError(_DslBaseError, RuntimeError):
             original_exception=original_exception,
             original_traceback=self._inherit_traceback_from_exception(original_exception),
         )
+
+
+def log_dsl_error(logger: logging.Logger, phase: str, exc: Exception) -> None:
+    """记录 DSL 错误日志，优先使用异常中保留的原始堆栈。"""
+    error_traceback = getattr(exc, "original_traceback", None)
+    if not isinstance(error_traceback, str) or not error_traceback:
+        error_traceback = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    logger.error("DslEngine %s failed: %s\n%s", phase, exc, error_traceback)

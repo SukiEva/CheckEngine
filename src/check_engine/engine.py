@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import logging
-import traceback
 from collections.abc import Mapping
 from typing import Any, Optional
 
 from .compiler import CompiledDsl, CompileCacheLike, DslCompiler, HashedLruCompileCache, NoopCompileCache
-from .exceptions import DSLExecutionError
+from .exceptions import DSLExecutionError, log_dsl_error
 from .execution_pipeline import ExecutionPipeline
 from .expression import ExpressionEvaluator
 from .parser import JsonDslParser
@@ -114,7 +113,4 @@ class DslEngine:
         return DSLExecutionError("Unexpected runtime error in DSL engine.", original_exception=exc)
 
     def _log_dsl_error(self, phase: str, exc: Exception) -> None:
-        error_traceback = getattr(exc, "original_traceback", None)
-        if not isinstance(error_traceback, str) or not error_traceback:
-            error_traceback = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-        self.logger.error("DslEngine %s failed: %s\n%s", phase, exc, error_traceback)
+        log_dsl_error(self.logger, phase, exc)
